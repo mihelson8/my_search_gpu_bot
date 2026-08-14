@@ -1,66 +1,59 @@
 import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-import requests
-import xml.etree.ElementTree as ET
+import undetected_chromedriver as uc
+import time
 
-# ==========================================================
-# ВСТАВЬТЕ СЮДА ВАШ НОВЫЙ ТОКЕН (в кавычках)
+# Твой новый токен
 TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
-# ==========================================================
 
-# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Привет! Я бот для поиска курса Доллара и Юаня.\n"
-        "Напиши команду /price, чтобы узнать актуальные курсы ЦБ РФ."
-    )
+    await update.message.reply_text("👋 Привет! Я парсер цен на GPU. Напиши /price, чтобы узнать цены на видеокарты.")
 
-# Команда /price с поиском по валютным кодам (USD, CNY)
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Запрашиваю курсы через API ЦБ... Подожди пару секунд.")
+    await update.message.reply_text("🔍 Сканирую сайт DNS... Это займёт 20-30 секунд. Подожди, пожалуйста.")
 
     try:
-        # Ссылка на официальное API Центробанка
-        url = "https://www.cbr.ru/scripts/XML_daily.asp"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        
-        response = requests.get(url, headers=headers)
-        root = ET.fromstring(response.content)
-        
-        usd_price = "Не найден"
-        cny_price = "Не найден"
-        
-        # Перебираем все валюты из XML ответа
-        for valute in root.findall('Valute'):
-            # Сравниваем коды валют. Это надежнее, чем названия!
-            char_code = valute.find('CharCode').text 
-            value = valute.find('Value').text.replace(',', '.')
-            
-            if char_code == "USD":
-                usd_price = value
-            elif char_code == "CNY":
-                cny_price = value
-        
-        # Отправляем результат в Telegram
-        await update.message.reply_text(
-            f"🇺🇸 **Курс Доллара США:** {usd_price} руб.\n"
-            f"🇨🇳 **Курс Китайского юаня:** {cny_price} руб.",
-            parse_mode='Markdown'
-        )
+        # Настройки для браузера (обход защиты)
+        options = uc.ChromeOptions()
+        options.add_argument("--headless")  # Режим без окна (чтобы не открывался браузер на сервере)
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+        # Правильная ссылка на видеокарты
+        url = "https://www.dns-shop.ru/search/?q=видеокарта&category=17a89aab164077e2"
+
+        # Запуск браузера
+        driver = uc.Chrome(options=options, version_main=151)
+        driver.get(url)
+        time.sleep(5)
+
+        # Ищем цены на сайте
+        elements = driver.find_elements("css selector", ".product-buy__price")
+        prices = [el.text.strip() for el in elements if el.text.strip()]
+
+        driver.quit()
+
+        # Формируем ответ
+        if prices:
+            response = "🔥 **Актуальные цены на видеокарты в DNS:**\n\n"
+            for i, price in enumerate(prices[:10], 1):
+                response += f"{i}. {price}\n"
+            await update.message.reply_text(response, parse_mode='Markdown')
+        else:
+            await update.message.reply_text("😔 Не удалось найти цены. Возможно, сайт изменил оформление.")
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка при запросе: {e}. Проверьте интернет.")
+        await update.message.reply_text(f"❌ Ошибка: {e}")
 
-# Запуск бота (с исправлением ошибки Windows Overlapped)
+application = ApplicationBuilder().token(TOKEN).build()
+application.add_handler(CommandHandler('start', start))
+application.add_handler(CommandHandler('price', price))
+
 if __name__ == '__main__':
-    if hasattr(asyncio, 'WindowsSelectorEventLoopPolicy'):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-    application = ApplicationBuilder().token(TOKEN).build()
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('price', price))
-    print("✅ Бот запущен! Обновленный поиск по кодам USD и CNY. Напиши /price в Telegram.")
-    application.run_polling()
+    application.run_webhook(
+        listen='0.0.0.0',
+        port=8000,
+        webhook_url='https://my-search-gpu-bot.onrender.com'
+    )
