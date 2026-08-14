@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: my_search_gpu_bot
+    env: python
+    buildCommand: |
+      apt-get update && apt-get install -y wget unzip
+      wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+      apt install -y ./google-chrome-stable_current_amd64.deb
+      pip install -r requirements.txt
+    startCommand: python bot.py
