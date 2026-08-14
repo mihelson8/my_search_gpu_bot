@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 
 # ==========================================================
 # ВСТАВЬТЕ СЮДА ВАШ НОВЫЙ ТОКЕН (в кавычках)
-TOKEN = '8934402151:AAF5M7mohaE92ZNJC_TtJxRub-2LyfkKExc'
+TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
 # ==========================================================
 
 # Команда /start
