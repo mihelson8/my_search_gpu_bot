@@ -57,5 +57,7 @@ if __name__ == '__main__':
     application.run_webhook(
         listen='0.0.0.0',
         port=8000,
-        webhook_url='https://my_search_gpu_bot.onrender.com' # Убедись, что этот адрес совпадает с твоим на Render
+        url_path='',
+        webhook_url='https://my-search-gpu-bot.onrender.com'
+    )
     )
