@@ -1,4 +1,4 @@
+setuptools
 python-telegram-bot
-requests
-selenium
 undetected-chromedriver
+selenium
