@@ -7,22 +7,21 @@ import time
 TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! Я бот для отслеживания цен на видеокарты. Напиши /price и я покажу актуальные цены в DNS.")
+    await update.message.reply_text("👋 Привет! Я парсер цен на GPU. Напиши /price, чтобы узнать цены на видеокарты.")
 
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Сканирую сайт DNS... Это займёт 20–30 секунд. Подожди, пожалуйста.")
-    
+    await update.message.reply_text("🔍 Сканирую сайт DNS... Это займёт 20-30 секунд. Подожди, пожалуйста.")
     try:
         options = uc.ChromeOptions()
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+        # Используем системный путь к браузеру (работает на Render)
+        driver = uc.Chrome(options=options, driver_executable_path="/usr/bin/google-chrome")
         
         url = "https://www.dns-shop.ru/search/?q=видеокарта&category=17a89aab164077e2"
-
-        # Запуск браузера без фиксированной версии и без пути к бинарнику
-        driver = uc.Chrome(options=options)
         driver.get(url)
         time.sleep(5)
 
@@ -37,10 +36,10 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(response, parse_mode='Markdown')
         else:
             await update.message.reply_text("😔 Не удалось найти цены. Возможно, сайт изменил оформление.")
-            
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
+# Настройка и запуск бота через Webhook (для Render)
 application = ApplicationBuilder().token(TOKEN).build()
 application.add_handler(CommandHandler('start', start))
 application.add_handler(CommandHandler('price', price))
