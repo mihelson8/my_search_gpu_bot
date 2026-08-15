@@ -53,10 +53,11 @@ async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-        # Библиотека сама найдёт браузер
+        # Используем правильный путь к браузеру для Render
         driver = uc.Chrome(
             options=options,
             version_main=151,
+            driver_executable_path="/usr/bin/google-chrome-stable",
             browserless_url="wss://chrome.browserless.io?token=2V4mHaHXY9vr0ZG60e17e7d354904b69ee46bc5231ccb7704"
         )
 
