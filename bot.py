@@ -8,11 +8,10 @@ import time
 TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! Я парсер цен на GPU. Напиши /gpu, чтобы узнать цены на видеокарты.")
+    await update.message.reply_text("👋 Привет! Я парсер цен на GPU. Напиши /price, чтобы узнать цены на видеокарты.")
 
-async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Сканирую сайт DNS через облачный браузер... Это займёт 20-30 секунд.")
-    
     try:
         options = Options()
         options.add_argument("--headless")
@@ -20,7 +19,6 @@ async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-        # Подключение к облачному браузеру Browserless с твоим ключом
         driver = uc.Chrome(
             options=options,
             version_main=151,
@@ -47,7 +45,7 @@ async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 application = ApplicationBuilder().token(TOKEN).build()
 application.add_handler(CommandHandler('start', start))
-application.add_handler(CommandHandler('gpu', gpu))
+application.add_handler(CommandHandler('price', price))
 
 if __name__ == '__main__':
     application.run_webhook(
@@ -55,5 +53,4 @@ if __name__ == '__main__':
         port=8000,
         url_path='',
         webhook_url='https://my-gpu-bot.onrender.com',
-        webhook_timeout=60
     )
