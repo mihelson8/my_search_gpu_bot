@@ -3,6 +3,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import undetected_chromedriver as uc
 import time
+import shutil
 
 TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
 
@@ -18,8 +19,10 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-        # Финальный путь к браузеру на Render
-        driver = uc.Chrome(options=options, driver_executable_path="/usr/bin/google-chrome-stable")
+        # Автоматический поиск пути к браузеру (работает на Render)
+        chrome_path = shutil.which("google-chrome") or shutil.which("google-chrome-stable") or "/usr/bin/google-chrome"
+        
+        driver = uc.Chrome(options=options, driver_executable_path=chrome_path)
         
         url = "https://www.dns-shop.ru/search/?q=видеокарта&category=17a89aab164077e2"
         driver.get(url)
