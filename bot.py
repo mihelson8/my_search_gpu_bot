@@ -3,7 +3,9 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import undetected_chromedriver as uc
 import time
-import shutil
+import subprocess
+import sys
+import os
 
 TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
 
@@ -11,18 +13,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Привет! Я парсер цен на GPU. Напиши /price, чтобы узнать цены на видеокарты.")
 
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Сканирую сайт DNS... Это займёт 20-30 секунд. Подожди, пожалуйста.")
+    await update.message.reply_text("🔍 Проверяю браузер и сканирую сайт DNS... Это займёт немного времени, подожди.")
     try:
+        # === ЯДЕРНОЕ РЕШЕНИЕ: Устанавливаем браузер прямо сейчас ===
+        try:
+            os.system("apt-get update && apt-get install -y chromium-browser")
+        except:
+            pass
+        
         options = uc.ChromeOptions()
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-        # Автоматический поиск пути к браузеру (работает на Render)
-        chrome_path = shutil.which("google-chrome") or shutil.which("google-chrome-stable") or "/usr/bin/google-chrome"
-        
-        driver = uc.Chrome(options=options, driver_executable_path=chrome_path)
+        # Указываем путь к только что установленному Chromium
+        driver = uc.Chrome(options=options, driver_executable_path="/usr/bin/chromium-browser")
         
         url = "https://www.dns-shop.ru/search/?q=видеокарта&category=17a89aab164077e2"
         driver.get(url)
@@ -42,7 +48,6 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
-# Настройка и запуск бота через Webhook (для Render)
 application = ApplicationBuilder().token(TOKEN).build()
 application.add_handler(CommandHandler('start', start))
 application.add_handler(CommandHandler('price', price))
