@@ -8,9 +8,9 @@ import time
 TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! Я парсер цен на GPU (работаю через облачный браузер). Напиши /price.")
+    await update.message.reply_text("👋 Привет! Я парсер цен на GPU. Напиши /gpu, чтобы узнать цены на видеокарты.")
 
-async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Сканирую сайт DNS через облачный браузер... Это займёт 20-30 секунд.")
     
     try:
@@ -47,7 +47,7 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 application = ApplicationBuilder().token(TOKEN).build()
 application.add_handler(CommandHandler('start', start))
-application.add_handler(CommandHandler('price', price))
+application.add_handler(CommandHandler('gpu', gpu))
 
 if __name__ == '__main__':
     application.run_webhook(
