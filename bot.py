@@ -4,13 +4,47 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import undetected_chromedriver as uc
 from selenium.webdriver.chrome.options import Options
 import time
+import requests
+import xml.etree.ElementTree as ET
 
 TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
 
+# === Команда для курсов валют ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! Я парсер цен на GPU. Напиши /price, чтобы узнать цены на видеокарты.")
+    await update.message.reply_text(
+        "👋 Привет! Я бот для курсов валют и цен на GPU.\n"
+        "📈 Отправь /price для курса Доллара и Юаня.\n"
+        "💻 Отправь /gpu для цен на видеокарты."
+    )
 
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔍 Запрашиваю курсы через API ЦБ... Подожди.")
+    try:
+        url = "https://www.cbr.ru/scripts/XML_daily.asp"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+        response = requests.get(url, headers=headers)
+        root = ET.fromstring(response.content)
+        
+        usd_price = "Не найден"
+        cny_price = "Не найден"
+        for valute in root.findall('Valute'):
+            char_code = valute.find('CharCode').text
+            value = valute.find('Value').text.replace(',', '.')
+            if char_code == "USD":
+                usd_price = value
+            elif char_code == "CNY":
+                cny_price = value
+        
+        await update.message.reply_text(
+            f"🇺🇸 **Курс Доллара США:** {usd_price} руб.\n"
+            f"🇨🇳 **Курс Китайского юаня:** {cny_price} руб.",
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка курсов: {e}.")
+
+# === Команда для парсинга видеокарт через Browserless ===
+async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Сканирую сайт DNS через облачный браузер... Это займёт 20-30 секунд.")
     try:
         options = Options()
@@ -19,6 +53,7 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
+        # Библиотека сама найдёт браузер
         driver = uc.Chrome(
             options=options,
             version_main=151,
@@ -41,16 +76,18 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("😔 Не удалось найти цены. Возможно, сайт изменил оформление.")
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {e}")
+        await update.message.reply_text(f"❌ Ошибка парсера: {e}")
 
+# === Настройка и запуск ===
 application = ApplicationBuilder().token(TOKEN).build()
 application.add_handler(CommandHandler('start', start))
 application.add_handler(CommandHandler('price', price))
+application.add_handler(CommandHandler('gpu', gpu))
 
 if __name__ == '__main__':
     application.run_webhook(
         listen='0.0.0.0',
         port=8000,
         url_path='',
-        webhook_url='https://my-gpu-bot.onrender.com',
+        webhook_url='https://my-search-gpu-bot.onrender.com'
     )
