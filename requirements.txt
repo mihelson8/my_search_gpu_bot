@@ -1,4 +1,4 @@
 setuptools
-python-telegram-bot
+python-telegram-bot[webhooks]
 undetected-chromedriver
 selenium
