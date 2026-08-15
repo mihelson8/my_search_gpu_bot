@@ -54,5 +54,6 @@ if __name__ == '__main__':
         listen='0.0.0.0',
         port=8000,
         url_path='',
-        webhook_url='https://my-search-gpu-bot.onrender.com'
+        webhook_url='https://my-gpu-bot.onrender.com',
+        webhook_timeout=60
     )
