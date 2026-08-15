@@ -4,16 +4,15 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import undetected_chromedriver as uc
 from selenium.webdriver.chrome.options import Options
 import time
-import requests
-import xml.etree.ElementTree as ET
 
 TOKEN = '8934402151:AAG3LlLq_JuU8ZHk0LP0qy0hPdNZpTvQNfs'
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Привет! Я бот для цен на GPU и курсов валют.\n/price — цены на видеокарты\n/rate — курсы Доллара и Юаня")
+    await update.message.reply_text("👋 Привет! Я парсер цен на GPU (работаю через облачный браузер). Напиши /price.")
 
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Сканирую DNS через облачный браузер... Подожди 20-30 сек.")
+    await update.message.reply_text("🔍 Сканирую сайт DNS через облачный браузер... Это займёт 20-30 секунд.")
+    
     try:
         options = Options()
         options.add_argument("--headless")
@@ -21,6 +20,7 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
+        # Подключение к облачному браузеру Browserless с твоим ключом
         driver = uc.Chrome(
             options=options,
             version_main=151,
@@ -41,36 +41,13 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 response += f"{i}. {price}\n"
             await update.message.reply_text(response, parse_mode='Markdown')
         else:
-            await update.message.reply_text("😔 Не удалось найти цены.")
+            await update.message.reply_text("😔 Не удалось найти цены. Возможно, сайт изменил оформление.")
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка парсера: {e}")
-
-async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💱 Запрашиваю курсы ЦБ...")
-    try:
-        url = "https://www.cbr.ru/scripts/XML_daily.asp"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers)
-        root = ET.fromstring(response.content)
-        
-        usd, cny = "Не найден", "Не найден"
-        for valute in root.findall('Valute'):
-            code = valute.find('CharCode').text
-            value = valute.find('Value').text.replace(',', '.')
-            if code == "USD": usd = value
-            elif code == "CNY": cny = value
-
-        await update.message.reply_text(
-            f"🇺🇸 Доллар: {usd} руб.\n🇨🇳 Юань: {cny} руб.",
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка курсов: {e}")
+        await update.message.reply_text(f"❌ Ошибка: {e}")
 
 application = ApplicationBuilder().token(TOKEN).build()
 application.add_handler(CommandHandler('start', start))
 application.add_handler(CommandHandler('price', price))
-application.add_handler(CommandHandler('rate', rate))
 
 if __name__ == '__main__':
     application.run_webhook(
