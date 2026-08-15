@@ -18,8 +18,8 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-        # Библиотека сама найдёт браузер, жёсткий путь не нужен
-        driver = uc.Chrome(options=options)
+        # Финальный путь к браузеру на Render
+        driver = uc.Chrome(options=options, driver_executable_path="/usr/bin/google-chrome-stable")
         
         url = "https://www.dns-shop.ru/search/?q=видеокарта&category=17a89aab164077e2"
         driver.get(url)
