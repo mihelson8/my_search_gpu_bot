@@ -27,9 +27,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Чтение конфигурации из переменных окружения
-TOKEN = os.getenv("BOT_TOKEN")
-BROWSERLESS_TOKEN = os.getenv("BROWSERLESS_TOKEN")
+# Токен вашего бота
+TOKEN = os.getenv("BOT_TOKEN", "8914024807:AAFUXerMus2OEkbfUCt0H_II70ac1IbzH48")
+
+# API токен Browserless.io (для удаленного браузера)
+BROWSERLESS_TOKEN = os.getenv("BROWSERLESS_TOKEN", "2V4mHaHXY9vr0ZG60e17e7d354904b69ee46bc5231ccb7704")
+
+# Настройки вебхука / порта (для хостинга)
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 PORT = int(os.getenv("PORT", 8000))
 
@@ -38,15 +42,15 @@ PORT = int(os.getenv("PORT", 8000))
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "👋 <b>Привет! Я бот для отслеживания курсов валют и цен на GPU.</b>\n\n"
-        "📈 <b>/price</b> — актуальный курс Доллара и Юаня (ЦБ РФ)\n"
+        "📈 <b>/price</b> — актуальный официальный курс Доллара, Юаня и Евро (ЦБ РФ)\n"
         "💻 <b>/gpu</b> — актуальные цены на видеокарты в DNS"
     )
     await update.message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
 
 
-# === Команда /price (Курсы валют через ЦБ РФ) ===
+# === Команда /price (Курсы валют через API ЦБ РФ) ===
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Запрашиваю курсы через API ЦБ РФ... Подожди.")
+    await update.message.reply_text("🔍 Запрашиваю курсы через API ЦБ РФ... Подожди несколько секунд.")
     try:
         url = "https://www.cbr.ru/scripts/XML_daily.asp"
         headers = {
@@ -94,7 +98,7 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка получения курсов валют: {html.escape(str(e))}")
 
 
-# === Функция парсинга цен видеокарт через Browserless.io ===
+# === Функция синхронного парсинга через Browserless.io ===
 def parse_dns_gpu_sync(browserless_token: str) -> list[tuple[str, str]]:
     options = Options()
     options.add_argument("--headless")
@@ -102,7 +106,6 @@ def parse_dns_gpu_sync(browserless_token: str) -> list[tuple[str, str]]:
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    # Подключение к облачному Chrome на Browserless.io
     command_executor = f"https://chrome.browserless.io/webdriver?token={browserless_token}"
     driver = webdriver.Remote(command_executor=command_executor, options=options)
 
@@ -112,7 +115,7 @@ def parse_dns_gpu_sync(browserless_token: str) -> list[tuple[str, str]]:
         driver.set_page_load_timeout(30)
         driver.get(url)
 
-        # Ждем загрузки карточек товаров (до 15 секунд)
+        # Ожидание появления карточек товаров (до 15 секунд)
         wait = WebDriverWait(driver, 15)
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".catalog-product, .catalog-item, .product-buy__price")))
 
@@ -149,7 +152,7 @@ async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔍 Сканирую сайт DNS через облачный браузер... Это займёт 15-25 секунд.")
     try:
-        # Выполняем синхронный сетевой парсинг в отдельном потоке, чтобы не блокировать Telegram бот
+        # Выполняем синхронный парсинг в отдельном потоке, чтобы Telegram бот не зависал
         items = await asyncio.to_thread(parse_dns_gpu_sync, BROWSERLESS_TOKEN)
 
         if items:
@@ -162,19 +165,17 @@ async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(response, parse_mode=ParseMode.HTML)
         else:
             await update.message.reply_text(
-                "😔 Не удалось извлечь цены. Возможно, сработала защита сайта или изменилась структура страниц DNS."
+                "😔 Не удалось получить цены с сайта DNS (возможно, сайт временно включил капчу)."
             )
     except Exception as e:
         logger.error(f"Ошибка при парсинге DNS: {e}", exc_info=True)
         await update.message.reply_text(f"❌ Ошибка парсера: {html.escape(str(e))}")
 
 
-# === Точка входа ===
+# === Точка входа в программу ===
 def main():
     if not TOKEN:
-        logger.error("Ошибка: Не задан токен бота (BOT_TOKEN)!")
-        print("\n[ОШИБКА] Не задана переменная BOT_TOKEN!")
-        print("Создайте файл .env или передайте BOT_TOKEN в переменных окружения.\n")
+        logger.error("Ошибка: Токен бота не задан!")
         sys.exit(1)
 
     application = ApplicationBuilder().token(TOKEN).build()
@@ -183,7 +184,7 @@ def main():
     application.add_handler(CommandHandler("gpu", gpu))
 
     if WEBHOOK_URL:
-        # Режим Webhook (для Render, Heroku и серверов с публичным URL)
+        # Режим Webhook для серверов (Render, VPS и др.)
         clean_webhook_url = WEBHOOK_URL.rstrip("/")
         logger.info(f"Запуск в режиме Webhook на порту {PORT}, URL: {clean_webhook_url}")
         application.run_webhook(
@@ -193,8 +194,8 @@ def main():
             webhook_url=f"{clean_webhook_url}/{TOKEN}"
         )
     else:
-        # Режим Polling (для локального запуска на компьютере без настройки портов и SSL)
-        logger.info("Запуск в режиме Polling (локальный запуск)...")
+        # Режим Polling для локального запуска на компьютере
+        logger.info("Бот успешно запущен в режиме Polling!")
         application.run_polling()
 
 
