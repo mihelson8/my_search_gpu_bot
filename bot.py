@@ -11,9 +11,15 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import xml.etree.ElementTree as ET
 
 import httpx
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
 # Настройка логирования
 logging.basicConfig(
@@ -41,6 +47,14 @@ FALLBACK_GPU = [
     ("NVIDIA GeForce RTX 5090 Palit GameRock 32GB", "479 990 ₽"),
 ]
 
+# Кнопки постоянного нижнего меню
+MAIN_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("📈 Курсы валют (ЦБ РФ)"), KeyboardButton("💻 Цены на видеокарты")],
+    ],
+    resize_keyboard=True
+)
+
 
 # === Простой HTTP-сервер для Render Health Check ===
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -55,7 +69,6 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, format, *args):
-        # Отключаем лишний спам логов в консоль
         pass
 
 
@@ -96,13 +109,18 @@ def save_cached_gpu(items):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "👋 <b>Привет! Я бот для отслеживания курсов валют и цен на GPU.</b>\n\n"
-        "📈 <b>/price</b> — актуальный официальный курс Доллара, Юаня и Евро (ЦБ РФ)\n"
-        "💻 <b>/gpu</b> — актуальные цены на популярные видеокарты (обновляются раз в сутки)"
+        "Нажимай удобные кнопки внизу экрана для быстрого получения данных 👇\n\n"
+        "📈 <b>Курсы валют</b> — официальный курс Доллара, Юаня и Евро от ЦБ РФ\n"
+        "💻 <b>Цены на видеокарты</b> — актуальные цены на популярные видеокарты"
     )
-    await update.message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
+    await update.message.reply_text(
+        welcome_text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=MAIN_KEYBOARD
+    )
 
 
-# === Команда /price (Курсы валют через API ЦБ РФ) ===
+# === Команда получения курсов валют ===
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Запрашиваю курсы через API ЦБ РФ... Подожди секунду.")
     try:
@@ -146,10 +164,17 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🇨🇳 <b>Китайский юань (CNY):</b> {cny_price} ₽\n"
             f"🇪🇺 <b>Евро (EUR):</b> {eur_price} ₽"
         )
-        await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            message_text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_KEYBOARD
+        )
     except Exception as e:
         logger.error(f"Ошибка при запросе курсов: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Ошибка получения курсов валют: {html.escape(str(e))}")
+        await update.message.reply_text(
+            f"❌ Ошибка получения курсов валют: {html.escape(str(e))}",
+            reply_markup=MAIN_KEYBOARD
+        )
 
 
 # === Функция парсинга цен видеокарт (запускается не чаще 1 раза в сутки) ===
@@ -207,7 +232,7 @@ async def get_gpu_prices():
     return FALLBACK_GPU, now
 
 
-# === Команда /gpu ===
+# === Команда получения цен на видеокарты ===
 async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         items, last_time = await get_gpu_prices()
@@ -224,10 +249,28 @@ async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             clean_price = html.escape(item_price)
             response += f"{i}. <b>{clean_title}</b>\n   💰 Цена: <code>{clean_price}</code>\n\n"
 
-        await update.message.reply_text(response, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            response,
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_KEYBOARD
+        )
     except Exception as e:
         logger.error(f"Ошибка при получении цен: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Ошибка получения цен: {html.escape(str(e))}")
+        await update.message.reply_text(
+            f"❌ Ошибка получения цен: {html.escape(str(e))}",
+            reply_markup=MAIN_KEYBOARD
+        )
+
+
+# === Обработчик нажатий на текстовые кнопки меню ===
+async def handle_text_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if "Курсы валют" in text:
+        await price(update, context)
+    elif "видеокарты" in text or "GPU" in text:
+        await gpu(update, context)
+    else:
+        await start(update, context)
 
 
 # === Запуск бота ===
@@ -235,7 +278,6 @@ def main():
     if not os.path.exists(CACHE_FILE):
         save_cached_gpu(FALLBACK_GPU)
 
-    # Запускаем фоновый HTTP сервер, чтобы Render видел открытый порт и ставил статус Live
     start_health_check_server(PORT)
 
     application = (
@@ -248,12 +290,16 @@ def main():
         .build()
     )
 
+    # Команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("price", price))
     application.add_handler(CommandHandler("gpu", gpu))
 
+    # Обработчик кнопок меню
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_button))
+
     print("\n" + "="*50)
-    print("Бот успешно запущен на сервере Render!")
+    print("Бот успешно запущен с кнопками быстрого меню!")
     print("="*50 + "\n")
 
     application.run_polling(
