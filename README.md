@@ -1,72 +1,165 @@
-# Telegram Бот: Курсы валют и Цены на GPU
+# 🇨🇳 🇬🇧 🇷🇺 Переводчик технических терминов (Chinese - English - Russian)
 
-Telegram-бот на Python (`python-telegram-bot`), который:
-- Отслеживает официальные курсы валют (USD, CNY, EUR) через API Центрального Банка РФ (`/price`).
-- Парсит актуальные цены и названия видеокарт с сайта DNS через удаленный облачный браузер Browserless.io (`/gpu`).
+Мощный переводчик и словарь технических и IT-терминов на **китайском (中文)**, **английском (English)** и **русском (Русский)** языках с поддержкой **Telegram-бота**, **консольного CLI-интерфейса** и **Python API**.
 
 ---
 
-## 🚀 Быстрый запуск
+## 🌟 Основные возможности
 
-### 1. Получение токенов
+1. **🌐 Трехъязычный технический словарь:**
+   - 🇬🇧 **English:** Общепринятая международная терминология.
+   - 🇨🇳 **中文 (Китайский):** Упрощенные и традиционные иероглифы + транскрипция **Пиньинь (Pinyin)** с тонами.
+   - 🇷🇺 **Русский:** Общепринятые переводы и русскоязычные термины.
+   - Подробные определения на 3 языках, примеры употребления в предложениях, синонимы, аббревиатуры и связанные понятия.
 
-1. **Telegram Bot Token:**
-   - Перейдите в Telegram к [@BotFather](https://t.me/BotFather).
-   - Отправьте `/newbot`, следуйте инструкциям и скопируйте полученный токен.
-2. **Browserless Token:**
-   - Зарегистрируйтесь на сайте [Browserless.io](https://cloud.browserless.io/).
-   - Скопируйте ваш API Token из личного кабинета.
+2. **📁 Тематические категории:**
+   - 🤖 **Искусственный интеллект и ML** (Deep Learning, LLM, Transformer, RAG, Tokenization, Embedding...)
+   - 💻 **Разработка ПО и программирование** (Compiler, OOP, Multithreading, Asynchronous, Memory Leak...)
+   - ⚙️ **Аппаратное обеспечение (Железо)** (CPU, GPU, VRAM, RAM, SSD, Microarchitecture...)
+   - 🌐 **Компьютерные сети и протоколы** (TCP/IP, DNS, HTTP/HTTPS, REST API, Load Balancer...)
+   - 🗄️ **Базы данных и хранилища** (RDBMS, NoSQL, ACID, Sharding, Replication, Vector DB...)
+   - ☁️ **Облачные технологии и DevOps** (Docker, Kubernetes, CI/CD, Microservices...)
+   - 🔒 **Информационная безопасность** (Encryption, Hash Function, Authentication, Authorization, DDoS...)
+   - 📊 **Алгоритмы и структуры данных** (Binary Search Tree, Hash Table, Dynamic Programming...)
+   - 🖥️ **Операционные системы** (Kernel, Virtual Memory, Deadlock, Mutex, System Call...)
+
+3. **🔍 Умный поиск и сопоставление:**
+   - Поиск в любом направлении: EN ↔ ZH ↔ RU.
+   - Поиск по Пиньиню (например, ввод `shendu xuexi` находит `深度学习` / `Deep Learning` / `Глубокое обучение`).
+   - Нечеткий поиск (fuzzy match) с исправлением опечаток.
+   - Поиск по синонимам и аббревиатурам (AI, LLM, K8s, DP, OOP, RAG, GPU и др.).
+   - Автоматический онлайн-переводчик произвольного текста и предложений при отсутствии термина в локальной базе.
+
+4. **🤖 Интерактивный Telegram-бот:**
+   - Быстрый поиск при отправке любого сообщения.
+   - Меню категорий с удобной навигацией по кнопкам.
+   - 🎲 Режим случайных карточек для изучения терминов.
+   - 🧠 Режим **викторины (Quiz / Flashcards)** для проверки знаний китайских и английских терминов.
+   - ⚡ **Инлайн-режим (Inline Mode):** поиск терминов в любых чатах через `@bot_name term`.
+   - 📈 Курсы валют ЦБ РФ (`/price`).
+
+5. **💻 Консольный CLI-интерфейс:**
+   - Интерактивный режим терминала (REPL).
+   - Быстрый перевод из командной строки.
+   - Викторина в терминале.
 
 ---
 
-### 2. Локальный запуск на компьютере (Polling)
+## 🚀 Быстрый старт
 
-1. Клонируйте репозиторий и перейдите в папку проекта:
-   ```bash
-   git clone <url_репозитория>
-   cd <папка_проекта>
-   ```
+### 1. Установка зависимостей
 
-2. Создайте и активируйте виртуальное окружение:
-   ```bash
-   # Linux / macOS:
-   python3 -m venv venv
-   source venv/bin/activate
+```bash
+# Клонируйте репозиторий
+git clone <url_репозитория>
+cd <папка_проекта>
 
-   # Windows:
-   python -m venv venv
-   venv\Scripts\activate
-   ```
+# Создайте и активируйте виртуальное окружение
+python3 -m venv venv
+source venv/bin/activate  # На Windows: venv\Scripts\activate
 
-3. Установите зависимости:
-   ```bash
-   pip install -r requirements.txt
-   ```
+# Установите пакеты
+pip install -r requirements.txt
+```
 
-4. Создайте файл `.env` на основе примера:
+---
+
+### 2. Использование CLI (Консоль)
+
+#### Поиск термина:
+```bash
+python cli.py "deep learning"
+python cli.py "深度学习"
+python cli.py "многопоточность"
+python cli.py "shendu xuexi"
+```
+
+#### Просмотр всех категорий:
+```bash
+python cli.py --categories
+```
+
+#### Случайные термины / карточки:
+```bash
+python cli.py --random 3
+```
+
+#### Интерактивный режим (REPL):
+```bash
+python cli.py
+```
+
+#### Режим викторины в терминале:
+```bash
+python cli.py --quiz
+```
+
+---
+
+### 3. Запуск Telegram-бота
+
+1. Создайте бота через [@BotFather](https://t.me/BotFather) и скопируйте токен.
+2. Создайте файл `.env`:
    ```bash
    cp .env.example .env
    ```
-   Укажите в `.env` ваши значения `BOT_TOKEN` и `BROWSERLESS_TOKEN`.
-
-5. Запустите бота:
+   Укажите ваш `BOT_TOKEN`:
+   ```env
+   BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   PORT=10000
+   ```
+3. Запустите бота:
    ```bash
    python bot.py
    ```
 
 ---
 
-### 3. Запуск в облаке (Render.com Webhook)
+### 4. Использование в качестве Python-библиотеки
 
-1. Загрузите код в ваш GitHub-репозиторий.
-2. Зайдите на [Render.com](https://render.com/) и создайте **New Web Service**.
-3. Подключите ваш репозиторий.
-4. Укажите:
-   - **Environment:** `Python 3` (или `Docker`)
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `python bot.py`
-5. В разделе **Environment Variables** добавьте:
-   - `BOT_TOKEN`: ваш токен Telegram бота.
-   - `BROWSERLESS_TOKEN`: ваш токен Browserless.
-   - `WEBHOOK_URL`: публичный URL сервиса Render (например, `https://my-gpu-bot.onrender.com`).
-6. Нажмите **Deploy Web Service**.
+```python
+import asyncio
+from translator import TechTranslator, TerminologyEngine, Language
+
+async def main():
+    translator = TechTranslator()
+    
+    # Поиск термина
+    result = await translator.translate("transformer")
+    if result.direct_match:
+        term = result.direct_match
+        print(f"EN: {term.en}")
+        print(f"ZH: {term.zh} ({term.pinyin})")
+        print(f"RU: {term.ru}")
+        print(f"Определение (RU): {term.definition_ru}")
+
+asyncio.run(main())
+```
+
+---
+
+## 🧪 Запуск тестов
+
+Для запуска модульных тестов выполните:
+
+```bash
+python3 -m pytest
+```
+
+Все тесты проверяют:
+- Корректность распознавания языков и генерации Пиньиня с тонами.
+- Поиск по базе (точные совпадения, поиск по пиньиню, синонимам, нечеткий поиск).
+- Фильтрацию по категориям.
+- Форматирование HTML для Telegram и терминала CLI.
+
+---
+
+## 🐳 Запуск через Docker
+
+```bash
+# Сборка образа
+docker build -t tech-translator-bot .
+
+# Запуск контейнера
+docker run -d --name tech-bot -e BOT_TOKEN="ваш_токен" -p 10000:10000 tech-translator-bot
+```

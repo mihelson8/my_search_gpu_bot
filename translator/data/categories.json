@@ -1,0 +1,92 @@
+[
+  {
+    "id": "ai_ml",
+    "icon": "🤖",
+    "name_ru": "Искусственный интеллект и ML",
+    "name_en": "Artificial Intelligence & ML",
+    "name_zh": "人工智能与机器学习",
+    "description_ru": "Нейросети, LLM, глубокое обучение, компьютерное зрение и NLP",
+    "description_en": "Neural networks, LLMs, deep learning, computer vision and NLP",
+    "description_zh": "神经网络、大语言模型、深度学习、计算机视觉与自然语言处理"
+  },
+  {
+    "id": "software_dev",
+    "icon": "💻",
+    "name_ru": "Разработка ПО и программирование",
+    "name_en": "Software Development & Programming",
+    "name_zh": "软件工程与编程",
+    "description_ru": "ООП, компиляторы, многопоточность, архитектурные паттерны и тестирование",
+    "description_en": "OOP, compilers, concurrency, design patterns, and testing",
+    "description_zh": "面向对象编程、编译器、并发、设计模式与测试"
+  },
+  {
+    "id": "hardware",
+    "icon": "⚙️",
+    "name_ru": "Аппаратное обеспечение (Железо)",
+    "name_en": "Computer Hardware & Architecture",
+    "name_zh": "计算机硬件与体系结构",
+    "description_ru": "Процессоры, видеокарты, память, шины, микроархитектура и чипсеты",
+    "description_en": "CPUs, GPUs, memory, buses, microarchitecture, and chipsets",
+    "description_zh": "处理器、显卡、内存、总线、微架构与芯片组"
+  },
+  {
+    "id": "networks",
+    "icon": "🌐",
+    "name_ru": "Компьютерные сети и протоколы",
+    "name_en": "Computer Networks & Protocols",
+    "name_zh": "计算机网络与协议",
+    "description_ru": "TCP/IP, DNS, HTTP/HTTPS, маршрутизация, балансировщики и CDN",
+    "description_en": "TCP/IP, DNS, HTTP/HTTPS, routing, load balancers, and CDN",
+    "description_zh": "TCP/IP、DNS、HTTP/HTTPS、路由、负载均衡与CDN"
+  },
+  {
+    "id": "databases",
+    "icon": "🗄️",
+    "name_ru": "Базы данных и хранение",
+    "name_en": "Databases & Data Storage",
+    "name_zh": "数据库与数据存储",
+    "description_ru": "SQL, NoSQL, транзакции ACID, шардинг, репликация и индексирование",
+    "description_en": "SQL, NoSQL, ACID transactions, sharding, replication, and indexing",
+    "description_zh": "SQL、NoSQL、ACID事务、分片、复制与索引"
+  },
+  {
+    "id": "cloud_devops",
+    "icon": "☁️",
+    "name_ru": "Облачные технологии и DevOps",
+    "name_en": "Cloud Computing & DevOps",
+    "name_zh": "云计算与DevOps",
+    "description_ru": "Docker, Kubernetes, CI/CD, бессерверные вычисления и микросервисы",
+    "description_en": "Docker, Kubernetes, CI/CD, serverless computing, and microservices",
+    "description_zh": "Docker、Kubernetes、CI/CD、无服务器与微服务"
+  },
+  {
+    "id": "cybersecurity",
+    "icon": "🔒",
+    "name_ru": "Информационная безопасность",
+    "name_en": "Cybersecurity & Cryptography",
+    "name_zh": "网络安全与密码学",
+    "description_ru": "Шифрование, хеширование, уязвимости, аутентификация и защита от атак",
+    "description_en": "Encryption, hashing, vulnerabilities, authentication, and threat defense",
+    "description_zh": "加密、哈希、漏洞、身份验证与网络防御"
+  },
+  {
+    "id": "algorithms",
+    "icon": "📊",
+    "name_ru": "Алгоритмы и структуры данных",
+    "name_en": "Algorithms & Data Structures",
+    "name_zh": "算法与数据结构",
+    "description_ru": "Деревья, графы, хеш-таблицы, сортировка, динамическое программирование",
+    "description_en": "Trees, graphs, hash tables, sorting, and dynamic programming",
+    "description_zh": "树、图、哈希表、排序与动态规划"
+  },
+  {
+    "id": "operating_systems",
+    "icon": "🖥️",
+    "name_ru": "Операционные системы",
+    "name_en": "Operating Systems & System Programming",
+    "name_zh": "操作系统与系统编程",
+    "description_ru": "Ядро ОС, системные вызовы, виртуальная память, планировщик и процессы",
+    "description_en": "OS kernel, system calls, virtual memory, scheduling, and processes",
+    "description_zh": "操作系统内核、系统调用、虚拟内存、调度与进程"
+  }
+]

@@ -1,0 +1,1418 @@
+[
+  {
+    "id": "artificial_intelligence",
+    "category": "ai_ml",
+    "en": "Artificial Intelligence",
+    "ru": "Искусственный интеллект",
+    "zh": "人工智能",
+    "zh_trad": "人工智慧",
+    "pinyin": "rén gōng zhì néng",
+    "definition_ru": "Область компьютерных наук, занимающаяся созданием систем, способных выполнять задачи, требующие человеческого интеллекта.",
+    "definition_en": "A branch of computer science dedicated to creating systems capable of performing tasks that require human intelligence.",
+    "definition_zh": "计算机科学的一个分支，致力于构建能够执行需要人类智能的任务的系统。",
+    "examples": [
+      {
+        "en": "Artificial intelligence is transforming many industries.",
+        "ru": "Искусственный интеллект трансформирует многие отрасли.",
+        "zh": "人工智能正在改变许多行业。",
+        "pinyin": "rén gōng zhì néng zhèng zài gǎi biàn xǔ duō háng yè."
+      }
+    ],
+    "synonyms_en": ["AI", "Machine Intelligence"],
+    "synonyms_ru": ["ИИ", "машинный интеллект"],
+    "synonyms_zh": ["AI", "机器智能"],
+    "related_terms": ["machine_learning", "deep_learning", "neural_network"]
+  },
+  {
+    "id": "machine_learning",
+    "category": "ai_ml",
+    "en": "Machine Learning",
+    "ru": "Машинное обучение",
+    "zh": "机器学习",
+    "zh_trad": "機器學習",
+    "pinyin": "jī qì xué xí",
+    "definition_ru": "Подраздел ИИ, изучающий алгоритмы, способные обучаться на данных без жесткого программирования правил.",
+    "definition_en": "A subset of AI focused on algorithms that learn from data without being explicitly programmed.",
+    "definition_zh": "人工智能的一个子领域，专注于通过数据学习而无需显式编写规则的算法。",
+    "examples": [
+      {
+        "en": "Machine learning models require large training datasets.",
+        "ru": "Моделям машинного обучения требуются большие обучающие наборы данных.",
+        "zh": "机器学习模型需要庞大的训练数据集。",
+        "pinyin": "jī qì xué xí mó xíng xū yào páng dà de xùn liàn shù jù jí."
+      }
+    ],
+    "synonyms_en": ["ML"],
+    "synonyms_ru": ["МО"],
+    "synonyms_zh": ["ML"],
+    "related_terms": ["artificial_intelligence", "deep_learning", "supervised_learning"]
+  },
+  {
+    "id": "deep_learning",
+    "category": "ai_ml",
+    "en": "Deep Learning",
+    "ru": "Глубокое обучение",
+    "zh": "深度学习",
+    "zh_trad": "深度學習",
+    "pinyin": "shēn dù xué xí",
+    "definition_ru": "Раздел машинного обучения, использующий глубокие многослойные искусственные нейронные сети.",
+    "definition_en": "A subset of machine learning based on multi-layered artificial neural networks.",
+    "definition_zh": "机器学习的一个分支，基于多层人工神经网络。",
+    "examples": [
+      {
+        "en": "Deep learning achieves state-of-the-art results in computer vision.",
+        "ru": "Глубокое обучение достигает передовых результатов в компьютерном зрении.",
+        "zh": "深度学习在计算机视觉领域取得了最先进的成果。",
+        "pinyin": "shēn dù xué xí zài jì suàn jī shì jué lǐng yù qǔ dé le zuì xiān jìn de chéng guǒ."
+      }
+    ],
+    "synonyms_en": ["DL"],
+    "synonyms_ru": ["глубинное обучение"],
+    "synonyms_zh": ["DL"],
+    "related_terms": ["neural_network", "transformer_model", "large_language_model"]
+  },
+  {
+    "id": "neural_network",
+    "category": "ai_ml",
+    "en": "Neural Network",
+    "ru": "Нейронная сеть",
+    "zh": "神经网络",
+    "zh_trad": "神經網路",
+    "pinyin": "shén jīng wǎng luò",
+    "definition_ru": "Вычислительная модель, состоящая из взаимосвязанных искусственных нейронов.",
+    "definition_en": "A computing system inspired by the biological neural networks in animal brains.",
+    "definition_zh": "一种受生物大脑神经网络启发的计算模型。",
+    "examples": [
+      {
+        "en": "Convolutional neural networks are widely used in image classification.",
+        "ru": "Сверточные нейронные сети широко используются в классификации изображений.",
+        "zh": "卷积神经网络广泛应用于图像分类。",
+        "pinyin": "juǎn jī shén jīng wǎng luò guǎng fàn yìng yòng yú tú xiàng fēn lèi."
+      }
+    ],
+    "synonyms_en": ["Artificial Neural Network", "ANN"],
+    "synonyms_ru": ["нейросеть", "ИНС"],
+    "synonyms_zh": ["人工神经网络", "ANN"],
+    "related_terms": ["deep_learning", "backpropagation", "activation_function"]
+  },
+  {
+    "id": "large_language_model",
+    "category": "ai_ml",
+    "en": "Large Language Model",
+    "ru": "Большая языковая модель",
+    "zh": "大语言模型",
+    "zh_trad": "大型語言模型",
+    "pinyin": "dà yǔ yán mó xíng",
+    "definition_ru": "Модель ИИ с миллиардами параметров, обученная на гигантских объемах текста для генерации и понимания речи.",
+    "definition_en": "An AI model with massive parameters trained on vast text data to understand and generate human language.",
+    "definition_zh": "具有海量参数的AI模型，在大规模文本数据上训练，用于理解和生成自然语言。",
+    "examples": [
+      {
+        "en": "Large language models can assist with coding and copywriting.",
+        "ru": "Большие языковые модели могут помогать в написании кода и текстов.",
+        "zh": "大语言模型可以协助编程和文案写作。",
+        "pinyin": "dà yǔ yán mó xíng kě yǐ xié zhù biān chéng hé wén àn xiě zuò."
+      }
+    ],
+    "synonyms_en": ["LLM"],
+    "synonyms_ru": ["БЯМ", "LLM"],
+    "synonyms_zh": ["LLM", "大模型"],
+    "related_terms": ["transformer_model", "prompt_engineering", "fine_tuning"]
+  },
+  {
+    "id": "transformer_model",
+    "category": "ai_ml",
+    "en": "Transformer Architecture",
+    "ru": "Архитектура Трансформер",
+    "zh": "Transformer架构",
+    "zh_trad": "Transformer架構",
+    "pinyin": "Transformer jià gòu",
+    "definition_ru": "Архитектура нейросетей, основанная на механизме внутреннего внимания (self-attention).",
+    "definition_en": "A neural network architecture based on self-attention mechanisms, dominating modern NLP and vision.",
+    "definition_zh": "一种基于自注意力机制的神经网络架构，主导了现代NLP和视觉领域。",
+    "examples": [
+      {
+        "en": "The transformer architecture enables efficient parallel training.",
+        "ru": "Архитектура трансформер обеспечивает эффективное параллельное обучение.",
+        "zh": "Transformer架构支持高效的并行训练。",
+        "pinyin": "Transformer jià gòu zhī chí gāo xiào de bìng xíng xùn liàn."
+      }
+    ],
+    "synonyms_en": ["Transformer"],
+    "synonyms_ru": ["трансформер"],
+    "synonyms_zh": ["Transformer网络", "变换器模型"],
+    "related_terms": ["attention_mechanism", "large_language_model"]
+  },
+  {
+    "id": "attention_mechanism",
+    "category": "ai_ml",
+    "en": "Attention Mechanism",
+    "ru": "Механизм внимания",
+    "zh": "注意力机制",
+    "zh_trad": "注意力機制",
+    "pinyin": "zhù yì lì jī zhì",
+    "definition_ru": "Механизм в нейросетях, позволяющий динамически фокусироваться на наиболее значимых частях входных данных.",
+    "definition_en": "A technique in neural networks allowing models to focus dynamically on different parts of the input sequence.",
+    "definition_zh": "神经网络中的一种技术，使模型能够动态关注输入序列中最相关的部分。",
+    "examples": [
+      {
+        "en": "Self-attention computes relations between all tokens in a sentence.",
+        "ru": "Механизм self-attention вычисляет связи между всеми токенами в предложении.",
+        "zh": "自注意力机制计算句子中所有标记之间的关系。",
+        "pinyin": "zì zhù yì lì jī zhì jì suàn jù zi zhōng suǒ yǒu biāo jì zhī jiān de guān xì."
+      }
+    ],
+    "synonyms_en": ["Self-Attention"],
+    "synonyms_ru": ["механизм самовнимания", "внимание"],
+    "synonyms_zh": ["自注意力机制"],
+    "related_terms": ["transformer_model", "large_language_model"]
+  },
+  {
+    "id": "reinforcement_learning",
+    "category": "ai_ml",
+    "en": "Reinforcement Learning",
+    "ru": "Обучение с подкреплением",
+    "zh": "强化学习",
+    "zh_trad": "強化學習",
+    "pinyin": "qiáng huà xué xí",
+    "definition_ru": "Метод машинного обучения, при котором агент учится принимать решения, максимизируя получаемую награду.",
+    "definition_en": "A machine learning paradigm where an agent learns decision making via rewards and penalties in an environment.",
+    "definition_zh": "一种机器学习范式，智能体通过与环境交互并获得奖励或惩罚来学习决策。",
+    "examples": [
+      {
+        "en": "Reinforcement learning is widely used in robotics and game playing.",
+        "ru": "Обучение с подкреплением широко применяется в робототехнике и играх.",
+        "zh": "强化学习广泛应用于机器人和博弈游戏。",
+        "pinyin": "qiáng huà xué xí guǎng fàn yìng yòng yú jī qì rén hé bó yì yóu xì."
+      }
+    ],
+    "synonyms_en": ["RL"],
+    "synonyms_ru": ["RL"],
+    "synonyms_zh": ["RL"],
+    "related_terms": ["supervised_learning", "unsupervised_learning"]
+  },
+  {
+    "id": "supervised_learning",
+    "category": "ai_ml",
+    "en": "Supervised Learning",
+    "ru": "Обучение с учителем",
+    "zh": "监督学习",
+    "zh_trad": "監督學習",
+    "pinyin": "jiān dū xué xí",
+    "definition_ru": "Обучение модели на размеченных данных с известными правильными ответами.",
+    "definition_en": "Machine learning where the model is trained on labeled input-output pairs.",
+    "definition_zh": "在带标签的输入输出对数据上训练模型的机器学习方法。",
+    "examples": [
+      {
+        "en": "Spam filtering is a classic example of supervised learning.",
+        "ru": "Фильтрация спама — классический пример обучения с учителем.",
+        "zh": "垃圾邮件过滤是监督学习的典型例子。",
+        "pinyin": "lā jī yóu jiàn guò lǜ shì jiān dū xué xí de diǎn xíng lì zi."
+      }
+    ],
+    "synonyms_en": [],
+    "synonyms_ru": ["контролируемое обучение"],
+    "synonyms_zh": ["有监督学习"],
+    "related_terms": ["unsupervised_learning", "reinforcement_learning"]
+  },
+  {
+    "id": "unsupervised_learning",
+    "category": "ai_ml",
+    "en": "Unsupervised Learning",
+    "ru": "Обучение без учителя",
+    "zh": "无监督学习",
+    "zh_trad": "無監督學習",
+    "pinyin": "wú jiān dū xué xí",
+    "definition_ru": "Обучение модели на неразмеченных данных для обнаружения скрытых закономерностей и кластеров.",
+    "definition_en": "Machine learning algorithms that discover hidden patterns or clusters in unlabeled data.",
+    "definition_zh": "在未标记数据中发现隐藏模式或聚类结构的机器学习算法。",
+    "examples": [
+      {
+        "en": "Clustering algorithms are part of unsupervised learning.",
+        "ru": "Алгоритмы кластеризации являются частью обучения без учителя.",
+        "zh": "聚类算法属于无监督学习。",
+        "pinyin": "jù lèi suàn fǎ shǔ yú wú jiān dū xué xí."
+      }
+    ],
+    "synonyms_en": [],
+    "synonyms_ru": ["неконтролируемое обучение"],
+    "synonyms_zh": ["非监督学习"],
+    "related_terms": ["supervised_learning", "clustering"]
+  },
+  {
+    "id": "fine_tuning",
+    "category": "ai_ml",
+    "en": "Fine-Tuning",
+    "ru": "Тонкая настройка (Файн-тюнинг)",
+    "zh": "微调",
+    "zh_trad": "微調",
+    "pinyin": "wēi tiáo",
+    "definition_ru": "Дообучение предварительно обученной базовой модели на целевом датасете для адаптации к конкретной задаче.",
+    "definition_en": "The process of taking a pre-trained model and further training it on a specific domain dataset.",
+    "definition_zh": "采用预训练模型并在特定领域数据集上进一步训练的过程。",
+    "examples": [
+      {
+        "en": "Fine-tuning improves domain-specific accuracy of LLMs.",
+        "ru": "Файн-тюнинг повышает точность языковых моделей в конкретной предметной области.",
+        "zh": "微调可以提高大语言模型在特定领域的准确率。",
+        "pinyin": "wēi tiáo kě yǐ tí gāo dà yǔ yán mó xíng zài tè dìng lǐng yù de zhǔn què lǜ."
+      }
+    ],
+    "synonyms_en": ["Model fine-tuning"],
+    "synonyms_ru": ["файн-тюнинг", "дообучение"],
+    "synonyms_zh": ["模型微调"],
+    "related_terms": ["large_language_model", "transfer_learning"]
+  },
+  {
+    "id": "prompt_engineering",
+    "category": "ai_ml",
+    "en": "Prompt Engineering",
+    "ru": "Промпт-инжиниринг",
+    "zh": "提示词工程",
+    "zh_trad": "提示詞工程",
+    "pinyin": "tí shì cí gōng chéng",
+    "definition_ru": "Методология формулирования и структурирования текстовых запросов к генеративным языковым моделям.",
+    "definition_en": "The practice of designing and refining inputs to generative AI models to achieve desired outputs.",
+    "definition_zh": "设计和优化给生成式AI模型的输入提示以获得理想输出的技术。",
+    "examples": [
+      {
+        "en": "Good prompt engineering leads to significantly better AI responses.",
+        "ru": "Хороший промпт-инжиниринг приводит к значительно более качественным ответам ИИ.",
+        "zh": "优秀的提示词工程能显著提高AI的回答质量。",
+        "pinyin": "yōu xiù de tí shì cí gōng chéng néng xiǎn zhù tí gāo AI de huí dá zhì liàng."
+      }
+    ],
+    "synonyms_en": ["Prompting"],
+    "synonyms_ru": ["составление промптов"],
+    "synonyms_zh": ["提示工程"],
+    "related_terms": ["large_language_model", "in_context_learning"]
+  },
+  {
+    "id": "computer_vision",
+    "category": "ai_ml",
+    "en": "Computer Vision",
+    "ru": "Компьютерное зрение",
+    "zh": "计算机视觉",
+    "zh_trad": "電腦視覺",
+    "pinyin": "jì suàn jī shì jué",
+    "definition_ru": "Направление ИИ, изучающее методы автоматического анализа, распознавания и понимания изображений и видео.",
+    "definition_en": "An AI field enabling computers to derive meaningful information from digital images and videos.",
+    "definition_zh": "人工智能的一个领域，使计算机能够从数字图像和视频中获取有意义的信息。",
+    "examples": [
+      {
+        "en": "Computer vision powers autonomous vehicle navigation.",
+        "ru": "Компьютерное зрение обеспечивает навигацию беспилотных автомобилей.",
+        "zh": "计算机视觉为自动驾驶汽车导航提供支持。",
+        "pinyin": "jì suàn jī shì jué wèi zì dòng jià shǐ qì chē dǎo háng tí gōng zhī chí."
+      }
+    ],
+    "synonyms_en": ["CV"],
+    "synonyms_ru": ["компьютерное видение", "CV"],
+    "synonyms_zh": ["CV"],
+    "related_terms": ["convolutional_neural_network", "deep_learning"]
+  },
+  {
+    "id": "natural_language_processing",
+    "category": "ai_ml",
+    "en": "Natural Language Processing",
+    "ru": "Обработка естественного языка",
+    "zh": "自然语言处理",
+    "zh_trad": "自然語言處理",
+    "pinyin": "zì rán yǔ yán chǔ lǐ",
+    "definition_ru": "Область компьютерных наук и лингвистики, направленная на понимание и генерацию человеческого языка машинами.",
+    "definition_en": "A branch of AI concerned with enabling computers to understand, interpret, and generate human language.",
+    "definition_zh": "人工智能与语言学的分支，致力于使计算机能够理解、解释和生成人类语言。",
+    "examples": [
+      {
+        "en": "Machine translation is a core task in natural language processing.",
+        "ru": "Машинный перевод — одна из ключевых задач обработки естественного языка.",
+        "zh": "机器翻译是自然语言处理的核心任务之一。",
+        "pinyin": "jī qì fān yì shì zì rán yǔ yán chǔ lǐ de hé xīn rèn wù zhī yī."
+      }
+    ],
+    "synonyms_en": ["NLP"],
+    "synonyms_ru": ["NLP"],
+    "synonyms_zh": ["NLP"],
+    "related_terms": ["large_language_model", "tokenization"]
+  },
+  {
+    "id": "tokenization",
+    "category": "ai_ml",
+    "en": "Tokenization",
+    "ru": "Токенизация",
+    "zh": "分词 / 标记化",
+    "zh_trad": "分詞 / 標記化",
+    "pinyin": "fēn cí / biāo jì huà",
+    "definition_ru": "Процесс разбиения текстовой строки на мелкие составные элементы (токены: слова, подслова, символы).",
+    "definition_en": "The process of splitting raw text into smaller meaningful units (tokens) for model processing.",
+    "definition_zh": "将原始文本分割为较小有意义单元（词元/Token）的过程。",
+    "examples": [
+      {
+        "en": "Byte-pair encoding is a popular tokenization method.",
+        "ru": "Byte-pair encoding — популярный метод токенизации.",
+        "zh": "字节对编码（BPE）是一种常用的分词方法。",
+        "pinyin": "zì jié duì biān mǎ shì yī zhǒng cháng yòng de fēn cí fāng fǎ."
+      }
+    ],
+    "synonyms_en": ["Tokenizing"],
+    "synonyms_ru": ["сегментация текста"],
+    "synonyms_zh": ["词元化", "标记切分"],
+    "related_terms": ["natural_language_processing", "embedding"]
+  },
+  {
+    "id": "embedding",
+    "category": "ai_ml",
+    "en": "Embedding (Vector Embedding)",
+    "ru": "Векторное представление (Эмбеддинг)",
+    "zh": "向量嵌入",
+    "zh_trad": "向量嵌入",
+    "pinyin": "xiàng liàng qiàn rù",
+    "definition_ru": "Числовое векторное представление объектов в многомерном пространстве, отражающее их семантическое сходство.",
+    "definition_en": "A numerical vector representation of words or data points in high-dimensional space capturing semantic meaning.",
+    "definition_zh": "在高维空间中表示单词或数据点的数值向量，捕捉其语义相似性。",
+    "examples": [
+      {
+        "en": "Vector embeddings allow semantic search across millions of documents.",
+        "ru": "Векторные эмбеддинги позволяют выполнять семантический поиск среди миллионов документов.",
+        "zh": "向量嵌入支持在数百万份文档中进行语义搜索。",
+        "pinyin": "xiàng liàng qiàn rù zhī chí zài shù bǎi wàn fèn wén dàng zhōng jìn xíng yǔ yì sōu suǒ."
+      }
+    ],
+    "synonyms_en": ["Vector Embedding", "Word Embedding"],
+    "synonyms_ru": ["эмбеддинг", "векторное погружение"],
+    "synonyms_zh": ["词嵌入", "向量化"],
+    "related_terms": ["vector_database", "natural_language_processing"]
+  },
+  {
+    "id": "rag",
+    "category": "ai_ml",
+    "en": "Retrieval-Augmented Generation",
+    "ru": "Генерация с расширенным поиском (RAG)",
+    "zh": "检索增强生成",
+    "zh_trad": "檢索增強生成",
+    "pinyin": "jiǎn suǒ zēng qiáng shēng chéng",
+    "definition_ru": "Метод объединения внешней поисковой базы знаний с большой языковой моделью для генерации точных ответов.",
+    "definition_en": "An AI technique combining external knowledge retrieval with generative LLMs to provide grounded responses.",
+    "definition_zh": "一种将外部知识库检索与生成式LLM结合的技术，用于提供准确有据的回答。",
+    "examples": [
+      {
+        "en": "RAG reduces hallucinations in enterprise AI applications.",
+        "ru": "RAG снижает вероятность галлюцинаций в корпоративных ИИ-приложениях.",
+        "zh": "RAG可以减少企业AI应用中的幻觉现象。",
+        "pinyin": "RAG kě yǐ jiǎn shǎo qǐ yè AI yìng yòng zhōng de huàn jué xiàn xiàng."
+      }
+    ],
+    "synonyms_en": ["RAG"],
+    "synonyms_ru": ["RAG"],
+    "synonyms_zh": ["RAG"],
+    "related_terms": ["large_language_model", "vector_database"]
+  },
+  {
+    "id": "agentic_ai",
+    "category": "ai_ml",
+    "en": "AI Agent (Agentic Workflow)",
+    "ru": "ИИ-агент (Агентный ИИ)",
+    "zh": "AI智能体 (智能代理)",
+    "zh_trad": "AI智慧代理",
+    "pinyin": "AI zhì néng tǐ / zhì néng dài lǐ",
+    "definition_ru": "Автономная система на базе LLM, способная планировать действия, вызывать инструменты и решать сложные многошаговые задачи.",
+    "definition_en": "An autonomous AI system powered by LLMs capable of reasoning, planning, calling external tools, and executing complex workflows.",
+    "definition_zh": "基于大模型的自主智能系统，具备推理规划、调用外部工具和执行多步骤复杂任务的能力。",
+    "examples": [
+      {
+        "en": "AI agents can browse the web and execute code autonomously.",
+        "ru": "ИИ-агенты могут автономно искать информацию в интернете и исполнять код.",
+        "zh": "AI智能体可以自主浏览网页并执行代码。",
+        "pinyin": "AI zhì néng tǐ kě yǐ zì zhǔ liú lǎn wǎng yè bìng zhí xíng dài mǎ."
+      }
+    ],
+    "synonyms_en": ["Autonomous Agent", "LLM Agent"],
+    "synonyms_ru": ["автономный агент", "агент"],
+    "synonyms_zh": ["智能代理", "Agent"],
+    "related_terms": ["large_language_model", "prompt_engineering"]
+  },
+  {
+    "id": "vector_database",
+    "category": "databases",
+    "en": "Vector Database",
+    "ru": "Векторная база данных",
+    "zh": "向量数据库",
+    "zh_trad": "向量資料庫",
+    "pinyin": "xiàng liàng shù jù kù",
+    "definition_ru": "Специализированная СУБД, оптимизированная для хранения многомерных векторов и быстрого поиска ближайших соседей (k-NN).",
+    "definition_en": "A database designed to store and index high-dimensional vector embeddings for fast similarity search.",
+    "definition_zh": "专为存储和索引高维向量嵌入而设计的数据库，支持快速相似度搜索。",
+    "examples": [
+      {
+        "en": "Milvus and Pinecone are popular vector databases.",
+        "ru": "Milvus и Pinecone — популярные векторные базы данных.",
+        "zh": "Milvus和Pinecone是常用的向量数据库。",
+        "pinyin": "Milvus hé Pinecone shì cháng yòng de xiàng liàng shù jù kù."
+      }
+    ],
+    "synonyms_en": ["Vector DB"],
+    "synonyms_ru": ["векторная СУБД"],
+    "synonyms_zh": ["矢量数据库"],
+    "related_terms": ["embedding", "rag"]
+  },
+  {
+    "id": "source_code",
+    "category": "software_dev",
+    "en": "Source Code",
+    "ru": "Исходный код",
+    "zh": "源代码",
+    "zh_trad": "原始碼",
+    "pinyin": "yuán dài mǎ",
+    "definition_ru": "Текст компьютерной программы на понятном человеку языке программирования.",
+    "definition_en": "Any collection of code written using a human-readable programming language.",
+    "definition_zh": "用人类可读的编程语言编写的计算机程序文本。",
+    "examples": [
+      {
+        "en": "The source code is hosted on GitHub.",
+        "ru": "Исходный код размещен на GitHub.",
+        "zh": "源代码托管在GitHub上。",
+        "pinyin": "yuán dài mǎ tuō guǎn zài GitHub shàng."
+      }
+    ],
+    "synonyms_en": ["Code", "Source"],
+    "synonyms_ru": ["исходник", "код"],
+    "synonyms_zh": ["源码", "代码"],
+    "related_terms": ["compiler", "interpreter", "git_version_control"]
+  },
+  {
+    "id": "compiler",
+    "category": "software_dev",
+    "en": "Compiler",
+    "ru": "Компилятор",
+    "zh": "编译器",
+    "zh_trad": "編譯器",
+    "pinyin": "biān yì qì",
+    "definition_ru": "Программа, преобразующая исходный код на высокоуровневом языке в машинный код или байт-код.",
+    "definition_en": "A computer program that translates computer code written in one language into machine code or bytecode.",
+    "definition_zh": "将高级编程语言编写的代码翻译为机器码或字节码的计算机程序。",
+    "examples": [
+      {
+        "en": "GCC and Clang are popular C/C++ compilers.",
+        "ru": "GCC и Clang — популярные компиляторы C/C++.",
+        "zh": "GCC和Clang是流行的C/C++编译器。",
+        "pinyin": "GCC hé Clang shì liú xíng de C/C++ biān yì qì."
+      }
+    ],
+    "synonyms_en": [],
+    "synonyms_ru": [],
+    "synonyms_zh": [],
+    "related_terms": ["interpreter", "source_code"]
+  },
+  {
+    "id": "interpreter",
+    "category": "software_dev",
+    "en": "Interpreter",
+    "ru": "Интерпретатор",
+    "zh": "解释器",
+    "zh_trad": "直譯器",
+    "pinyin": "jiě shì qì",
+    "definition_ru": "Программа, которая выполняет инструкции исходного кода строка за строкой без предварительной компиляции.",
+    "definition_en": "A computer program that directly executes instructions written in a programming language without previous compilation.",
+    "definition_zh": "逐行直接执行编程语言指令而无需预先完全编译的程序。",
+    "examples": [
+      {
+        "en": "Python code is executed by the CPython interpreter.",
+        "ru": "Код Python выполняется интерпретатором CPython.",
+        "zh": "Python代码由CPython解释器执行。",
+        "pinyin": "Python dài mǎ yóu CPython jiě shì qì zhí xíng."
+      }
+    ],
+    "synonyms_en": [],
+    "synonyms_ru": [],
+    "synonyms_zh": [],
+    "related_terms": ["compiler", "source_code"]
+  },
+  {
+    "id": "multithreading",
+    "category": "software_dev",
+    "en": "Multithreading",
+    "ru": "Многопоточность",
+    "zh": "多线程",
+    "zh_trad": "多執行緒",
+    "pinyin": "duō xiàn chéng",
+    "definition_ru": "Способность центрального процессора или процесса одновременно выполнять несколько потоков команд.",
+    "definition_en": "The ability of a central processing unit or process to execute multiple concurrent threads.",
+    "definition_zh": "中央处理器或进程并发执行多个线程的能力。",
+    "examples": [
+      {
+        "en": "Multithreading can significantly improve application responsiveness.",
+        "ru": "Многопоточность может значительно улучшить отзывчивость приложения.",
+        "zh": "多线程可以显著提高应用程序的响应能力。",
+        "pinyin": "duō xiàn chéng kě yǐ xiǎn zhù tí gāo yìng yòng chéng xù de xiǎng yìng néng lì."
+      }
+    ],
+    "synonyms_en": ["Concurrency", "Thread parallelism"],
+    "synonyms_ru": ["многонитевость"],
+    "synonyms_zh": ["多线程并发"],
+    "related_terms": ["asynchronous", "deadlock", "mutex"]
+  },
+  {
+    "id": "asynchronous",
+    "category": "software_dev",
+    "en": "Asynchronous Programming",
+    "ru": "Асинхронное программирование",
+    "zh": "异步编程",
+    "zh_trad": "非同步編程",
+    "pinyin": "yì bù biān chéng",
+    "definition_ru": "Подход к программированию, позволяющий выполнять длительные операции ввода-вывода без блокировки основного потока.",
+    "definition_en": "A programming model where non-blocking operations run independently of the main execution thread.",
+    "definition_zh": "一种非阻塞操作独立于主执行线程运行的编程模式。",
+    "examples": [
+      {
+        "en": "Async/await syntax simplifies asynchronous programming in Python and JavaScript.",
+        "ru": "Синтаксис async/await упрощает асинхронное программирование в Python и JavaScript.",
+        "zh": "async/await语法简化了Python和JavaScript中的异步编程。",
+        "pinyin": "async/await yǔ fǎ jiǎn huà le Python hé JavaScript zhōng de yì bù biān chéng."
+      }
+    ],
+    "synonyms_en": ["Async"],
+    "synonyms_ru": ["асинхронность", "асинк"],
+    "synonyms_zh": ["异步处理"],
+    "related_terms": ["multithreading"]
+  },
+  {
+    "id": "deadlock",
+    "category": "operating_systems",
+    "en": "Deadlock",
+    "ru": "Взаимная блокировка (Дедлок)",
+    "zh": "死锁",
+    "zh_trad": "死結",
+    "pinyin": "sǐ suǒ",
+    "definition_ru": "Ситуация в многозадачной среде, когда два или более процессов взаимно ожидают освобождения ресурсов друг друга.",
+    "definition_en": "A state in which each member of a group of processes is waiting for another member to release a shared lock.",
+    "definition_zh": "多任务环境中，一组进程中每个进程都在等待另一个进程释放锁资源的僵局状态。",
+    "examples": [
+      {
+        "en": "Careful lock ordering helps avoid deadlocks.",
+        "ru": "Аккуратный порядок взятия блокировок помогает избежать взаимных блокировок.",
+        "zh": "谨慎安排加锁顺序有助于避免死锁。",
+        "pinyin": "jǐn shèn ān pái jiā suǒ shùn xù yǒu zhù yú bì miǎn sǐ suǒ."
+      }
+    ],
+    "synonyms_en": ["Deadly embrace"],
+    "synonyms_ru": ["тупик", "дедлок"],
+    "synonyms_zh": ["死锁状态"],
+    "related_terms": ["multithreading", "mutex"]
+  },
+  {
+    "id": "mutex",
+    "category": "operating_systems",
+    "en": "Mutex (Mutual Exclusion)",
+    "ru": "Мьютекс (Взаимное исключение)",
+    "zh": "互斥锁",
+    "zh_trad": "互斥鎖",
+    "pinyin": "hù chì suǒ",
+    "definition_ru": "Примитив синхронизации, обеспечивающий доступ к общему ресурсу только одному потоку в каждый момент времени.",
+    "definition_en": "A synchronization primitive that grants exclusive access to a shared resource to only one thread at a time.",
+    "definition_zh": "一种同步原语，确保同一时间只有一个线程能够访问共享资源。",
+    "examples": [
+      {
+        "en": "Acquire the mutex before modifying the shared counter.",
+        "ru": "Захватите мьютекс перед изменением общего счетчика.",
+        "zh": "在修改共享计数器之前获取互斥锁。",
+        "pinyin": "zài xiū gǎi gòng xiǎng jì shù qì zhī qián huò qǔ hù chì suǒ."
+      }
+    ],
+    "synonyms_en": ["Mutual Exclusion Lock"],
+    "synonyms_ru": ["мьютекс"],
+    "synonyms_zh": ["互斥体", "互斥量"],
+    "related_terms": ["deadlock"]
+  },
+  {
+    "id": "cpu",
+    "category": "hardware",
+    "en": "Central Processing Unit (CPU)",
+    "ru": "Центральный процессор (ЦП)",
+    "zh": "中央处理器 (CPU)",
+    "zh_trad": "中央處理器 (CPU)",
+    "pinyin": "zhōng yāng chǔ lǐ qì",
+    "definition_ru": "Основной микропроцессор компьютера, выполняющий машинные инструкции программ.",
+    "definition_en": "The primary component of a computer that executes program instructions and performs calculations.",
+    "definition_zh": "计算机的核心部件，负责执行程序指令并进行算术和逻辑计算。",
+    "examples": [
+      {
+        "en": "Modern CPUs contain multiple processing cores.",
+        "ru": "Современные процессоры содержат несколько вычислительных ядер.",
+        "zh": "现代CPU包含多个处理核心。",
+        "pinyin": "xiàn dài CPU bāo hán duō gè chǔ lǐ hé xīn."
+      }
+    ],
+    "synonyms_en": ["Processor", "CPU"],
+    "synonyms_ru": ["процессор", "ЦПУ", "проц"],
+    "synonyms_zh": ["处理器", "CPU"],
+    "related_terms": ["gpu", "ram"]
+  },
+  {
+    "id": "gpu",
+    "category": "hardware",
+    "en": "Graphics Processing Unit (GPU)",
+    "ru": "Графический процессор (Видеокарта / GPU)",
+    "zh": "图形处理器 (GPU / 显卡)",
+    "zh_trad": "圖形處理器 (GPU / 顯示卡)",
+    "pinyin": "tú xíng chǔ lǐ qì / xiǎn kǎ",
+    "definition_ru": "Специализированный процессор с тысячами ядер, оптимизированный для параллельных вычислений и графики.",
+    "definition_en": "A specialized electronic circuit designed to rapidly process parallel data for graphics and deep learning.",
+    "definition_zh": "专为快速并行处理图形和深度学习计算而设计的专用电子芯片。",
+    "examples": [
+      {
+        "en": "GPUs are essential for training modern neural networks.",
+        "ru": "GPU необходимы для обучения современных нейронных сетей.",
+        "zh": "GPU对训练现代神经网络至关重要。",
+        "pinyin": "GPU duì xùn liàn xiàn dài shén jīng wǎng luò zhì guān zhòng yào."
+      }
+    ],
+    "synonyms_en": ["Video Card", "Graphics Card"],
+    "synonyms_ru": ["видеокарта", "ГПУ"],
+    "synonyms_zh": ["显卡", "图形芯片"],
+    "related_terms": ["cpu", "vram"]
+  },
+  {
+    "id": "vram",
+    "category": "hardware",
+    "en": "Video RAM (VRAM)",
+    "ru": "Видеопамять (VRAM)",
+    "zh": "显存 (VRAM)",
+    "zh_trad": "視訊記憶體 (VRAM)",
+    "pinyin": "xiǎn cún",
+    "definition_ru": "Высокоскоростная оперативная память, встроенная в видеокарту для хранения текстур и весов нейросетей.",
+    "definition_en": "High-speed dedicated memory on a graphics card used to store render data and neural network weights.",
+    "definition_zh": "显卡上的高速专用内存，用于存储渲染数据和神经网络模型权重。",
+    "examples": [
+      {
+        "en": "Running large LLMs locally requires at least 16GB of VRAM.",
+        "ru": "Для локального запуска больших LLM требуется не менее 16 ГБ видеопамяти.",
+        "zh": "在本地运行大型语言模型至少需要16GB显存。",
+        "pinyin": "zài běn dì yùn xíng dà xíng yǔ yán mó xíng zhì shǎo xū yào 16GB xiǎn cún."
+      }
+    ],
+    "synonyms_en": ["Video Memory", "Graphics Memory"],
+    "synonyms_ru": ["память видеокарты"],
+    "synonyms_zh": ["视频内存", "显卡内存"],
+    "related_terms": ["gpu", "ram"]
+  },
+  {
+    "id": "ram",
+    "category": "hardware",
+    "en": "Random Access Memory (RAM)",
+    "ru": "Оперативная память (ОЗУ / RAM)",
+    "zh": "随机存取存储器 (内存 / RAM)",
+    "zh_trad": "隨機存取記憶體 (記憶體 / RAM)",
+    "pinyin": "suí jī cún qǔ cún chǔ qì / nèi cún",
+    "definition_ru": "Энергозависимая память компьютера, используемая для временного хранения исполняемого кода и данных.",
+    "definition_en": "A form of volatile computer memory that can be read and changed in any order, used for active data and code.",
+    "definition_zh": "计算机的一种易失性存储介质，用于临时存放正在运行的程序指令和数据。",
+    "examples": [
+      {
+        "en": "Upgrading RAM allows your system to run more applications simultaneously.",
+        "ru": "Увеличение объема оперативной памяти позволяет запускать больше приложений одновременно.",
+        "zh": "增加内存可以让系统同时运行更多应用程序。",
+        "pinyin": "zēng jiā nèi cún kě yǐ ràng xì tǒng tóng shí yùn xíng gèng duō yìng yòng chéng xù."
+      }
+    ],
+    "synonyms_en": ["Main Memory", "Memory"],
+    "synonyms_ru": ["ОЗУ", "оперативка"],
+    "synonyms_zh": ["内存", "主存"],
+    "related_terms": ["vram", "virtual_memory"]
+  },
+  {
+    "id": "solid_state_drive",
+    "category": "hardware",
+    "en": "Solid-State Drive (SSD)",
+    "ru": "Твердотельный накопитель (SSD)",
+    "zh": "固态硬盘 (SSD)",
+    "zh_trad": "固態硬碟 (SSD)",
+    "pinyin": "gù tài yìng pán",
+    "definition_ru": "Энергонезависимое накопительное устройство на основе флеш-памяти, превосходящее HDD по скорости чтения и записи.",
+    "definition_en": "A solid-state storage device that uses integrated circuit assemblies as memory to store persistent data.",
+    "definition_zh": "使用集成电路芯片作为持久存储介质的固态存储设备，读写速度远快于传统机械硬盘。",
+    "examples": [
+      {
+        "en": "NVMe SSDs provide ultra-fast read and write speeds.",
+        "ru": "NVMe SSD обеспечивают сверхвысокую скорость чтения и записи.",
+        "zh": "NVMe固态硬盘提供超高速的读写性能。",
+        "pinyin": "NVMe gù tài yìng pán tí gōng chāo gāo sù de dú xiě xìng néng."
+      }
+    ],
+    "synonyms_en": ["SSD", "Flash Drive"],
+    "synonyms_ru": ["SSD", "ССД", "твердотельник"],
+    "synonyms_zh": ["SSD", "固态盘"],
+    "related_terms": ["ram"]
+  },
+  {
+    "id": "api",
+    "category": "software_dev",
+    "en": "Application Programming Interface (API)",
+    "ru": "Интерфейс прикладного программирования (API)",
+    "zh": "应用程序编程接口 (API)",
+    "zh_trad": "應用程式介面 (API)",
+    "pinyin": "yìng yòng chéng xù biān chéng jiē kǒu",
+    "definition_ru": "Набор готовых функций, протоколов и инструментов для взаимодействия между различными программными системами.",
+    "definition_en": "A set of protocols, routines, and tools for building software applications and enabling communication between systems.",
+    "definition_zh": "一组定义好的协议、函数和工具，用于构建软件应用程序及系统间通信。",
+    "examples": [
+      {
+        "en": "The REST API allows clients to retrieve user profiles via HTTP GET.",
+        "ru": "REST API позволяет клиентам получать профили пользователей через HTTP GET.",
+        "zh": "REST API允许客户端通过HTTP GET获取用户资料。",
+        "pinyin": "REST API yǔn xǔ kè hù duān tōng guò HTTP GET huò qǔ yòng hù zī liào."
+      }
+    ],
+    "synonyms_en": ["API", "Web API"],
+    "synonyms_ru": ["АПИ", "API"],
+    "synonyms_zh": ["API接口", "应用接口"],
+    "related_terms": ["rest_api", "microservices"]
+  },
+  {
+    "id": "rest_api",
+    "category": "networks",
+    "en": "RESTful API (REST)",
+    "ru": "REST API",
+    "zh": "RESTful 接口",
+    "zh_trad": "RESTful 介面",
+    "pinyin": "RESTful jiē kǒu",
+    "definition_ru": "Архитектурный стиль веб-сервисов, использующий стандартные HTTP-методы (GET, POST, PUT, DELETE) для работы с ресурсами.",
+    "definition_en": "An architectural style for web services relying on stateless, client-server communication using standard HTTP verbs.",
+    "definition_zh": "一种基于无状态、客户端-服务器架构的Web服务风格，利用标准HTTP方法操作资源。",
+    "examples": [
+      {
+        "en": "REST APIs typically communicate using JSON payloads.",
+        "ru": "REST API обычно обмениваются данными в формате JSON.",
+        "zh": "REST API通常使用JSON格式进行数据交互。",
+        "pinyin": "REST API tōng cháng shǐ yòng JSON gé shì jìn xíng shù jù jiāo hù."
+      }
+    ],
+    "synonyms_en": ["REST"],
+    "synonyms_ru": ["REST архитектура"],
+    "synonyms_zh": ["REST架构", "RESTful服务"],
+    "related_terms": ["api", "http_protocol"]
+  },
+  {
+    "id": "http_protocol",
+    "category": "networks",
+    "en": "Hypertext Transfer Protocol (HTTP)",
+    "ru": "Протокол передачи гипертекста (HTTP)",
+    "zh": "超文本传输协议 (HTTP)",
+    "zh_trad": "超文本傳輸協定 (HTTP)",
+    "pinyin": "chāo wén běn chuán shū xié yì",
+    "definition_ru": "Сетевой протокол прикладного уровня, используемый для передачи веб-страниц и данных в Интернете.",
+    "definition_en": "An application-layer protocol for transmitting hypermedia documents, the foundation of data communication for the World Wide Web.",
+    "definition_zh": "一种应用层协议，用于在万维网上传输超媒体文档和数据。",
+    "examples": [
+      {
+        "en": "HTTPS encrypts HTTP traffic with TLS for security.",
+        "ru": "HTTPS шифрует HTTP-трафик с помощью TLS для безопасности.",
+        "zh": "HTTPS使用TLS对HTTP通信进行加密以确保安全。",
+        "pinyin": "HTTPS shǐ yòng TLS duì HTTP tōng xìn jìn xíng jiā mì yǐ què bǎo ān quán."
+      }
+    ],
+    "synonyms_en": ["HTTP"],
+    "synonyms_ru": ["HTTP"],
+    "synonyms_zh": ["HTTP协议"],
+    "related_terms": ["tcp_ip", "dns", "rest_api"]
+  },
+  {
+    "id": "dns",
+    "category": "networks",
+    "en": "Domain Name System (DNS)",
+    "ru": "Система доменных имен (DNS)",
+    "zh": "域名系统 (DNS)",
+    "zh_trad": "網域名稱系統 (DNS)",
+    "pinyin": "yù míng xì tǒng",
+    "definition_ru": "Распределенная система, преобразующая понятные человеку доменные имена сайтов в числовые IP-адреса.",
+    "definition_en": "A hierarchical, decentralized naming system that translates human-readable domain names into IP addresses.",
+    "definition_zh": "分层的去中心化命名系统，将人类易读的域名解析为机器识别的IP地址。",
+    "examples": [
+      {
+        "en": "DNS resolution translates example.com to its IP address.",
+        "ru": "DNS-разрешение преобразует example.com в его IP-адрес.",
+        "zh": "DNS解析将 example.com 转换为其IP地址。",
+        "pinyin": "DNS jiě xī jiāng example.com zhuǎn huàn wèi qí IP dì zhǐ."
+      }
+    ],
+    "synonyms_en": ["DNS"],
+    "synonyms_ru": ["ДНС"],
+    "synonyms_zh": ["DNS服务器", "域名解析"],
+    "related_terms": ["tcp_ip", "http_protocol"]
+  },
+  {
+    "id": "tcp_ip",
+    "category": "networks",
+    "en": "TCP/IP Protocol Suite",
+    "ru": "Стек протоколов TCP/IP",
+    "zh": "TCP/IP 协议族",
+    "zh_trad": "TCP/IP 協定套組",
+    "pinyin": "TCP/IP xié yì zú",
+    "definition_ru": "Набор сетевых протоколов, лежащих в основе работы сети Интернет (Transmission Control Protocol / Internet Protocol).",
+    "definition_en": "The set of communications protocols used on the Internet and similar computer networks.",
+    "definition_zh": "互联网及类似计算机网络所使用的整套通信协议集合。",
+    "examples": [
+      {
+        "en": "TCP guarantees reliable and in-order packet delivery.",
+        "ru": "TCP гарантирует надежную и упорядоченную доставку сетевых пакетов.",
+        "zh": "TCP保证了网络数据包的可靠且有序传输。",
+        "pinyin": "TCP bǎo zhèng le wǎng luò shù jù bāo de kě kào qiě yǒu xù chuán shū."
+      }
+    ],
+    "synonyms_en": ["Internet Protocol Suite"],
+    "synonyms_ru": ["стек TCP/IP"],
+    "synonyms_zh": ["网络协议栈"],
+    "related_terms": ["dns", "http_protocol"]
+  },
+  {
+    "id": "load_balancer",
+    "category": "networks",
+    "en": "Load Balancer",
+    "ru": "Балансировщик нагрузки",
+    "zh": "负载均衡器",
+    "zh_trad": "負載平衡器",
+    "pinyin": "fù zài jūn héng qì",
+    "definition_ru": "Устройство или сервис, распределяющий входящий сетевой трафик между несколькими серверами для повышения доступности.",
+    "definition_en": "A device or software that distributes network traffic across multiple servers to ensure high availability and responsiveness.",
+    "definition_zh": "将网络流量分发到多个服务器以确保高可用性和高响应速度的设备或软件。",
+    "examples": [
+      {
+        "en": "Nginx can act as a reverse proxy and load balancer.",
+        "ru": "Nginx может работать как обратный прокси и балансировщик нагрузки.",
+        "zh": "Nginx可以用作反向代理和负载均衡器。",
+        "pinyin": "Nginx kě yǐ yòng zuò fǎn xiàng dài lǐ hé fù zài jūn héng qì."
+      }
+    ],
+    "synonyms_en": ["Load Distribution System"],
+    "synonyms_ru": ["балансировщик"],
+    "synonyms_zh": ["负载均衡", "SLB"],
+    "related_terms": ["microservices"]
+  },
+  {
+    "id": "docker_container",
+    "category": "cloud_devops",
+    "en": "Docker Container",
+    "ru": "Контейнер Docker",
+    "zh": "Docker容器",
+    "zh_trad": "Docker容器",
+    "pinyin": "Docker róng qì",
+    "definition_ru": "Легковесный изолированный исполняемый пакет, включающий все зависимости для запуска приложения.",
+    "definition_en": "A lightweight, standalone, executable package of software that includes everything needed to run an application.",
+    "definition_zh": "一种轻量级、独立的软件包，包含运行应用程序所需的一切依赖和环境。",
+    "examples": [
+      {
+        "en": "Docker containers ensure consistent behavior across dev and prod.",
+        "ru": "Контейнеры Docker обеспечивают одинаковое поведение приложения в dev и prod средах.",
+        "zh": "Docker容器确保应用在开发与生产环境中表现一致。",
+        "pinyin": "Docker róng qì què bǎo yìng yòng zài kāi fā yǔ shēng chǎn huán jìng zhōng biǎo xiàn yī zhì."
+      }
+    ],
+    "synonyms_en": ["Container"],
+    "synonyms_ru": ["контейнер"],
+    "synonyms_zh": ["容器", "应用容器"],
+    "related_terms": ["kubernetes", "ci_cd"]
+  },
+  {
+    "id": "kubernetes",
+    "category": "cloud_devops",
+    "en": "Kubernetes (K8s)",
+    "ru": "Кубернетес (Kubernetes / K8s)",
+    "zh": "Kubernetes (K8s / 容器编排平台)",
+    "zh_trad": "Kubernetes (K8s)",
+    "pinyin": "Kubernetes / róng qì biān pái píng tái",
+    "definition_ru": "Открытая платформа оркестрации контейнеров для автоматизации развертывания, масштабирования и управления приложениями.",
+    "definition_en": "An open-source container orchestration system for automating application deployment, scaling, and management.",
+    "definition_zh": "一个开源容器编排平台，用于自动化应用程序的部署、扩展和管理。",
+    "examples": [
+      {
+        "en": "Kubernetes automatically scales pods based on CPU utilization.",
+        "ru": "Kubernetes автоматически масштабирует поды на основе нагрузки на процессор.",
+        "zh": "Kubernetes根据CPU利用率自动扩缩容Pod。",
+        "pinyin": "Kubernetes gēn jù CPU lì yòng lǜ zì dòng kuò suō róng Pod."
+      }
+    ],
+    "synonyms_en": ["K8s", "Container Orchestrator"],
+    "synonyms_ru": ["кубер", "оркестратор контейнеров"],
+    "synonyms_zh": ["K8s", "容器编排系统"],
+    "related_terms": ["docker_container", "microservices", "ci_cd"]
+  },
+  {
+    "id": "ci_cd",
+    "category": "cloud_devops",
+    "en": "Continuous Integration / Continuous Deployment (CI/CD)",
+    "ru": "Непрерывная интеграция и доставка (CI/CD)",
+    "zh": "持续集成与持续部署 (CI/CD)",
+    "zh_trad": "持續整合與持續部署 (CI/CD)",
+    "pinyin": "chí xù jí chéng yǔ chí xù bù shǔ",
+    "definition_ru": "Практика разработки ПО, автоматизирующая сборку, тестирование и релиз программного обеспечения.",
+    "definition_en": "A combined practice of continuous integration and continuous delivery/deployment automating the release pipeline.",
+    "definition_zh": "一种自动化软件构建、测试和部署发布全流程的工程实践。",
+    "examples": [
+      {
+        "en": "GitHub Actions is a widely used tool for CI/CD pipelines.",
+        "ru": "GitHub Actions — широко используемый инструмент для пайплайнов CI/CD.",
+        "zh": "GitHub Actions是广泛使用的CI/CD流水线工具。",
+        "pinyin": "GitHub Actions shì guǎng fàn shǐ yòng de CI/CD liú shuǐ xiàn gōng jù."
+      }
+    ],
+    "synonyms_en": ["CI/CD Pipeline"],
+    "synonyms_ru": ["пайплайн CI/CD"],
+    "synonyms_zh": ["CI/CD流水线"],
+    "related_terms": ["docker_container", "git_version_control"]
+  },
+  {
+    "id": "microservices",
+    "category": "cloud_devops",
+    "en": "Microservices Architecture",
+    "ru": "Микросервисная архитектура",
+    "zh": "微服务架构",
+    "zh_trad": "微服務架構",
+    "pinyin": "wēi fú wù jià gòu",
+    "definition_ru": "Подход к разработке ПО, при котором приложение разбивается на небольшие независимые сервисы, взаимодействующие по сети.",
+    "definition_en": "An architectural pattern that structures an application as a collection of loosely coupled, independently deployable services.",
+    "definition_zh": "一种将大型应用拆分为松耦合、可独立部署的小型服务集合的软件架构风格。",
+    "examples": [
+      {
+        "en": "Microservices allow teams to deploy features independently.",
+        "ru": "Микросервисы позволяют командам независимо развертывать новую функциональность.",
+        "zh": "微服务允许开发团队独立发布功能。",
+        "pinyin": "wēi fú wù yǔn xǔ kāi fā tuán duì dú lì fā bù gōng néng."
+      }
+    ],
+    "synonyms_en": ["Microservices"],
+    "synonyms_ru": ["микросервисы"],
+    "synonyms_zh": ["微服务"],
+    "related_terms": ["docker_container", "api", "load_balancer"]
+  },
+  {
+    "id": "relational_database",
+    "category": "databases",
+    "en": "Relational Database (RDBMS)",
+    "ru": "Реляционная база данных (РСУБД)",
+    "zh": "关系型数据库 (RDBMS)",
+    "zh_trad": "關聯式資料庫 (RDBMS)",
+    "pinyin": "guān xì xíng shù jù kù",
+    "definition_ru": "База данных, хранящая данные в структурированных таблицах со строками и столбцами, поддерживающая SQL.",
+    "definition_en": "A database based on the relational model that stores data in structured tables with rows and columns.",
+    "definition_zh": "基于关系模型以结构化二维表（行与列）存储数据的数据库系统，支持SQL查询。",
+    "examples": [
+      {
+        "en": "PostgreSQL and MySQL are leading open-source relational databases.",
+        "ru": "PostgreSQL и MySQL — ведущие реляционные базы данных с открытым исходным кодом.",
+        "zh": "PostgreSQL和MySQL是主流的开源关系型数据库。",
+        "pinyin": "PostgreSQL hé MySQL shì zhǔ liú de kāi yuán guān xì xíng shù jù kù."
+      }
+    ],
+    "synonyms_en": ["SQL Database", "RDBMS"],
+    "synonyms_ru": ["SQL-база данных", "РСУБД"],
+    "synonyms_zh": ["SQL数据库", "关系数据库"],
+    "related_terms": ["nosql_database", "acid_transactions"]
+  },
+  {
+    "id": "nosql_database",
+    "category": "databases",
+    "en": "NoSQL Database",
+    "ru": "NoSQL база данных (Нереляционная БД)",
+    "zh": "NoSQL 数据库 (非关系型数据库)",
+    "zh_trad": "NoSQL 資料庫 (非關聯式資料庫)",
+    "pinyin": "NoSQL shù jù kù / fēi guān xì xíng shù jù kù",
+    "definition_ru": "Нереляционная СУБД, оптимизированная для хранения неструктурированных или полуструктурированных данных (документы, ключ-значение, графы).",
+    "definition_en": "A non-relational database management system designed for flexible data models and horizontal scalability.",
+    "definition_zh": "一种非关系型数据库系统，针对非结构化或半结构化数据模型及水平扩展进行优化。",
+    "examples": [
+      {
+        "en": "MongoDB and Redis are popular examples of NoSQL databases.",
+        "ru": "MongoDB и Redis — популярные примеры NoSQL баз данных.",
+        "zh": "MongoDB和Redis是常用的NoSQL数据库。",
+        "pinyin": "MongoDB hé Redis shì cháng yòng de NoSQL shù jù kù."
+      }
+    ],
+    "synonyms_en": ["Non-relational Database"],
+    "synonyms_ru": ["нереляционная БД"],
+    "synonyms_zh": ["非关系型数据库"],
+    "related_terms": ["relational_database", "sharding", "replication"]
+  },
+  {
+    "id": "acid_transactions",
+    "category": "databases",
+    "en": "ACID Properties (Atomicity, Consistency, Isolation, Durability)",
+    "ru": "Свойства ACID (Атомарность, Согласованность, Изолированность, Надежность)",
+    "zh": "ACID 特性 (原子性、一致性、隔离性、持久性)",
+    "zh_trad": "ACID 特性 (原子性、一致性、隔離性、持久性)",
+    "pinyin": "ACID tè xìng (yuán zǐ xìng, yī zhì xìng, gé lí xìng, chí jiǔ xìng)",
+    "definition_ru": "Набор требований к транзакциям в СУБД, гарантирующих надежность и целостность данных.",
+    "definition_en": "A set of four key properties that guarantee database transactions are processed reliably.",
+    "definition_zh": "数据库事务处理的四大关键特性，确保数据的可靠性与完整性。",
+    "examples": [
+      {
+        "en": "Financial systems strictly demand full ACID compliance.",
+        "ru": "Финансовые системы строго требуют полного соответствия ACID.",
+        "zh": "金融交易系统对ACID特性有极高的严格要求。",
+        "pinyin": "jīn róng jiāo yì xì tǒng duì ACID tè xìng yǒu jí gāo de yán gé yāo qiú."
+      }
+    ],
+    "synonyms_en": ["ACID Transactions"],
+    "synonyms_ru": ["транзакции ACID"],
+    "synonyms_zh": ["ACID事务"],
+    "related_terms": ["relational_database"]
+  },
+  {
+    "id": "sharding",
+    "category": "databases",
+    "en": "Database Sharding",
+    "ru": "Шардирование базы данных",
+    "zh": "分库分表 / 数据库分片",
+    "zh_trad": "資料庫分片",
+    "pinyin": "fēn kù fēn biǎo / shù jù kù fēn piàn",
+    "definition_ru": "Метод горизонтального масштабирования, при котором данные базы разделяются между несколькими серверами.",
+    "definition_en": "A type of database partitioning that separates large databases into smaller, faster parts called shards.",
+    "definition_zh": "一种数据库水平拆分技术，将大型数据集分散存储在多个物理数据库节点上以提升吞吐量。",
+    "examples": [
+      {
+        "en": "Sharding distributes user data by region to balance server load.",
+        "ru": "Шардирование распределяет данные пользователей по регионам для балансировки нагрузки.",
+        "zh": "分片技术按地域分布用户数据以平衡服务器负载。",
+        "pinyin": "fēn piàn jì shù àn dì yù fēn bù yòng hù shù jù yǐ píng héng fú wù qì fù zài."
+      }
+    ],
+    "synonyms_en": ["Horizontal Partitioning"],
+    "synonyms_ru": ["горизонтальное партиционирование", "шардинг"],
+    "synonyms_zh": ["数据分片", "水平分表"],
+    "related_terms": ["replication", "nosql_database"]
+  },
+  {
+    "id": "replication",
+    "category": "databases",
+    "en": "Database Replication",
+    "ru": "Репликация базы данных",
+    "zh": "数据库主从复制",
+    "zh_trad": "資料庫複寫 / 複製",
+    "pinyin": "shù jù kù zhǔ cóng fù zhì",
+    "definition_ru": "Процесс копирования данных с одного сервера баз данных (master) на один или несколько других (replica/slave).",
+    "definition_en": "The process of copying and maintaining database objects across multiple servers for redundancy and high availability.",
+    "definition_zh": "在多台数据库服务器之间同步和保持数据一致的过程，用于高可用与容灾备份。",
+    "examples": [
+      {
+        "en": "Primary-replica replication helps scale read-heavy workloads.",
+        "ru": "Репликация master-slave помогает масштабировать нагрузки с преобладанием чтения.",
+        "zh": "主从复制有助于应对读多写少的并发负载。",
+        "pinyin": "zhǔ cóng fù zhì yǒu zhù yú yìng duì dú duō xiě shǎo de bīng fā fù zài."
+      }
+    ],
+    "synonyms_en": ["Master-Slave Replication", "Data Replication"],
+    "synonyms_ru": ["репликация данных"],
+    "synonyms_zh": ["主从同步", "读写分离"],
+    "related_terms": ["sharding"]
+  },
+  {
+    "id": "encryption",
+    "category": "cybersecurity",
+    "en": "Data Encryption",
+    "ru": "Шифрование данных",
+    "zh": "数据加密",
+    "zh_trad": "資料加密",
+    "pinyin": "shù jù jiā mì",
+    "definition_ru": "Процесс преобразования открытого текста в зашифрованный с использованием криптографического ключа.",
+    "definition_en": "The process of converting plaintext information into ciphertext to prevent unauthorized access.",
+    "definition_zh": "使用加密算法和密钥将明文信息转换为密文以防止未经授权访问的过程。",
+    "examples": [
+      {
+        "en": "End-to-end encryption ensures only communicating users can read messages.",
+        "ru": "Сквозное шифрование гарантирует, что только общающиеся пользователи могут читать сообщения.",
+        "zh": "端到端加密确保只有通信双方能够阅读消息。",
+        "pinyin": "duān dào duān jiā mì què bǎo zhǐ yǒu tōng xìn shuāng fāng néng gòu yuè dú xiāo xi."
+      }
+    ],
+    "synonyms_en": ["Cryptography"],
+    "synonyms_ru": ["криптографическая защита"],
+    "synonyms_zh": ["密码学加密"],
+    "related_terms": ["hash_function", "authentication"]
+  },
+  {
+    "id": "hash_function",
+    "category": "cybersecurity",
+    "en": "Cryptographic Hash Function",
+    "ru": "Криптографическая хеш-функция",
+    "zh": "密码学哈希函数 (散列函数)",
+    "zh_trad": "密碼雜湊函數",
+    "pinyin": "mì mǎ xué hā xī hán shù / sàn liè hán shù",
+    "definition_ru": "Математический алгоритм, преобразующий входные данные произвольной длины в строку фиксированной длины (хеш).",
+    "definition_en": "A mathematical algorithm that maps data of arbitrary size to a fixed-size bit string irreversibly.",
+    "definition_zh": "一种将任意大小的数据单向映射为固定长度字符串的数学算法。",
+    "examples": [
+      {
+        "en": "Passwords should always be stored using salted hash functions like bcrypt.",
+        "ru": "Пароли всегда должны храниться с использованием соленых хеш-функций, таких как bcrypt.",
+        "zh": "密码应始终使用加盐哈希函数（如bcrypt）进行存储。",
+        "pinyin": "mì mǎ yīng shǐ zhōng shǐ yòng jiā yán hā xī hán shù (rú bcrypt) jìn xíng cún chǔ."
+      }
+    ],
+    "synonyms_en": ["Hash Function", "Hashing"],
+    "synonyms_ru": ["хеширование", "хэш"],
+    "synonyms_zh": ["哈希算法", "散列算法"],
+    "related_terms": ["encryption", "hash_table"]
+  },
+  {
+    "id": "authentication",
+    "category": "cybersecurity",
+    "en": "Authentication (AuthN)",
+    "ru": "Аутентификация",
+    "zh": "身份验证 / 认证",
+    "zh_trad": "身分驗證 / 認證",
+    "pinyin": "shēn fèn yàn zhèng / rèn zhèng",
+    "definition_ru": "Процесс проверки подлинности пользователя или устройства (проверка того, кем субъект себя называет).",
+    "definition_en": "The process of verifying the identity of a user, device, or system entity.",
+    "definition_zh": "确认用户、设备或系统实体真实身份的过程。",
+    "examples": [
+      {
+        "en": "Two-factor authentication (2FA) adds an extra layer of account security.",
+        "ru": "Двухфакторная аутентификация (2FA) добавляет дополнительный уровень безопасности аккаунта.",
+        "zh": "双因素身份验证（2FA）为账户增添了额外的安全层。",
+        "pinyin": "shuāng yīn sù shēn fèn yàn zhèng (2FA) wèi zhàng hù zēng tiān le é wài de ān quán céng."
+      }
+    ],
+    "synonyms_en": ["AuthN", "User Verification"],
+    "synonyms_ru": ["проверка подлинности"],
+    "synonyms_zh": ["鉴权", "身份认证"],
+    "related_terms": ["authorization"]
+  },
+  {
+    "id": "authorization",
+    "category": "cybersecurity",
+    "en": "Authorization (AuthZ)",
+    "ru": "Авторизация",
+    "zh": "授权 / 权限授予",
+    "zh_trad": "授權 / 權限授予",
+    "pinyin": "shòu quán / quán xiàn shòu yǔ",
+    "definition_ru": "Процесс проверки прав доступа аутентифицированного пользователя к определенным ресурсам или действиям.",
+    "definition_en": "The process of granting or denying specific access rights and permissions to an authenticated entity.",
+    "definition_zh": "确定已认证的实体是否具备访问特定资源或执行特定操作权限的过程。",
+    "examples": [
+      {
+        "en": "Role-based access control (RBAC) simplifies system authorization.",
+        "ru": "Ролевой контроль доступа (RBAC) упрощает авторизацию в системе.",
+        "zh": "基于角色的访问控制（RBAC）简化了系统授权。",
+        "pinyin": "jī yú jué sè de fàng wèn kòng zhì (RBAC) jiǎn huà le xì tǒng shòu quán."
+      }
+    ],
+    "synonyms_en": ["AuthZ", "Access Control"],
+    "synonyms_ru": ["разграничение прав доступа"],
+    "synonyms_zh": ["权限控制", "访问控制"],
+    "related_terms": ["authentication"]
+  },
+  {
+    "id": "ddos_attack",
+    "category": "cybersecurity",
+    "en": "Distributed Denial of Service (DDoS)",
+    "ru": "Распределенная атака типа 'Отказ в обслуживании' (DDoS)",
+    "zh": "分布式拒绝服务攻击 (DDoS)",
+    "zh_trad": "分散式阻斷服務攻擊 (DDoS)",
+    "pinyin": "fēn bù shì jù jué fú wù gōng jī",
+    "definition_ru": "Кибератака, при которой злоумышленники перегружают сервер огромным потоком фиктивного трафика из множества источников.",
+    "definition_en": "A cyberattack in which multiple compromised computer systems flood a target server with traffic, causing outage.",
+    "definition_zh": "攻击者利用多台受控计算机向目标服务器发送海量垃圾流量以使其瘫痪的网络攻击方式。",
+    "examples": [
+      {
+        "en": "Cloudflare provides automated DDoS mitigation services.",
+        "ru": "Cloudflare предоставляет автоматическую защиту от DDoS-атак.",
+        "zh": "Cloudflare提供自动化的DDoS防御缓解服务。",
+        "pinyin": "Cloudflare tí gōng zì dòng huà de DDoS fáng yù huǎn jiě fú wù."
+      }
+    ],
+    "synonyms_en": ["DDoS Attack"],
+    "synonyms_ru": ["ДДоС атака", "DDoS"],
+    "synonyms_zh": ["DDoS攻击", "分布式流量攻击"],
+    "related_terms": ["load_balancer"]
+  },
+  {
+    "id": "binary_tree",
+    "category": "algorithms",
+    "en": "Binary Search Tree (BST)",
+    "ru": "Двоичное дерево поиска (ДДП)",
+    "zh": "二叉搜索树 (BST)",
+    "zh_trad": "二元搜尋樹 (BST)",
+    "pinyin": "èr chā sōu suǒ shù",
+    "definition_ru": "Древовидная структура данных, где у каждого узла не более двух потомков, а левый потомок меньше корня, правый — больше.",
+    "definition_en": "A rooted binary tree data structure whose internal nodes each store a key greater than all keys in its left subtree and less than those in its right.",
+    "definition_zh": "一种树形数据结构，每个节点最多有两个子节点，左子树所有节点小于根节点，右子树所有节点大于根节点。",
+    "examples": [
+      {
+        "en": "A balanced binary search tree offers O(log n) lookup time.",
+        "ru": "Сбалансированное двоичное дерево поиска обеспечивает время поиска O(log n).",
+        "zh": "平衡二叉搜索树支持 O(log n) 的查找时间复杂度。",
+        "pinyin": "píng héng èr chā sōu suǒ shù zhī chí O(log n) de zhǎo chā shí jiān fù zá dù."
+      }
+    ],
+    "synonyms_en": ["BST"],
+    "synonyms_ru": ["бинарное дерево поиска"],
+    "synonyms_zh": ["二叉查找树", "BST"],
+    "related_terms": ["hash_table"]
+  },
+  {
+    "id": "hash_table",
+    "category": "algorithms",
+    "en": "Hash Table (Hash Map)",
+    "ru": "Хеш-таблица (Хеш-мапа)",
+    "zh": "哈希表 (散列表)",
+    "zh_trad": "雜湊表 (散列表)",
+    "pinyin": "hā xī biǎo / sàn liè biǎo",
+    "definition_ru": "Структура данных, реализующая ассоциативный массив (ключ-значение) с амортизированным временем доступа O(1).",
+    "definition_en": "A data structure that implements an associative array abstract data type using a hash function for O(1) average lookup.",
+    "definition_zh": "利用哈希函数实现键值对映射的数据结构，平均查找和插入时间复杂度为 O(1)。",
+    "examples": [
+      {
+        "en": "Python dictionaries are implemented as hash tables.",
+        "ru": "Словари в Python реализованы на базе хеш-таблиц.",
+        "zh": "Python的字典（dict）基于哈希表实现。",
+        "pinyin": "Python de zì diǎn (dict) jī yú hā xī biǎo shí xiàn."
+      }
+    ],
+    "synonyms_en": ["Hash Map", "Dictionary"],
+    "synonyms_ru": ["хэш-таблица", "ассоциативный массив"],
+    "synonyms_zh": ["哈希映射", "散列图"],
+    "related_terms": ["hash_function", "binary_tree"]
+  },
+  {
+    "id": "dynamic_programming",
+    "category": "algorithms",
+    "en": "Dynamic Programming (DP)",
+    "ru": "Динамическое программирование (ДП)",
+    "zh": "动态规划 (DP)",
+    "zh_trad": "動態規劃 (DP)",
+    "pinyin": "dòng tài guī huà",
+    "definition_ru": "Метод решения сложных задач путем их разбиения на перекрывающиеся подзадачи и сохранения промежуточных результатов (мемоизация).",
+    "definition_en": "An algorithmic paradigm that solves complex problems by breaking them into overlapping subproblems and storing intermediate solutions.",
+    "definition_zh": "通过把复杂问题分解为具有重叠子问题的子任务并记忆中间状态来求解算法难题的方法。",
+    "examples": [
+      {
+        "en": "The Knapsack problem can be solved efficiently using dynamic programming.",
+        "ru": "Задача о рюкзаке эффективно решается с помощью динамического программирования.",
+        "zh": "背包问题可以通过动态规划高效求解。",
+        "pinyin": "bèi bāo wèn tí kě yǐ tōng guò dòng tài guī huà gāo xiào qiú jiě."
+      }
+    ],
+    "synonyms_en": ["DP"],
+    "synonyms_ru": ["ДП"],
+    "synonyms_zh": ["DP算法"],
+    "related_terms": ["binary_tree"]
+  },
+  {
+    "id": "virtual_memory",
+    "category": "operating_systems",
+    "en": "Virtual Memory",
+    "ru": "Виртуальная память",
+    "zh": "虚拟内存",
+    "zh_trad": "虛擬記憶體",
+    "pinyin": "xū nǐ nèi cún",
+    "definition_ru": "Техника управления памятью ОС, позволяющая процессам адресовать больше памяти, чем физически установлено, используя подкачку (paging).",
+    "definition_en": "A memory management capability of an OS that uses hardware and software to map virtual addresses to physical storage.",
+    "definition_zh": "操作系统的一种内存管理机制，利用硬件与外存分页技术为进程提供比实际物理内存更大的连续虚拟地址空间。",
+    "examples": [
+      {
+        "en": "Paging moves unused memory pages to the swap file on the disk.",
+        "ru": "Пейджинг перемещает неиспользуемые страницы памяти в файл подкачки на диске.",
+        "zh": "分页机制将未使用的内存页转移到磁盘上的交换文件中。",
+        "pinyin": "fēn yè jī zhì jiāng wèi shǐ yòng de nèi cún yè zhuǎn yí dào cí pán shàng de jiāo huàn wén jiàn zhōng."
+      }
+    ],
+    "synonyms_en": [],
+    "synonyms_ru": ["свопинг", "файл подкачки"],
+    "synonyms_zh": ["虚拟存储器"],
+    "related_terms": ["ram", "operating_system_kernel"]
+  },
+  {
+    "id": "operating_system_kernel",
+    "category": "operating_systems",
+    "en": "Kernel",
+    "ru": "Ядро операционной системы",
+    "zh": "操作系统内核",
+    "zh_trad": "作業系統核心",
+    "pinyin": "cào zuò xì tǒng nèi hé",
+    "definition_ru": "Центральная часть ОС, управляющая доступом к аппаратному обеспечению (процессору, памяти, устройствам ввода-вывода).",
+    "definition_en": "The core computer program of an OS that has complete control over everything in the system.",
+    "definition_zh": "操作系统的核心模块，对系统硬件资源（CPU、内存、I/O设备）具有最高控制权。",
+    "examples": [
+      {
+        "en": "The Linux kernel manages processes, drivers, and memory.",
+        "ru": "Ядро Linux управляет процессами, драйверами и памятью.",
+        "zh": "Linux内核负责管理进程、设备驱动和内存。",
+        "pinyin": "Linux nèi hé fù zé guǎn lǐ jìn chéng, shè bèi qū dòng hé nèi cún."
+      }
+    ],
+    "synonyms_en": ["OS Kernel"],
+    "synonyms_ru": ["ядро ОС", "ядро"],
+    "synonyms_zh": ["系统内核", "内核"],
+    "related_terms": ["virtual_memory"]
+  },
+  {
+    "id": "git_version_control",
+    "category": "software_dev",
+    "en": "Git Version Control",
+    "ru": "Система контроля версий Git",
+    "zh": "Git 版本控制系统",
+    "zh_trad": "Git 版本控制系統",
+    "pinyin": "Git bǎn běn kòng zhì xì tǒng",
+    "definition_ru": "Распределенная система управления версиями исходного кода, позволяющая отслеживать изменения и вести командную разработку.",
+    "definition_en": "A distributed version control system for tracking changes in source code during software development.",
+    "definition_zh": "一种分布式版本控制系统，用于在软件开发过程中追踪源码修改并支持团队协同工作。",
+    "examples": [
+      {
+        "en": "Developers use git branches to work on features in parallel.",
+        "ru": "Разработчики используют ветки git для параллельной работы над функциями.",
+        "zh": "开发人员使用Git分支进行并行功能开发。",
+        "pinyin": "kāi fā rén yuán shǐ yòng Git fēn zhī jìn xíng bìng xíng gōng néng kāi fā."
+      }
+    ],
+    "synonyms_en": ["Git", "VCS"],
+    "synonyms_ru": ["Гит", "СКВ"],
+    "synonyms_zh": ["Git", "版本控制"],
+    "related_terms": ["source_code", "ci_cd"]
+  },
+  {
+    "id": "object_oriented_programming",
+    "category": "software_dev",
+    "en": "Object-Oriented Programming (OOP)",
+    "ru": "Объектно-ориентированное программирование (ООП)",
+    "zh": "面向对象编程 (OOP)",
+    "zh_trad": "物件導向程式設計 (OOP)",
+    "pinyin": "miàn xiàng duì xiàng biān chéng",
+    "definition_ru": "Парадигма программирования, основанная на концепции объектов, инкапсулирующих состояние (поля) и поведение (методы).",
+    "definition_en": "A programming paradigm based on the concept of objects containing data and code.",
+    "definition_zh": "一种基于“对象”概念的编程范式，对象将数据状态与行为方法进行封装。",
+    "examples": [
+      {
+        "en": "Encapsulation, inheritance, and polymorphism are the four pillars of OOP.",
+        "ru": "Инкапсуляция, наследование и полиморфизм — ключевые принципы ООП.",
+        "zh": "封装、继承与多态是面向对象编程的三大核心特征。",
+        "pinyin": "fēng zhuāng, jì chéng yǔ duō tài shì miàn xiàng duì xiàng biān chéng de sān dà hé xīn tè zhēng."
+      }
+    ],
+    "synonyms_en": ["OOP"],
+    "synonyms_ru": ["ООП"],
+    "synonyms_zh": ["OOP", "面向对象"],
+    "related_terms": ["source_code"]
+  },
+  {
+    "id": "quantum_computing",
+    "category": "hardware",
+    "en": "Quantum Computing",
+    "ru": "Квантовые вычисления",
+    "zh": "量子计算",
+    "zh_trad": "量子運算",
+    "pinyin": "liàng zǐ jì suàn",
+    "definition_ru": "Направление компьютерных наук, использующее принципы квантовой механики (кубиты, суперпозицию, запутанность) для решения задач.",
+    "definition_en": "A rapidly-emerging technology that harnesses the laws of quantum mechanics to solve problems too complex for classical computers.",
+    "definition_zh": "利用量子力学原理（量子比特、叠加态与纠缠态）进行复杂计算的新兴前沿技术。",
+    "examples": [
+      {
+        "en": "Quantum computers use qubits instead of classical binary bits.",
+        "ru": "Квантовые компьютеры используют кубиты вместо классических битов.",
+        "zh": "量子计算机使用量子比特（Qubit）代替传统的二进制比特。",
+        "pinyin": "liàng zǐ jì suàn jī shǐ yòng liàng zǐ bǐ tè dài tì chuán tǒng de èr jìn zhì bǐ tè."
+      }
+    ],
+    "synonyms_en": ["Quantum Computer"],
+    "synonyms_ru": ["квантовый компьютер"],
+    "synonyms_zh": ["量子计算机"],
+    "related_terms": ["cpu", "cybersecurity"]
+  }
+]
