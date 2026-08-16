@@ -6,6 +6,8 @@ import json
 import time
 import asyncio
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -22,8 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Токен бота
 TOKEN = os.getenv("BOT_TOKEN", "8914024807:AAFUXerMus2OEkbfUCt0H_II70ac1IbzH48")
-PORT = int(os.getenv("PORT", 8000))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 10000))
 
 CACHE_FILE = "gpu_prices.json"
 CACHE_EXPIRATION = 24 * 60 * 60  # 24 часа (раз в сутки)
@@ -39,6 +40,33 @@ FALLBACK_GPU = [
     ("NVIDIA GeForce RTX 5080 Gigabyte Gaming OC 16GB", "189 990 ₽"),
     ("NVIDIA GeForce RTX 5090 Palit GameRock 32GB", "479 990 ₽"),
 ]
+
+
+# === Простой HTTP-сервер для Render Health Check ===
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Bot is running OK!")
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        # Отключаем лишний спам логов в консоль
+        pass
+
+
+def start_health_check_server(port: int):
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        logger.info(f"Health check HTTP-сервер успешно запущен на порту {port}")
+    except Exception as e:
+        logger.warning(f"Не удалось запустить health check сервер на порту {port}: {e}")
 
 
 # === Функции для работы с кэшем на диске ===
@@ -167,16 +195,13 @@ async def get_gpu_prices():
     cached_items, last_time = load_cached_gpu()
     now = time.time()
 
-    # Если в кэше есть данные и они свежее 24 часов — отдаем сразу
     if cached_items and (now - last_time < CACHE_EXPIRATION):
         return cached_items, last_time
 
-    # Если кэш устарел (или пуст) — делаем 1 запрос на сайт
     fresh_items = await fetch_fresh_gpu_prices()
     if fresh_items:
         return fresh_items, now
 
-    # Если запрос не удался — возвращаем старый кэш или резервный список
     if cached_items:
         return cached_items, last_time
     return FALLBACK_GPU, now
@@ -207,9 +232,11 @@ async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Запуск бота ===
 def main():
-    # Создаем стартовый кэш, если файла еще нет
     if not os.path.exists(CACHE_FILE):
         save_cached_gpu(FALLBACK_GPU)
+
+    # Запускаем фоновый HTTP сервер, чтобы Render видел открытый порт и ставил статус Live
+    start_health_check_server(PORT)
 
     application = (
         ApplicationBuilder()
@@ -226,8 +253,7 @@ def main():
     application.add_handler(CommandHandler("gpu", gpu))
 
     print("\n" + "="*50)
-    print("Бот запущен с суточным кэшированием цен (1 запрос в 24ч)!")
-    print("Откройте Telegram и отправьте /price или /gpu")
+    print("Бот успешно запущен на сервере Render!")
     print("="*50 + "\n")
 
     application.run_polling(
