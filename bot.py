@@ -22,14 +22,13 @@ logger = logging.getLogger(__name__)
 
 # Токен бота
 TOKEN = os.getenv("BOT_TOKEN", "8914024807:AAFUXerMus2OEkbfUCt0H_II70ac1IbzH48")
+PORT = int(os.getenv("PORT", 8000))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Кэш для цен на видеокарты (хранится 15 минут, чтобы магазины не блокировали по 403)
-GPU_CACHE = {
-    "data": [],
-    "last_updated": 0
-}
+CACHE_FILE = "gpu_prices.json"
+CACHE_EXPIRATION = 24 * 60 * 60  # 24 часа (раз в сутки)
 
-# Резервный список цен на случай блокировок сайтов
+# Резервный список цен
 FALLBACK_GPU = [
     ("NVIDIA GeForce RTX 5060 Palit Dual 8GB", "45 990 ₽"),
     ("NVIDIA GeForce RTX 5060 Ti Palit Infinity 3 16GB", "74 990 ₽"),
@@ -42,12 +41,35 @@ FALLBACK_GPU = [
 ]
 
 
+# === Функции для работы с кэшем на диске ===
+def load_cached_gpu():
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("items", []), data.get("timestamp", 0)
+        except Exception:
+            pass
+    return [], 0
+
+
+def save_cached_gpu(items):
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump({
+                "timestamp": time.time(),
+                "items": items
+            }, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Не удалось сохранить кэш цен: {e}")
+
+
 # === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "👋 <b>Привет! Я бот для отслеживания курсов валют и цен на GPU.</b>\n\n"
         "📈 <b>/price</b> — актуальный официальный курс Доллара, Юаня и Евро (ЦБ РФ)\n"
-        "💻 <b>/gpu</b> — актуальные цены на популярные видеокарты"
+        "💻 <b>/gpu</b> — актуальные цены на популярные видеокарты (обновляются раз в сутки)"
     )
     await update.message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
 
@@ -102,32 +124,17 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка получения курсов валют: {html.escape(str(e))}")
 
 
-# === Функция получения цен на видеокарты с кэшированием ===
-async def get_gpu_prices() -> list[tuple[str, str]]:
-    global GPU_CACHE
-
-    now = time.time()
-    # Если данные свежее 15 минут — отдаем из кэша (быстро и без блокировок)
-    if GPU_CACHE["data"] and (now - GPU_CACHE["last_updated"] < 900):
-        return GPU_CACHE["data"]
-
+# === Функция парсинга цен видеокарт (запускается не чаще 1 раза в сутки) ===
+async def fetch_fresh_gpu_prices() -> list[tuple[str, str]]:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Upgrade-Insecure-Requests": "1"
     }
 
     try:
         url = "https://www.regard.ru/catalog/1013/videokarty"
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code == 200:
                 results = []
@@ -147,34 +154,52 @@ async def get_gpu_prices() -> list[tuple[str, str]]:
                         continue
 
                 if results:
-                    GPU_CACHE["data"] = results
-                    GPU_CACHE["last_updated"] = now
+                    save_cached_gpu(results)
                     return results
     except Exception as e:
-        logger.warning(f"Парсинг каталога временно недоступен: {e}")
+        logger.warning(f"Ошибка фонового обновления цен: {e}")
 
-    # Если онлайн-запрос заблокирован антиботом — возвращаем кэш или резервный список
-    if GPU_CACHE["data"]:
-        return GPU_CACHE["data"]
-    return FALLBACK_GPU
+    return []
+
+
+# === Функция получения цен из кэша (или фоновое обновление) ===
+async def get_gpu_prices():
+    cached_items, last_time = load_cached_gpu()
+    now = time.time()
+
+    # Если в кэше есть данные и они свежее 24 часов — отдаем сразу
+    if cached_items and (now - last_time < CACHE_EXPIRATION):
+        return cached_items, last_time
+
+    # Если кэш устарел (или пуст) — делаем 1 запрос на сайт
+    fresh_items = await fetch_fresh_gpu_prices()
+    if fresh_items:
+        return fresh_items, now
+
+    # Если запрос не удался — возвращаем старый кэш или резервный список
+    if cached_items:
+        return cached_items, last_time
+    return FALLBACK_GPU, now
 
 
 # === Команда /gpu ===
 async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Запрашиваю свежие цены на видеокарты... Подожди секунду.")
     try:
-        items = await get_gpu_prices()
+        items, last_time = await get_gpu_prices()
 
-        if items:
-            response = "🔥 <b>Актуальные цены на видеокарты:</b>\n\n"
-            for i, (title, item_price) in enumerate(items[:8], 1):
-                clean_title = html.escape(title)
-                clean_price = html.escape(item_price)
-                response += f"{i}. <b>{clean_title}</b>\n   💰 Цена: <code>{clean_price}</code>\n\n"
-
-            await update.message.reply_text(response, parse_mode=ParseMode.HTML)
+        if last_time > 0:
+            time_str = time.strftime("%d.%m.%Y %H:%M", time.localtime(last_time))
+            header = f"🔥 <b>Цены на видеокарты (база от {time_str}):</b>\n\n"
         else:
-            await update.message.reply_text("😔 Не удалось получить список видеокарт в данный момент.")
+            header = "🔥 <b>Актуальные цены на видеокарты:</b>\n\n"
+
+        response = header
+        for i, (title, item_price) in enumerate(items[:8], 1):
+            clean_title = html.escape(title)
+            clean_price = html.escape(item_price)
+            response += f"{i}. <b>{clean_title}</b>\n   💰 Цена: <code>{clean_price}</code>\n\n"
+
+        await update.message.reply_text(response, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error(f"Ошибка при получении цен: {e}", exc_info=True)
         await update.message.reply_text(f"❌ Ошибка получения цен: {html.escape(str(e))}")
@@ -182,6 +207,10 @@ async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Запуск бота ===
 def main():
+    # Создаем стартовый кэш, если файла еще нет
+    if not os.path.exists(CACHE_FILE):
+        save_cached_gpu(FALLBACK_GPU)
+
     application = (
         ApplicationBuilder()
         .token(TOKEN)
@@ -197,7 +226,7 @@ def main():
     application.add_handler(CommandHandler("gpu", gpu))
 
     print("\n" + "="*50)
-    print("Бот успешно запущен и работает!")
+    print("Бот запущен с суточным кэшированием цен (1 запрос в 24ч)!")
     print("Откройте Telegram и отправьте /price или /gpu")
     print("="*50 + "\n")
 
