@@ -55,7 +55,7 @@ try:
 except ImportError:
     pass
 
-TOKEN = os.getenv("BOT_TOKEN", "8995959559:AAHIrwMnaQpMGELiwrO-WfRh-uICt65UIJ4")
+TOKEN = os.getenv("BOT_TOKEN", "8995959559:AAHIrwMnaQpMGELlwrO-WfRh-ulCt65UIJ4")
 PORT = int(os.getenv("PORT", 10000))
 
 # Инициализация движка словаря
