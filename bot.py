@@ -17,10 +17,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# Загружаем переменные из .env файла (если он существует)
 load_dotenv()
 
-# Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -30,10 +28,10 @@ logger = logging.getLogger(__name__)
 # Токен вашего бота
 TOKEN = os.getenv("BOT_TOKEN", "8914024807:AAFUXerMus2OEkbfUCt0H_II70ac1IbzH48")
 
-# API токен Browserless.io (для удаленного браузера)
+# API токен Browserless.io
 BROWSERLESS_TOKEN = os.getenv("BROWSERLESS_TOKEN", "2V4mHaHXY9vr0ZG60e17e7d354904b69ee46bc5231ccb7704")
 
-# Настройки вебхука / порта (для хостинга)
+# Настройки хостинга
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 PORT = int(os.getenv("PORT", 8000))
 
@@ -57,7 +55,7 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
             xml_data = response.content
@@ -115,7 +113,6 @@ def parse_dns_gpu_sync(browserless_token: str) -> list[tuple[str, str]]:
         driver.set_page_load_timeout(30)
         driver.get(url)
 
-        # Ожидание появления карточек товаров (до 15 секунд)
         wait = WebDriverWait(driver, 15)
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".catalog-product, .catalog-item, .product-buy__price")))
 
@@ -144,15 +141,13 @@ def parse_dns_gpu_sync(browserless_token: str) -> list[tuple[str, str]]:
 async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not BROWSERLESS_TOKEN:
         await update.message.reply_text(
-            "⚠️ <b>Токен Browserless не задан!</b>\n"
-            "Укажите переменную окружения <code>BROWSERLESS_TOKEN</code>.",
+            "⚠️ <b>Токен Browserless не задан!</b>",
             parse_mode=ParseMode.HTML
         )
         return
 
     await update.message.reply_text("🔍 Сканирую сайт DNS через облачный браузер... Это займёт 15-25 секунд.")
     try:
-        # Выполняем синхронный парсинг в отдельном потоке, чтобы Telegram бот не зависал
         items = await asyncio.to_thread(parse_dns_gpu_sync, BROWSERLESS_TOKEN)
 
         if items:
@@ -178,13 +173,22 @@ def main():
         logger.error("Ошибка: Токен бота не задан!")
         sys.exit(1)
 
-    application = ApplicationBuilder().token(TOKEN).build()
+    # Увеличиваем таймауты подключения к Telegram API, чтобы избежать TimedOut
+    application = (
+        ApplicationBuilder()
+        .token(TOKEN)
+        .connect_timeout(30.0)
+        .read_timeout(30.0)
+        .write_timeout(30.0)
+        .pool_timeout(30.0)
+        .build()
+    )
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("price", price))
     application.add_handler(CommandHandler("gpu", gpu))
 
     if WEBHOOK_URL:
-        # Режим Webhook для серверов (Render, VPS и др.)
         clean_webhook_url = WEBHOOK_URL.rstrip("/")
         logger.info(f"Запуск в режиме Webhook на порту {PORT}, URL: {clean_webhook_url}")
         application.run_webhook(
@@ -194,9 +198,12 @@ def main():
             webhook_url=f"{clean_webhook_url}/{TOKEN}"
         )
     else:
-        # Режим Polling для локального запуска на компьютере
-        logger.info("Бот успешно запущен в режиме Polling!")
-        application.run_polling()
+        logger.info("Бот успешно запущен в режиме Polling! Слушаю команды...")
+        application.run_polling(
+            poll_interval=1.0,
+            timeout=30,
+            bootstrap_retries=-1
+        )
 
 
 if __name__ == "__main__":
