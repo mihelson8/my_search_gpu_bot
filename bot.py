@@ -49,7 +49,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Переменные окружения и настройки
-TOKEN = os.getenv("BOT_TOKEN", "8914024807:AAFUXerMus2OEkbfUCt0H_II70ac1IbzH48")
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+TOKEN = os.getenv("BOT_TOKEN", "8995959559:AAHIrwMnaQpMGELiwrO-WfRh-uICt65UIJ4")
 PORT = int(os.getenv("PORT", 10000))
 
 # Инициализация движка словаря
