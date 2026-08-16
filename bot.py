@@ -151,6 +151,9 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
         cat_info = engine.get_category_by_id(term.category)
         cat_name = cat_info.name_ru if cat_info else term.category
         text += f"📁 <b>Категория:</b> {cat_name}\n"
+    else:
+        # В компактном режиме также выводим транскрипцию
+        pass
 
     return text
 
@@ -361,7 +364,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response_text += "🌐 <b>Онлайн-перевод:</b>\n"
             for lang, trans_text in output.online_translations.items():
                 flag = "🇬🇧" if lang == "en" else "🇷🇺" if lang == "ru" else "🇨🇳"
-                response_text += f"{flag} {html.escape(trans_text)}\n"
+                if lang == "zh":
+                    zh_pinyin = get_pinyin(trans_text)
+                    if zh_pinyin:
+                        response_text += f"{flag} {html.escape(trans_text)} (<i>Pinyin: {html.escape(zh_pinyin)}</i>)\n"
+                    else:
+                        response_text += f"{flag} {html.escape(trans_text)}\n"
+                else:
+                    response_text += f"{flag} {html.escape(trans_text)}\n"
         else:
             response_text += "Попробуйте изменить формулировку или проверьте правильность написания."
 

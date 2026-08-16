@@ -340,5 +340,8 @@ class TechTranslator:
                     trans = await self.online.translate_text(query, detected_lang, t_lang)
                     if trans:
                         output.online_translations[t_lang.value] = trans
+                        # If online translation gave Chinese, compute Pinyin for it
+                        if t_lang == Language.ZH and not output.pinyin:
+                            output.pinyin = get_pinyin(trans)
 
         return output

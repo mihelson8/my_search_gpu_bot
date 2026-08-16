@@ -97,9 +97,16 @@ def format_translation_output(output: TranslationOutput) -> str:
         lines.append(f"\n{Colors.BOLD}🌐 Онлайн-перевод:{Colors.END}")
         for lang, text in output.online_translations.items():
             flag = "🇬🇧" if lang == "en" else "🇷🇺" if lang == "ru" else "🇨🇳"
-            lines.append(f"  {flag} {text}")
+            if lang == "zh":
+                zh_py = get_pinyin(text)
+                if zh_py:
+                    lines.append(f"  {flag} {text} {Colors.DIM}(Pinyin: {zh_py}){Colors.END}")
+                else:
+                    lines.append(f"  {flag} {text}")
+            else:
+                lines.append(f"  {flag} {text}")
 
-    if output.pinyin and not output.direct_match:
+    if output.pinyin and not output.direct_match and "zh" not in output.online_translations:
         lines.append(f"  🇨🇳 Pinyin: {output.pinyin}")
 
     return "\n".join(lines)
