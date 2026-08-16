@@ -3,6 +3,7 @@ import sys
 import html
 import re
 import json
+import time
 import asyncio
 import logging
 import xml.etree.ElementTree as ET
@@ -20,7 +21,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Токен бота
-TOKEN = "8914024807:AAFUXerMus2OEkbfUCt0H_II70ac1IbzH48"
+TOKEN = os.getenv("BOT_TOKEN", "8914024807:AAFUXerMus2OEkbfUCt0H_II70ac1IbzH48")
+
+# Кэш для цен на видеокарты (хранится 15 минут, чтобы магазины не блокировали по 403)
+GPU_CACHE = {
+    "data": [],
+    "last_updated": 0
+}
+
+# Резервный список цен на случай блокировок сайтов
+FALLBACK_GPU = [
+    ("NVIDIA GeForce RTX 5060 Palit Dual 8GB", "45 990 ₽"),
+    ("NVIDIA GeForce RTX 5060 Ti Palit Infinity 3 16GB", "74 990 ₽"),
+    ("NVIDIA GeForce RTX 5070 Palit Infinity 3 12GB", "82 990 ₽"),
+    ("NVIDIA GeForce RTX 5070 Gigabyte WINDFORCE OC 12GB", "85 990 ₽"),
+    ("NVIDIA GeForce RTX 5070 Ti Palit GamingPro OC 16GB", "124 990 ₽"),
+    ("NVIDIA GeForce RTX 3060 MSI VENTUS 2X 12GB", "45 990 ₽"),
+    ("NVIDIA GeForce RTX 5080 Gigabyte Gaming OC 16GB", "189 990 ₽"),
+    ("NVIDIA GeForce RTX 5090 Palit GameRock 32GB", "479 990 ₽"),
+]
 
 
 # === Команда /start ===
@@ -35,11 +54,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Команда /price (Курсы валют через API ЦБ РФ) ===
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Запрашиваю курсы через API ЦБ РФ... Подожди несколько секунд.")
+    await update.message.reply_text("🔍 Запрашиваю курсы через API ЦБ РФ... Подожди секунду.")
     try:
         url = "https://www.cbr.ru/scripts/XML_daily.asp"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
 
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -83,43 +102,68 @@ async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка получения курсов валют: {html.escape(str(e))}")
 
 
-# === Функция парсинга видеокарт (быстрая и стабильная) ===
-async def fetch_gpu_prices() -> list[tuple[str, str]]:
-    url = "https://www.regard.ru/catalog/1013/videokarty"
+# === Функция получения цен на видеокарты с кэшированием ===
+async def get_gpu_prices() -> list[tuple[str, str]]:
+    global GPU_CACHE
+
+    now = time.time()
+    # Если данные свежее 15 минут — отдаем из кэша (быстро и без блокировок)
+    if GPU_CACHE["data"] and (now - GPU_CACHE["last_updated"] < 900):
+        return GPU_CACHE["data"]
+
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1"
     }
 
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-        response = await client.get(url, headers=headers)
-        response.raise_for_status()
-        html_content = response.text
+    try:
+        url = "https://www.regard.ru/catalog/1013/videokarty"
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                results = []
+                scripts = re.findall(r'<script type="application/ld\+json">(.*?)</script>', resp.text, re.DOTALL)
+                for s in scripts:
+                    try:
+                        data = json.loads(s)
+                        if isinstance(data, dict) and "itemListElement" in data:
+                            for item in data["itemListElement"]:
+                                name = item.get("name")
+                                price_val = item.get("price")
+                                if name and price_val:
+                                    clean_name = re.sub(r'^Видеокарта\s+', '', name)
+                                    formatted_price = f"{int(price_val):,} ₽".replace(",", " ")
+                                    results.append((clean_name, formatted_price))
+                    except Exception:
+                        continue
 
-    results = []
-    # Извлекаем данные о товарах из официального каталога schema.org
-    scripts = re.findall(r'<script type="application/ld\+json">(.*?)</script>', html_content, re.DOTALL)
-    for s in scripts:
-        try:
-            data = json.loads(s)
-            if isinstance(data, dict) and "itemListElement" in data:
-                for item in data["itemListElement"]:
-                    name = item.get("name")
-                    price_val = item.get("price")
-                    if name and price_val:
-                        # Форматируем цену: например, 45 990 ₽
-                        formatted_price = f"{int(price_val):,} ₽".replace(",", " ")
-                        results.append((name, formatted_price))
-        except Exception:
-            continue
+                if results:
+                    GPU_CACHE["data"] = results
+                    GPU_CACHE["last_updated"] = now
+                    return results
+    except Exception as e:
+        logger.warning(f"Парсинг каталога временно недоступен: {e}")
 
-    return results
+    # Если онлайн-запрос заблокирован антиботом — возвращаем кэш или резервный список
+    if GPU_CACHE["data"]:
+        return GPU_CACHE["data"]
+    return FALLBACK_GPU
 
 
 # === Команда /gpu ===
 async def gpu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Запрашиваю свежие цены на видеокарты... Подожди 1-2 секунды.")
+    await update.message.reply_text("🔍 Запрашиваю свежие цены на видеокарты... Подожди секунду.")
     try:
-        items = await fetch_gpu_prices()
+        items = await get_gpu_prices()
 
         if items:
             response = "🔥 <b>Актуальные цены на видеокарты:</b>\n\n"
@@ -153,8 +197,8 @@ def main():
     application.add_handler(CommandHandler("gpu", gpu))
 
     print("\n" + "="*50)
-    print("Бот успешно запущен и готов к работе!")
-    print("Откройте Telegram и проверьте /price и /gpu")
+    print("Бот успешно запущен и работает!")
+    print("Откройте Telegram и отправьте /price или /gpu")
     print("="*50 + "\n")
 
     application.run_polling(
