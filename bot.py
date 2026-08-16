@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Токен бота
 TOKEN = os.getenv("BOT_TOKEN", "8914024807:AAFUXerMus2OEkbfUCt0H_II70ac1IbzH48")
 PORT = int(os.getenv("PORT", 10000))
+SERVICE_URL = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("WEBHOOK_URL") or "https://my-search-gpu-bot-1.onrender.com"
 
 CACHE_FILE = "gpu_prices.json"
 CACHE_EXPIRATION = 24 * 60 * 60  # 24 часа (раз в сутки)
@@ -56,7 +57,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
 )
 
 
-# === Простой HTTP-сервер для Render Health Check ===
+# === Простой HTTP-сервер для Render Health Check и пингов ===
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -77,9 +78,29 @@ def start_health_check_server(port: int):
         server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        logger.info(f"Health check HTTP-сервер успешно запущен на порту {port}")
+        logger.info(f"Health check HTTP-сервер запущен на порту {port}")
     except Exception as e:
         logger.warning(f"Не удалось запустить health check сервер на порту {port}: {e}")
+
+
+# === Фоновый пингер для предотвращения засыпания Render Free (Keep-Alive) ===
+def self_ping_loop(url: str):
+    logger.info(f"Фоновый Keep-Alive пингер активирован для: {url}")
+    # Ждем 3 минуты после старта, затем пингуем каждые 9 минут (Render засыпает через 15 мин)
+    time.sleep(180)
+    while True:
+        try:
+            r = httpx.get(url, timeout=25.0)
+            logger.info(f"Keep-Alive ping -> {url} (статус {r.status_code})")
+        except Exception as e:
+            logger.warning(f"Ошибка Keep-Alive ping: {e}")
+        time.sleep(540)  # 9 минут
+
+
+def start_keep_alive(url: str):
+    if url:
+        thread = threading.Thread(target=self_ping_loop, args=(url,), daemon=True)
+        thread.start()
 
 
 # === Функции для работы с кэшем на диске ===
@@ -279,6 +300,7 @@ def main():
         save_cached_gpu(FALLBACK_GPU)
 
     start_health_check_server(PORT)
+    start_keep_alive(SERVICE_URL)
 
     application = (
         ApplicationBuilder()
@@ -299,7 +321,7 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_button))
 
     print("\n" + "="*50)
-    print("Бот успешно запущен с кнопками быстрого меню!")
+    print("Бот успешно запущен и работает 24/7!")
     print("="*50 + "\n")
 
     application.run_polling(
