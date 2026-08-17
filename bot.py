@@ -104,6 +104,20 @@ def start_health_check_server(port: int):
     except Exception as e:
         logger.warning(f"Не удалось запустить health check сервер на порту {port}: {e}")
 
+    # Запускаем встроенный фоновый самопингер для предотвращения засыпания Render Free
+    def keep_alive_worker():
+        while True:
+            time.sleep(180)  # каждые 3 минуты
+            try:
+                # Пингуем локальный сервер
+                with httpx.Client(timeout=5.0) as client:
+                    client.get(f"http://127.0.0.1:{port}")
+            except Exception:
+                pass
+
+    pinger_thread = threading.Thread(target=keep_alive_worker, daemon=True)
+    pinger_thread.start()
+
 
 # === Форматирование карточки термина для Telegram (HTML) ===
 def format_term_html(term: TechTerm, compact: bool = False) -> str:
@@ -904,6 +918,12 @@ def build_application():
 
     # Голосовые сообщения (Voice Input)
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
+
+    # Обработчик ошибок
+    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logger.error(f"Telegram update error: {context.error}", exc_info=context.error)
+
+    app.add_error_handler(error_handler)
 
     return app
 
