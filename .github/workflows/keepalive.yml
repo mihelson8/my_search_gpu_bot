@@ -1,0 +1,15 @@
+name: Keep Alive Render Bot 24/7
+
+on:
+  schedule:
+    # Запуск каждые 5 минут круглые сутки
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Web Service
+        run: |
+          curl -s -L --max-time 15 "https://my-search-gpu-bot-2.onrender.com" || echo "Ping failed or timeout, will retry next run"

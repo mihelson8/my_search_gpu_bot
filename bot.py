@@ -112,25 +112,22 @@ def start_health_check_server(port: int):
 
     # Автоматический пингер через внешний сервис, чтобы Render никогда не спал
     def keep_alive_worker():
-        # Даем серверу 15 секунд на полный запуск перед первым пингом
-        time.sleep(15)
+        time.sleep(10)
+        # Публичные URL, которые мы пингуем для поддержания активности
+        targets = [
+            RENDER_EXTERNAL_URL,
+            "https://my-search-gpu-bot-2.onrender.com",
+            f"http://127.0.0.1:{port}"
+        ]
         while True:
-            # 1. Пинг внешнего публичного URL Render
-            if RENDER_EXTERNAL_URL:
-                try:
-                    with httpx.Client(timeout=10.0, follow_redirects=True) as client:
-                        resp = client.get(RENDER_EXTERNAL_URL)
-                        logger.debug(f"Keep-alive ping to {RENDER_EXTERNAL_URL}: {resp.status_code}")
-                except Exception as e:
-                    logger.debug(f"Keep-alive ping error: {e}")
-            # 2. Пинг локального HTTP порта
-            try:
-                with httpx.Client(timeout=5.0) as client:
-                    client.get(f"http://127.0.0.1:{port}")
-            except Exception:
-                pass
-
-            time.sleep(60)  # каждую 1 минуту
+            for url in targets:
+                if url:
+                    try:
+                        with httpx.Client(timeout=8.0, follow_redirects=True) as client:
+                            client.get(url)
+                    except Exception:
+                        pass
+            time.sleep(45)  # каждые 45 секунд
 
     pinger_thread = threading.Thread(target=keep_alive_worker, daemon=True)
     pinger_thread.start()
