@@ -116,7 +116,7 @@ class AnprApp:
         self.btn_stop = ttk.Button(top, text="■ Стоп", command=self.stop_capture, state="disabled")
         self.btn_stop.pack(side="left", padx=(0, 6))
         ttk.Button(top, text="Снимок сейчас", command=self.capture_once).pack(side="left", padx=(0, 8))
-        ttk.Button(top, text="Камера по IP", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
+        ttk.Button(top, text="Облачная камера", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
 
         ttk.Label(top, text="Источник:").pack(side="left")
         self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["seetong_folder"]))
@@ -135,6 +135,7 @@ class AnprApp:
         self.camera_ip_var = tk.StringVar(value=self.cfg.get("camera_ip", "192.168.0.123"))
         self.camera_user_var = tk.StringVar(value=self.cfg.get("camera_user", "admin"))
         self.camera_pass_var = tk.StringVar(value=self.cfg.get("camera_password", "123456"))
+        self.device_id_var = tk.StringVar(value=self.cfg.get("device_id", "35918051"))
 
         body = ttk.Frame(self.root, padding="14 10")
         body.pack(fill="both", expand=True)
@@ -353,6 +354,7 @@ class AnprApp:
             "camera_ip": self.camera_ip_var.get().strip(),
             "camera_user": self.camera_user_var.get().strip() or "admin",
             "camera_password": self.camera_pass_var.get(),
+            "device_id": self.device_id_var.get().strip(),
             "rtsp_url": self.rtsp_var.get().strip(),
             "http_url": self.http_var.get().strip(),
             "file_path": self.file_var.get().strip(),
@@ -388,56 +390,44 @@ class AnprApp:
 
     def open_camera_dialog(self) -> None:
         dlg = tk.Toplevel(self.root)
-        dlg.title("Камера по сети")
-        dlg.geometry("460x340")
+        dlg.title("Облачная камера Seetong")
+        dlg.geometry("500x360")
         dlg.configure(bg=self.bg)
         ttk.Label(
             dlg,
-            text="Берём картинку напрямую с камеры, не со скриншота экрана.\n"
-            "IP смотрите в Seetong: устройство 35918051 → свойства / LAN.",
-            wraplength=420,
+            text="Камера работает через приложение Seetong, локального IP нет.\n"
+            "Картинку берём из снимков клиента, не с экрана и не по RTSP.",
+            wraplength=460,
             justify="left",
         ).pack(anchor="w", padx=20, pady=(16, 8))
-        ttk.Label(dlg, text="IP камеры").pack(anchor="w", padx=20)
-        ttk.Entry(dlg, textvariable=self.camera_ip_var, width=40).pack(padx=20, pady=(0, 8))
-        ttk.Label(dlg, text="Логин").pack(anchor="w", padx=20)
-        ttk.Entry(dlg, textvariable=self.camera_user_var, width=40).pack(padx=20, pady=(0, 8))
-        ttk.Label(dlg, text="Пароль").pack(anchor="w", padx=20)
-        ttk.Entry(dlg, textvariable=self.camera_pass_var, width=40, show="*").pack(padx=20, pady=(0, 12))
+        ttk.Label(dlg, text="ID устройства в Seetong").pack(anchor="w", padx=20)
+        ttk.Entry(dlg, textvariable=self.device_id_var, width=44).pack(padx=20, pady=(0, 8))
+        ttk.Label(dlg, text="Папка снимков (Path setting → Screenshot Path)").pack(anchor="w", padx=20)
+        ttk.Entry(dlg, textvariable=self.shots_dir_var, width=44).pack(padx=20, pady=(0, 8))
 
-        def connect() -> None:
-            ip = self.camera_ip_var.get().strip()
-            if not ip:
-                messagebox.showwarning("Нет IP", "Введите IP камеры.")
-                return
-            try:
-                from anpr.camera import connect_camera
-
-                result = connect_camera(ip, self.camera_user_var.get().strip(), self.camera_pass_var.get())
-            except Exception as exc:
-                messagebox.showerror("Камера не открылась", str(exc))
-                return
-            self.http_var.set(result.get("http_url", self.http_var.get()))
-            self.rtsp_var.set(result.get("rtsp_url", self.rtsp_var.get()))
-            source = result.get("source", "http")
-            self.source_var.set(SOURCE_LABELS.get(source, SOURCE_LABELS["http"]))
+        def use_cloud() -> None:
+            folder = self.shots_dir_var.get().strip() or r"C:\Program Files (x86)\Seetong\pi"
+            self.shots_dir_var.set(folder)
+            self.source_var.set(SOURCE_LABELS["seetong_folder"])
             self.cfg.update(self._settings_from_form())
             save_config(self.cfg)
             dlg.destroy()
             messagebox.showinfo(
-                "Камера подключена",
-                "Источник: "
-                + SOURCE_LABELS.get(source, source)
-                + "\nТеперь нажмите Старт. Seetong можно оставить открытым, но кадр идёт с камеры.",
+                "Готово",
+                "Источник: папка снимков Seetong.\n\n"
+                "1. В Seetong откройте Main View, канал с камерой.\n"
+                "2. Нажмите значок снимка (фотоаппарат).\n"
+                "3. В автономерах нажмите Старт.\n\n"
+                "Весь экран и IP не нужны.",
             )
 
-        ttk.Button(dlg, text="Проверить и подключить", command=connect).pack(pady=8)
+        ttk.Button(dlg, text="Использовать снимки Seetong", command=use_cloud).pack(pady=10)
         ttk.Label(
             dlg,
-            text="Частые адреса Topsee/Seetong: 192.168.0.123 или адрес из роутера.\n"
-            "Логин admin, пароль часто 123456.",
+            text="IP/RTSP у облачной камеры нет. Если позже камера будет в той же Wi‑Fi сети, "
+            "можно пробовать HTTP/RTSP отдельно.",
             style="Muted.TLabel",
-            wraplength=420,
+            wraplength=460,
             justify="left",
         ).pack(anchor="w", padx=20, pady=8)
 
@@ -474,7 +464,7 @@ class AnprApp:
             if not messagebox.askyesno(
                 "Весь экран",
                 "«Весь экран» снимает рабочий стол и читает надписи Seetong, а не номера машин.\n\n"
-                "Лучше нажать «Камера по IP». Всё равно включить весь экран?",
+                "Лучше брать снимки из папки Seetong. Всё равно включить весь экран?",
             ):
                 return
         if source in ("http", "rtsp") and "192.168.0.123" in (

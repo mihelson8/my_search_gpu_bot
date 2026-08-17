@@ -20,6 +20,7 @@ DEFAULTS: Dict[str, Any] = {
     "rtsp_url": "rtsp://admin:123456@192.168.0.123:554/mpeg4",
     "http_url": "http://admin:123456@192.168.0.123/snapshot.cgi",
     "file_path": "",
+    "device_id": "35918051",
     "shots_dir": r"C:\Program Files (x86)\Seetong\pi",
     "crop_left": 0.20,
     "crop_top": 0.12,
