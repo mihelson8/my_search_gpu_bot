@@ -1,0 +1,179 @@
+"""Russian license-plate normalization and validation.
+
+Standard passenger plates (type 1): letter + 3 digits + 2 letters + 2–3 digit region.
+Allowed letters are the 12 Cyrillic characters that look like Latin:
+А В Е К М Н О Р С Т У Х
+"""
+
+from __future__ import annotations
+
+import re
+from typing import List, Optional
+
+CYR_LETTERS = "АВЕКМНОРСТУХ"
+LATIN_TO_CYR = {
+    "A": "А",
+    "B": "В",
+    "E": "Е",
+    "K": "К",
+    "M": "М",
+    "H": "Н",
+    "O": "О",
+    "P": "Р",
+    "C": "С",
+    "T": "Т",
+    "Y": "У",
+    "X": "Х",
+}
+CYR_TO_LATIN = {v: k for k, v in LATIN_TO_CYR.items()}
+
+# OCR often confuses these depending on whether a slot must be a letter or a digit.
+LETTER_SLOT_FIX = {
+    "0": "О",
+    "O": "О",
+    "8": "В",
+    "6": "Б",  # will fail validation if left as Б
+    "3": "З",
+}
+DIGIT_SLOT_FIX = {
+    "О": "0",
+    "O": "0",
+    "D": "0",
+    "Q": "0",
+    "I": "1",
+    "І": "1",
+    "L": "1",
+    "Z": "2",
+    "З": "3",
+    "S": "5",
+    "Б": "6",
+    "G": "6",
+    "Т": "7",
+    "T": "7",
+    "В": "8",
+    "B": "8",
+    "Ч": "4",
+}
+
+PLATE_RE = re.compile(rf"^[{CYR_LETTERS}]\d{{3}}[{CYR_LETTERS}]{{2}}\d{{2,3}}$")
+NON_PLATE_CHARS = re.compile(r"[^A-ZА-ЯЁ0-9]+", re.IGNORECASE)
+
+
+def _to_cyr_letter(ch: str) -> str:
+    ch = ch.upper()
+    if ch in LATIN_TO_CYR:
+        return LATIN_TO_CYR[ch]
+    return ch
+
+
+def compact_alnum(text: str) -> str:
+    """Keep only letters and digits, map Latin lookalikes to Cyrillic letters."""
+    if not text:
+        return ""
+    chars = []
+    for ch in text.upper().replace("Ё", "Е"):
+        if ch in LATIN_TO_CYR:
+            chars.append(LATIN_TO_CYR[ch])
+        elif ch.isalnum():
+            chars.append(ch)
+    return "".join(chars)
+
+
+def apply_slot_rules(compact: str) -> str:
+    """Force letter/digit slots for 8–9 character Russian plates."""
+    if len(compact) not in (8, 9):
+        return "".join(_to_cyr_letter(ch) for ch in compact)
+
+    out = []
+    letter_slots = {0, 4, 5}
+    for i, ch in enumerate(compact):
+        ch = ch.upper()
+        if i in letter_slots:
+            ch = LETTER_SLOT_FIX.get(ch, ch)
+            ch = _to_cyr_letter(ch)
+        else:
+            ch = DIGIT_SLOT_FIX.get(ch, ch)
+            if not ch.isdigit():
+                ch = DIGIT_SLOT_FIX.get(_to_cyr_letter(ch), ch)
+        out.append(ch)
+    return "".join(out)
+
+
+def normalize_plate(text: str) -> str:
+    """Return a compact normalized plate string (may still be invalid)."""
+    compact = compact_alnum(text)
+    return apply_slot_rules(compact)
+
+
+def plate_is_valid(plate: str) -> bool:
+    return bool(plate) and bool(PLATE_RE.match(plate))
+
+
+def format_plate(plate: str) -> str:
+    """Human-readable grouping: A123BC 777."""
+    p = normalize_plate(plate)
+    if len(p) == 8:
+        return f"{p[0]}{p[1:4]}{p[4:6]} {p[6:8]}"
+    if len(p) == 9:
+        return f"{p[0]}{p[1:4]}{p[4:6]} {p[6:9]}"
+    return p or plate
+
+
+def extract_plates(raw_text: str) -> List[str]:
+    """Find all valid Russian plates inside noisy OCR text."""
+    if not raw_text:
+        return []
+
+    found = []
+    seen = set()
+
+    compact = compact_alnum(raw_text)
+    # Sliding windows over the compact string (8 and 9 chars).
+    for size in (9, 8):
+        if len(compact) < size:
+            continue
+        for i in range(0, len(compact) - size + 1):
+            candidate = apply_slot_rules(compact[i : i + size])
+            if plate_is_valid(candidate) and candidate not in seen:
+                seen.add(candidate)
+                found.append(candidate)
+
+    # Also try the whole string as one plate.
+    whole = normalize_plate(raw_text)
+    if plate_is_valid(whole) and whole not in seen:
+        found.insert(0, whole)
+
+    return found
+
+
+def best_plate(raw_text: str) -> Optional[str]:
+    plates = extract_plates(raw_text)
+    return plates[0] if plates else None
+
+
+def category_label(category: str) -> str:
+    return {
+        "own": "СВОЙ",
+        "foreign": "ЧУЖОЙ",
+        "unknown": "НЕИЗВЕСТНЫЙ",
+    }.get(category, category)
+
+
+def parse_category(value: str) -> str:
+    raw = (value or "").strip().lower()
+    mapping = {
+        "own": "own",
+        "свой": "own",
+        "svoi": "own",
+        "свои": "own",
+        "white": "own",
+        "whitelist": "own",
+        "foreign": "foreign",
+        "чужой": "foreign",
+        "чужие": "foreign",
+        "black": "foreign",
+        "blacklist": "foreign",
+        "unknown": "unknown",
+        "неизвестный": "unknown",
+    }
+    return mapping.get(raw, "unknown")

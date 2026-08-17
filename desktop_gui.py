@@ -61,6 +61,7 @@ class BusinessSuiteApp:
 
         title_label = ttk.Label(header_frame, text="📹 🇨🇳 CCTV & China Cargo Business Suite", style="Header.TLabel")
         title_label.pack(side="left")
+        ttk.Button(header_frame, text="Автономера Seetong", command=self.open_anpr).pack(side="left", padx=16)
 
         self.stats_label = ttk.Label(header_frame, text="Загрузка статистики...", foreground="#38bdf8", font=("Segoe UI", 10, "bold"))
         self.stats_label.pack(side="right")
@@ -434,6 +435,15 @@ class BusinessSuiteApp:
             self.china_res_label.config(text=f"ИТОГО КЛИЕНТУ В РФ: {int(total):,} руб.")
         except ValueError:
             pass
+
+    def open_anpr(self):
+        import os
+        import subprocess
+        import sys
+
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "anpr_gui.py")
+        subprocess.Popen([sys.executable, script], cwd=os.path.dirname(script))
+
 
 def main():
     root = tk.Tk()
