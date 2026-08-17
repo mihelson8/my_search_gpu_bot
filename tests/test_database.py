@@ -42,11 +42,12 @@ def test_get_terms_by_category():
 
 def test_get_term_in_lang():
     engine = TerminologyEngine()
-    term = engine.get_term_by_id("deep_learning")
+    term = engine.get_term_by_id("hello_greeting")
     assert term is not None
-    assert term.get_term_in_lang(Language.EN) == "Deep Learning"
-    assert term.get_term_in_lang(Language.ZH) == "深度学习"
-    assert term.get_term_in_lang(Language.RU) == "Глубокое обучение"
+    assert term.get_term_in_lang(Language.EN) == "Hello / Hi"
+    assert term.get_term_in_lang(Language.ZH) == "你好"
+    assert term.get_term_in_lang(Language.RU) == "Привет / Здравствуйте"
+    assert "Мэндээ" in term.get_term_in_lang(Language.BUA)
 
 
 def test_random_terms():

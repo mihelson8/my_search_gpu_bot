@@ -1603,20 +1603,24 @@
     "zh": "多少钱？ / 这个怎么卖？",
     "zh_trad": "多少錢？",
     "pinyin": "duō shao qián? / zhè ge zěn me mài?",
+    "bua": "Хэды сэнтэйб? / Энэ хэдыб?",
     "definition_ru": "Основная фраза при совершении покупок для уточнения стоимости товара или услуги.",
     "definition_en": "Essential shopping phrase used to ask the price of goods or services.",
     "definition_zh": "购物和消费时询问商品或服务价格的最核心句型。",
+    "definition_bua": "Юумэнэй үнэ сэнгые асуухадаа хэрэглэдэг гол үгэ.",
     "examples": [
       {
         "en": "Excuse me, how much is this in total?",
         "ru": "Извините, сколько это стоит всего?",
         "zh": "请问，这一共多少钱？",
-        "pinyin": "qǐng wèn, zhè yí gòng duō shao qián?"
+        "pinyin": "qǐng wèn, zhè yí gòng duō shao qián?",
+        "bua": "Хүлисэгты, энэ бүгэдэнь хэды болооб?"
       }
     ],
     "synonyms_en": ["What is the price?", "How much is this?"],
     "synonyms_ru": ["Почем это?", "Сколько с меня?"],
     "synonyms_zh": ["什么价格？", "一共多少？"],
+    "synonyms_bua": ["Үнэнь хэдыб?", "Сэниинь хэдыб?"],
     "related_terms": ["mobile_payment_wechat_alipay", "bill_check_please"]
   },
   {
@@ -1627,6 +1631,7 @@
     "zh": "微信支付 / 支付宝 (扫码支付)",
     "zh_trad": "微信支付 / 支付寶",
     "pinyin": "wēi xìn zhī fù / zhī fù bǎo (sǎo mǎ zhī fù)",
+    "bua": "Утаһаар түлэхэ (WeChat / Alipay)",
     "definition_ru": "Основной способ безналичной оплаты в Китае по QR-коду со смартфона.",
     "definition_en": "The dominant mobile QR-code payment methods across China (WeChat Pay & Alipay).",
     "definition_zh": "中国最普及的智能手机扫码移动支付方式（微信与支付宝）。",
@@ -1635,7 +1640,8 @@
         "en": "Can I pay with WeChat Pay or Alipay?",
         "ru": "Можно оплатить через WeChat или Alipay?",
         "zh": "可以微信或支付宝扫码支付吗？",
-        "pinyin": "kě yǐ wēi xìn huò zhī fù bǎo sǎo mǎ zhī fù ma?"
+        "pinyin": "kě yǐ wēi xìn huò zhī fù bǎo sǎo mǎ zhī fù ma?",
+        "bua": "WeChat гү, али Alipay-ээр түлэжэ болохо гү?"
       }
     ],
     "synonyms_en": ["QR code payment", "Mobile Pay"],
@@ -1651,6 +1657,7 @@
     "zh": "买单 / 结账",
     "zh_trad": "買單 / 結帳",
     "pinyin": "mǎi dān / jié zhàng",
+    "bua": "Тоосоо абаашарыт / Тоосоо хэе",
     "definition_ru": "Фраза в ресторане или кафе для вызова официанта и оплаты заказа.",
     "definition_en": "Phrase used in restaurants or stores to request the bill and pay for the meal.",
     "definition_zh": "在餐厅或商店就餐结束后要求结账付款的常用表达。",
@@ -1659,7 +1666,8 @@
         "en": "Waiter, the bill please!",
         "ru": "Официант, принесите счет, пожалуйста!",
         "zh": "服务员，买单！",
-        "pinyin": "fú wù yuán, mǎi dān!"
+        "pinyin": "fú wù yuán, mǎi dān!",
+        "bua": "Хүндэмүүшэ, тоосоо абаашарыт даа!"
       }
     ],
     "synonyms_en": ["Can I get the bill?", "Check please"],
@@ -1675,6 +1683,7 @@
     "zh": "菜单 / 点餐",
     "zh_trad": "菜單 / 點餐",
     "pinyin": "cài dān / diǎn cān",
+    "bua": "Эдеэнэй гаршаг (Меню) / Захиалга хэхэ",
     "definition_ru": "Заказ блюд по меню в ресторане или службе доставки.",
     "definition_en": "Ordering dishes from a restaurant menu or food delivery service.",
     "definition_zh": "在餐厅看菜单并选择点选餐食。",
@@ -1683,7 +1692,8 @@
         "en": "Could you please bring the menu? We are ready to order.",
         "ru": "Принесите меню, пожалуйста. Мы готовы сделать заказ.",
         "zh": "请拿一份菜单，我们要点餐。",
-        "pinyin": "qǐng ná yí fèn cài dān, wǒ men yào diǎn cān."
+        "pinyin": "qǐng ná yí fèn cài dān, wǒ men yào diǎn cān.",
+        "bua": "Меню абаашарыт даа, эдеэгээ захихабди."
       }
     ],
     "synonyms_en": ["Food ordering", "Order dishes"],
@@ -1699,6 +1709,7 @@
     "zh": "请问……在哪里？ / 怎么走？",
     "zh_trad": "請問……在哪裡？",
     "pinyin": "qǐng wèn ... zài nǎ lǐ? / zěn me zǒu?",
+    "bua": "Хаана байнаб? / Яажа хүрэхэб?",
     "definition_ru": "Ключевой вопрос для поиска дороги к нужному месту, станции метро или достопримечательности.",
     "definition_en": "Key navigation phrase used when asking for directions to a place or station.",
     "definition_zh": "在城市旅行中向路人问路、寻找特定地点或车站的核心句式。",
@@ -1707,7 +1718,8 @@
         "en": "Excuse me, where is the nearest metro station?",
         "ru": "Извините, где находится ближайшая станция метро?",
         "zh": "请问最近的地铁站在哪里？",
-        "pinyin": "qǐng wèn zuì jìn de dì tiě zhàn zài nǎ lǐ?"
+        "pinyin": "qǐng wèn zuì jìn de dì tiě zhàn zài nǎ lǐ?",
+        "bua": "Хүлисэгты, эгээн ойро метро хаана байнаб?"
       }
     ],
     "synonyms_en": ["Directions to", "Which way is"],
@@ -1723,6 +1735,7 @@
     "zh": "出租车 (打车) / 地铁 / 高铁",
     "zh_trad": "出租車 / 地鐵 / 高鐵",
     "pinyin": "chū zū chē (dǎ chē) / dì tiě / gāo tiě",
+    "bua": "Такси / Метро / Түргэн галта тэргэ",
     "definition_ru": "Основные виды городского и междугороднего транспорта в Китае и мире.",
     "definition_en": "Primary modes of public and urban transportation (taxi, metro, bullet trains).",
     "definition_zh": "城市交通和城际出行的主要交通工具（网约车/出租车、轨道交通与高速铁路）。",
@@ -1731,7 +1744,8 @@
         "en": "Let's take the subway or call a taxi via Didi.",
         "ru": "Давайте поедем на метро или вызовем такси через Didi.",
         "zh": "我们坐地铁或者用滴滴打车吧。",
-        "pinyin": "wǒ men zuò dì tiě huò zhě yòng dī dī dǎ chē ba."
+        "pinyin": "wǒ men zuò dì tiě huò zhě yòng dī dī dǎ chē ba.",
+        "bua": "Метрогоор ябая гү, али такси баряа һаа яахаб?"
       }
     ],
     "synonyms_en": ["Cab", "Metro", "Bullet train"],
@@ -1747,6 +1761,7 @@
     "zh": "酒店入住 / 预订房间",
     "zh_trad": "酒店入住 / 預訂房間",
     "pinyin": "jiǔ diàn rù zhù / yù dìng fáng jiān",
+    "bua": "Буудалаар орохо / Таһалга захиха",
     "definition_ru": "Регистрация прибытия в гостиницу по предварительной брони.",
     "definition_en": "Checking into a hotel with an existing reservation and getting the room key.",
     "definition_zh": "到达酒店前台办理入住登记手续并领取房卡。",
@@ -1755,7 +1770,8 @@
         "en": "Hello, I have a reservation. I would like to check in.",
         "ru": "Здравствуйте, у меня есть бронь. Я хочу заселиться.",
         "zh": "你好，我有预订，我想办理入住。",
-        "pinyin": "nǐ hǎo, wǒ yǒu yù dìng, wǒ xiǎng bàn lǐ rù zhù."
+        "pinyin": "nǐ hǎo, wǒ yǒu yù dìng, wǒ xiǎng bàn lǐ rù zhù.",
+        "bua": "Мэндээ, би захиалгатайб, буудалдаа орохоб."
       }
     ],
     "synonyms_en": ["Check in", "Book a room"],
@@ -1771,6 +1787,7 @@
     "zh": "开会 (会议) / 日程安排 / 截止日期 (Deadline)",
     "zh_trad": "開會 / 日程安排 / 截止日期",
     "pinyin": "kāi huì (huì yì) / rì chéng ān pái / jié zhǐ rì qī",
+    "bua": "Хуралдаан / Саг хужар / Түгэсэхэ хугасаа",
     "definition_ru": "Базовые рабочие понятия делового расписания, планерок и сроков сдачи проектов.",
     "definition_en": "Key office and project terms regarding business meetings, calendars, and project due dates.",
     "definition_zh": "职场中关于工作会议、时间规划和项目最终交付时间节点的核心词汇。",
@@ -1779,7 +1796,8 @@
         "en": "Our project deadline is next Friday. Let's schedule a meeting.",
         "ru": "Дедлайн нашего проекта — следующая пятница. Давайте назначим встречу.",
         "zh": "我们项目的截止日期是下周五。我们安排一次会议吧。",
-        "pinyin": "wǒ men xiàng mù de jié zhǐ rì qī shì xià zhōu wǔ. wǒ men ān pái yí cì huì yì ba."
+        "pinyin": "wǒ men xiàng mù de jié zhǐ rì qī shì xià zhōu wǔ. wǒ men ān pái yí cì huì yì ba.",
+        "bua": "Түсэлэйнгөө түгэсэхэ саг ерэхэ баасанда. Хурал хэе."
       }
     ],
     "synonyms_en": ["Call", "Sync", "Due date"],
@@ -1795,6 +1813,7 @@
     "zh": "远程办公 / 团队协作",
     "zh_trad": "遠程辦公 / 團隊協作",
     "pinyin": "yuǎn chéng bàn gōng / tuán duì xié zuò",
+    "bua": "Зайнаһаа хүдэлхэ / Хамтын хүдэлмэри",
     "definition_ru": "Формат работы вне офиса с использованием видеосвязи, мессенджеров и систем управления задачами.",
     "definition_en": "Working outside a traditional office using online communication and task management tools.",
     "definition_zh": "利用在线协作工具和即时通讯在非固定物理办公室开展工作的方式。",
@@ -1803,7 +1822,8 @@
         "en": "Remote work requires effective communication and collaboration.",
         "ru": "Удаленная работа требует эффективной коммуникации и командного взаимодействия.",
         "zh": "远程办公需要高效的沟通与团队协作。",
-        "pinyin": "yuǎn chéng bàn gōng xū yào gāo xiào de gōu tōng yǔ tuán duì xié zuò."
+        "pinyin": "yuǎn chéng bàn gōng xū yào gāo xiào de gōu tōng yǔ tuán duì xié zuò.",
+        "bua": "Зайнаһаа хүдэлхэдэ һайн харилсаа, хамтын хүдэлмэри хэрэгтэй."
       }
     ],
     "synonyms_en": ["Work from home", "WFH", "Telecommuting"],

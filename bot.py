@@ -446,9 +446,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, res in enumerate(output.search_results[:5], 1):
             t = res.term
             match_pct = int(res.score * 100)
+            bua_part = f" | 🔵 {html.escape(t.bua)}" if t.bua else ""
             response_text += (
                 f"{i}. <b>{html.escape(t.en)}</b> ↔ <b>{html.escape(t.zh)}</b> (<i>{html.escape(t.pinyin)}</i>)\n"
-                f"   🇷🇺 {html.escape(t.ru)}\n\n"
+                f"   🇷🇺 {html.escape(t.ru)}{bua_part}\n\n"
             )
             buttons.append([
                 InlineKeyboardButton(
@@ -568,9 +569,10 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for i, res in enumerate(output.search_results[:5], 1):
                 t = res.term
                 match_pct = int(res.score * 100)
+                bua_part = f" | 🔵 {html.escape(t.bua)}" if t.bua else ""
                 response_text += (
                     f"{i}. <b>{html.escape(t.en)}</b> ↔ <b>{html.escape(t.zh)}</b> (<i>{html.escape(t.pinyin)}</i>)\n"
-                    f"   🇷🇺 {html.escape(t.ru)}\n\n"
+                    f"   🇷🇺 {html.escape(t.ru)}{bua_part}\n\n"
                 )
                 buttons.append([
                     InlineKeyboardButton(

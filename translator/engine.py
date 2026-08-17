@@ -140,6 +140,10 @@ class TerminologyEngine:
                 score = 1.0
                 if score > best_score:
                     best_score, best_field, best_match_text = score, "ru_exact", term.ru
+            elif term.bua and query_lower == term.bua.lower():
+                score = 1.0
+                if score > best_score:
+                    best_score, best_field, best_match_text = score, "bua_exact", term.bua
 
             # Check Pinyin exact or prefix match
             norm_term_pinyin = normalize_pinyin(term.pinyin)
@@ -152,7 +156,7 @@ class TerminologyEngine:
                 if score > best_score:
                     best_score, best_field, best_match_text = score, "pinyin_substr", term.pinyin
 
-            # Check Substring matches in EN, ZH, RU
+            # Check Substring matches in EN, ZH, RU, BUA
             if query_lower in term.en.lower():
                 score = 0.90 if term.en.lower().startswith(query_lower) else 0.80
                 if score > best_score:
@@ -167,6 +171,11 @@ class TerminologyEngine:
                 score = 0.90 if term.ru.lower().startswith(query_lower) else 0.80
                 if score > best_score:
                     best_score, best_field, best_match_text = score, "ru_substring", term.ru
+
+            if term.bua and query_lower in term.bua.lower():
+                score = 0.90 if term.bua.lower().startswith(query_lower) else 0.80
+                if score > best_score:
+                    best_score, best_field, best_match_text = score, "bua_substring", term.bua
 
             # Check Synonyms
             for syn in term.synonyms_en:
@@ -198,6 +207,16 @@ class TerminologyEngine:
                     continue
                 if score > best_score:
                     best_score, best_field, best_match_text = score, "synonym_ru", syn
+
+            for syn in term.synonyms_bua:
+                if query_lower == syn.lower():
+                    score = 0.95
+                elif query_lower in syn.lower():
+                    score = 0.75
+                else:
+                    continue
+                if score > best_score:
+                    best_score, best_field, best_match_text = score, "synonym_bua", syn
 
             # Check fuzzy similarity
             if best_score < 0.8:
