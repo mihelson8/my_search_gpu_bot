@@ -148,9 +148,8 @@ def type1_region(text: str) -> str:
     compact = compact_alnum(text)
     latin = _latin_compact(compact)
     stripped = RUS_SUFFIX_RE.sub("", latin).strip()
-    digits = "".join(ch for ch in stripped if ch.isdigit())
-    if TYPE1_REGION_RE.match(digits) and not _window_is_overlay_junk(digits):
-        return digits
+    if TYPE1_REGION_RE.match(stripped) and not _window_is_overlay_junk(stripped):
+        return stripped
     return ""
 
 

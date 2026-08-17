@@ -249,13 +249,13 @@ def test_type1_plate_region_aspect():
     from anpr.recognizer import find_plate_regions
 
     frame = numpy.full((120, 200, 3), 80, dtype=numpy.uint8)
-    # White Type-1 plate ~4.6 aspect inside a car-like crop
-    frame[70:88, 28:168] = 230
+    # White Type-1 plate ~4.6–5.5 aspect inside a car-like crop
+    frame[74:92, 48:148] = 230
     regions = find_plate_regions(frame)
-    assert regions
+    assert regions, "white Type-1 rectangle should be a plate candidate"
     (x0, y0, x1, y1), _crop = regions[0]
     aspect = (x1 - x0) / float(max(y1 - y0, 1))
-    assert 2.5 <= aspect <= 8.0
+    assert 2.5 <= aspect <= 8.5
 
 
 def test_seetong_window_keywords():

@@ -169,14 +169,15 @@ def find_plate_regions(image, max_candidates: int = 8) -> List[Tuple[Tuple[int, 
     _, thresh = cv2.threshold(grad, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
     closed = cv2.dilate(closed, None, iterations=1)
-    scored = _plate_candidates_from_mask(image, closed, 1.8, 7.5, 4.64)
+    scored = _plate_candidates_from_mask(image, closed, 1.8, 8.5, 4.64)
 
     # White Type-1 plate: light rectangle with a region box on the right.
+    # High cameras flatten the plate, so aspect can look wider than 4.6.
     mean = float(np.mean(gray))
     _, light = cv2.threshold(gray, max(int(mean + 20), 135), 255, cv2.THRESH_BINARY)
     light_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (17, 5))
     light_closed = cv2.morphologyEx(light, cv2.MORPH_CLOSE, light_kernel, iterations=2)
-    scored.extend(_plate_candidates_from_mask(image, light_closed, 3.0, 6.8, 4.64))
+    scored.extend(_plate_candidates_from_mask(image, light_closed, 2.8, 8.5, 4.64))
 
     scored.sort(key=lambda item: (item[0], item[1]))
     seen = set()
