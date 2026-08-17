@@ -1414,5 +1414,389 @@
     "synonyms_ru": ["квантовый компьютер"],
     "synonyms_zh": ["量子计算机"],
     "related_terms": ["cpu", "cybersecurity"]
+  },
+  {
+    "id": "hello_greeting",
+    "category": "daily_dialogue",
+    "en": "Hello / Hi",
+    "ru": "Привет / Здравствуйте",
+    "zh": "你好",
+    "zh_trad": "你好",
+    "pinyin": "nǐ hǎo",
+    "definition_ru": "Самое распространенное универсальное приветствие при встрече.",
+    "definition_en": "The most common and universal greeting when meeting someone.",
+    "definition_zh": "最常用、最基础的日常问候语。",
+    "examples": [
+      {
+        "en": "Hello! Nice to meet you.",
+        "ru": "Привет! Рад познакомиться с вами.",
+        "zh": "你好！很高兴认识你。",
+        "pinyin": "nǐ hǎo! hěn gāo xìng rèn shi nǐ."
+      }
+    ],
+    "synonyms_en": ["Hi", "Greetings", "Good day"],
+    "synonyms_ru": ["Здравствуй", "Добрый день", "Приветствую"],
+    "synonyms_zh": ["您好", "哈喽", "嗨"],
+    "related_terms": ["thank_you", "goodbye"]
+  },
+  {
+    "id": "thank_you",
+    "category": "daily_dialogue",
+    "en": "Thank you / Thanks",
+    "ru": "Спасибо / Благодарю",
+    "zh": "谢谢",
+    "zh_trad": "謝謝",
+    "pinyin": "xiè xie",
+    "definition_ru": "Выражение благодарности и признательности собеседнику.",
+    "definition_en": "Polite expression of gratitude and appreciation.",
+    "definition_zh": "表达感谢和感激的常用礼貌用语。",
+    "examples": [
+      {
+        "en": "Thank you very much for your help!",
+        "ru": "Большое спасибо за вашу помощь!",
+        "zh": "非常感谢你的帮助！",
+        "pinyin": "fēi cháng gǎn xiè nǐ de bāng zhù!"
+      }
+    ],
+    "synonyms_en": ["Thanks a lot", "Many thanks", "Appreciate it"],
+    "synonyms_ru": ["Большое спасибо", "Благодарствую"],
+    "synonyms_zh": ["多谢", "非常感谢", "麻烦你了"],
+    "related_terms": ["you_are_welcome", "excuse_me"]
+  },
+  {
+    "id": "you_are_welcome",
+    "category": "daily_dialogue",
+    "en": "You are welcome / Not at all",
+    "ru": "Пожалуйста / Не за что",
+    "zh": "不用谢 / 不客气",
+    "zh_trad": "不用謝 / 不客氣",
+    "pinyin": "bù yòng xiè / bù kè qi",
+    "definition_ru": "Вежливый ответ на выражение благодарности.",
+    "definition_en": "A polite response to someone thanking you.",
+    "definition_zh": "对他人表达感谢时的礼貌回应。",
+    "examples": [
+      {
+        "en": "— Thank you! — You are welcome!",
+        "ru": "— Спасибо! — Пожалуйста (не за что)!",
+        "zh": "— 谢谢你！ — 不客气！",
+        "pinyin": "— xiè xie nǐ! — bù kè qi!"
+      }
+    ],
+    "synonyms_en": ["No problem", "Don't mention it", "My pleasure"],
+    "synonyms_ru": ["Не стоит благодарности", "На здоровье"],
+    "synonyms_zh": ["没事", "别客气", "不用客气"],
+    "related_terms": ["thank_you"]
+  },
+  {
+    "id": "excuse_me_sorry",
+    "category": "daily_dialogue",
+    "en": "Excuse me / Sorry / Pardon",
+    "ru": "Извините / Прошу прощения",
+    "zh": "不好意思 / 对不起",
+    "zh_trad": "不好意思 / 對不起",
+    "pinyin": "bù hǎo yì si / duì bu qǐ",
+    "definition_ru": "Вежливое обращение для привлечения внимания или принесения извинений.",
+    "definition_en": "Polite phrase used to attract attention or apologize for an inconvenience.",
+    "definition_zh": "用于打扰他人、引起注意或表达歉意的礼貌用语。",
+    "examples": [
+      {
+        "en": "Excuse me, may I ask a question?",
+        "ru": "Извините, можно задать вопрос?",
+        "zh": "不好意思，我可以问一个问题吗？",
+        "pinyin": "bù hǎo yì si, wǒ kě yǐ wèn yí gè wèn tí ma?"
+      }
+    ],
+    "synonyms_en": ["Pardon me", "I am sorry", "Forgive me"],
+    "synonyms_ru": ["Простите", "Пардон"],
+    "synonyms_zh": ["抱歉", "劳驾", "请原谅"],
+    "related_terms": ["please_request"]
+  },
+  {
+    "id": "goodbye",
+    "category": "daily_dialogue",
+    "en": "Goodbye / Bye",
+    "ru": "До свидания / Пока",
+    "zh": "再见",
+    "zh_trad": "再見",
+    "pinyin": "zài jiàn",
+    "definition_ru": "Формула вежливого прощания при расставании.",
+    "definition_en": "Common farewell expression when parting ways.",
+    "definition_zh": "告别时最常用的礼貌用语。",
+    "examples": [
+      {
+        "en": "Goodbye, see you tomorrow!",
+        "ru": "До свидания, увидимся завтра!",
+        "zh": "再见，明天见！",
+        "pinyin": "zài jiàn, míng tiān jiàn!"
+      }
+    ],
+    "synonyms_en": ["See you later", "Take care", "Bye-bye"],
+    "synonyms_ru": ["Увидимся", "До скорого", "Всего доброго"],
+    "synonyms_zh": ["拜拜", "明天见", "下次见"],
+    "related_terms": ["hello_greeting"]
+  },
+  {
+    "id": "please_request",
+    "category": "daily_dialogue",
+    "en": "Please",
+    "ru": "Пожалуйста (просьба)",
+    "zh": "请",
+    "zh_trad": "請",
+    "pinyin": "qǐng",
+    "definition_ru": "Слово вежливой просьбы, предложения или приглашения к действию.",
+    "definition_en": "A polite word used when making a request or inviting someone to do something.",
+    "definition_zh": "表达请求、邀请或礼让的前缀礼貌用语。",
+    "examples": [
+      {
+        "en": "Please come in and have a seat.",
+        "ru": "Пожалуйста, проходите и садитесь.",
+        "zh": "请进，请坐。",
+        "pinyin": "qǐng jìn, qǐng zuò."
+      }
+    ],
+    "synonyms_en": ["Kindly", "If you please"],
+    "synonyms_ru": ["Будьте добры", "Будьте любезны"],
+    "synonyms_zh": ["请问", "麻烦您"],
+    "related_terms": ["excuse_me_sorry"]
+  },
+  {
+    "id": "yes_no_agreement",
+    "category": "daily_dialogue",
+    "en": "Yes / No / OK",
+    "ru": "Да / Нет / Хорошо",
+    "zh": "对 / 不是 / 好的",
+    "zh_trad": "對 / 不是 / 好的",
+    "pinyin": "duì / bú shì / hǎo de",
+    "definition_ru": "Базовые слова для согласия, подтверждения или отрицания в разговоре.",
+    "definition_en": "Basic conversational words expressing affirmation, denial, or agreement.",
+    "definition_zh": "日常对话中用于肯定、否定或确认的基本应答词。",
+    "examples": [
+      {
+        "en": "— Is this correct? — Yes, absolutely OK!",
+        "ru": "— Это правильно? — Да, всё хорошо!",
+        "zh": "— 这样对吗？ — 对，好的没问题！",
+        "pinyin": "— zhè yàng duì ma? — duì, hǎo de méi wèn tí!"
+      }
+    ],
+    "synonyms_en": ["Sure", "Correct", "Alright"],
+    "synonyms_ru": ["Верно", "Согласен", "Ладно"],
+    "synonyms_zh": ["可以", "没问题", "行"],
+    "related_terms": ["thank_you"]
+  },
+  {
+    "id": "how_much_price",
+    "category": "food_shopping",
+    "en": "How much does it cost? / How much?",
+    "ru": "Сколько это стоит? / Какая цена?",
+    "zh": "多少钱？ / 这个怎么卖？",
+    "zh_trad": "多少錢？",
+    "pinyin": "duō shao qián? / zhè ge zěn me mài?",
+    "definition_ru": "Основная фраза при совершении покупок для уточнения стоимости товара или услуги.",
+    "definition_en": "Essential shopping phrase used to ask the price of goods or services.",
+    "definition_zh": "购物和消费时询问商品或服务价格的最核心句型。",
+    "examples": [
+      {
+        "en": "Excuse me, how much is this in total?",
+        "ru": "Извините, сколько это стоит всего?",
+        "zh": "请问，这一共多少钱？",
+        "pinyin": "qǐng wèn, zhè yí gòng duō shao qián?"
+      }
+    ],
+    "synonyms_en": ["What is the price?", "How much is this?"],
+    "synonyms_ru": ["Почем это?", "Сколько с меня?"],
+    "synonyms_zh": ["什么价格？", "一共多少？"],
+    "related_terms": ["mobile_payment_wechat_alipay", "bill_check_please"]
+  },
+  {
+    "id": "mobile_payment_wechat_alipay",
+    "category": "food_shopping",
+    "en": "WeChat Pay / Alipay (Mobile Payment)",
+    "ru": "Оплата через WeChat / Alipay (Мобильная оплата)",
+    "zh": "微信支付 / 支付宝 (扫码支付)",
+    "zh_trad": "微信支付 / 支付寶",
+    "pinyin": "wēi xìn zhī fù / zhī fù bǎo (sǎo mǎ zhī fù)",
+    "definition_ru": "Основной способ безналичной оплаты в Китае по QR-коду со смартфона.",
+    "definition_en": "The dominant mobile QR-code payment methods across China (WeChat Pay & Alipay).",
+    "definition_zh": "中国最普及的智能手机扫码移动支付方式（微信与支付宝）。",
+    "examples": [
+      {
+        "en": "Can I pay with WeChat Pay or Alipay?",
+        "ru": "Можно оплатить через WeChat или Alipay?",
+        "zh": "可以微信或支付宝扫码支付吗？",
+        "pinyin": "kě yǐ wēi xìn huò zhī fù bǎo sǎo mǎ zhī fù ma?"
+      }
+    ],
+    "synonyms_en": ["QR code payment", "Mobile Pay"],
+    "synonyms_ru": ["Оплата по QR-коду", "Вичат оплата", "Алипей"],
+    "synonyms_zh": ["扫码", "扫我微信", "刷支付宝"],
+    "related_terms": ["how_much_price", "bill_check_please"]
+  },
+  {
+    "id": "bill_check_please",
+    "category": "food_shopping",
+    "en": "Check, please / The bill",
+    "ru": "Счет, пожалуйста / Рассчитайте нас",
+    "zh": "买单 / 结账",
+    "zh_trad": "買單 / 結帳",
+    "pinyin": "mǎi dān / jié zhàng",
+    "definition_ru": "Фраза в ресторане или кафе для вызова официанта и оплаты заказа.",
+    "definition_en": "Phrase used in restaurants or stores to request the bill and pay for the meal.",
+    "definition_zh": "在餐厅或商店就餐结束后要求结账付款的常用表达。",
+    "examples": [
+      {
+        "en": "Waiter, the bill please!",
+        "ru": "Официант, принесите счет, пожалуйста!",
+        "zh": "服务员，买单！",
+        "pinyin": "fú wù yuán, mǎi dān!"
+      }
+    ],
+    "synonyms_en": ["Can I get the bill?", "Check please"],
+    "synonyms_ru": ["Посчитайте нас", "Принесите счет"],
+    "synonyms_zh": ["结账", "算下账"],
+    "related_terms": ["how_much_price", "food_menu_order"]
+  },
+  {
+    "id": "food_menu_order",
+    "category": "food_shopping",
+    "en": "Menu / Order food",
+    "ru": "Меню / Заказ еды",
+    "zh": "菜单 / 点餐",
+    "zh_trad": "菜單 / 點餐",
+    "pinyin": "cài dān / diǎn cān",
+    "definition_ru": "Заказ блюд по меню в ресторане или службе доставки.",
+    "definition_en": "Ordering dishes from a restaurant menu or food delivery service.",
+    "definition_zh": "在餐厅看菜单并选择点选餐食。",
+    "examples": [
+      {
+        "en": "Could you please bring the menu? We are ready to order.",
+        "ru": "Принесите меню, пожалуйста. Мы готовы сделать заказ.",
+        "zh": "请拿一份菜单，我们要点餐。",
+        "pinyin": "qǐng ná yí fèn cài dān, wǒ men yào diǎn cān."
+      }
+    ],
+    "synonyms_en": ["Food ordering", "Order dishes"],
+    "synonyms_ru": ["Сделать заказ", "Выбрать блюда"],
+    "synonyms_zh": ["点菜", "看菜单"],
+    "related_terms": ["bill_check_please"]
+  },
+  {
+    "id": "where_is_location",
+    "category": "travel_city",
+    "en": "Where is...? / How to get to...",
+    "ru": "Где находится...? / Как пройти к...",
+    "zh": "请问……在哪里？ / 怎么走？",
+    "zh_trad": "請問……在哪裡？",
+    "pinyin": "qǐng wèn ... zài nǎ lǐ? / zěn me zǒu?",
+    "definition_ru": "Ключевой вопрос для поиска дороги к нужному месту, станции метро или достопримечательности.",
+    "definition_en": "Key navigation phrase used when asking for directions to a place or station.",
+    "definition_zh": "在城市旅行中向路人问路、寻找特定地点或车站的核心句式。",
+    "examples": [
+      {
+        "en": "Excuse me, where is the nearest metro station?",
+        "ru": "Извините, где находится ближайшая станция метро?",
+        "zh": "请问最近的地铁站在哪里？",
+        "pinyin": "qǐng wèn zuì jìn de dì tiě zhàn zài nǎ lǐ?"
+      }
+    ],
+    "synonyms_en": ["Directions to", "Which way is"],
+    "synonyms_ru": ["Подскажите дорогу к", "Где тут"],
+    "synonyms_zh": ["去……怎么走？", "……在什么位置？"],
+    "related_terms": ["taxi_subway_transport", "hotel_checkin"]
+  },
+  {
+    "id": "taxi_subway_transport",
+    "category": "travel_city",
+    "en": "Taxi / Subway / High-speed Train",
+    "ru": "Такси / Метро / Скоростной поезд",
+    "zh": "出租车 (打车) / 地铁 / 高铁",
+    "zh_trad": "出租車 / 地鐵 / 高鐵",
+    "pinyin": "chū zū chē (dǎ chē) / dì tiě / gāo tiě",
+    "definition_ru": "Основные виды городского и междугороднего транспорта в Китае и мире.",
+    "definition_en": "Primary modes of public and urban transportation (taxi, metro, bullet trains).",
+    "definition_zh": "城市交通和城际出行的主要交通工具（网约车/出租车、轨道交通与高速铁路）。",
+    "examples": [
+      {
+        "en": "Let's take the subway or call a taxi via Didi.",
+        "ru": "Давайте поедем на метро или вызовем такси через Didi.",
+        "zh": "我们坐地铁或者用滴滴打车吧。",
+        "pinyin": "wǒ men zuò dì tiě huò zhě yòng dī dī dǎ chē ba."
+      }
+    ],
+    "synonyms_en": ["Cab", "Metro", "Bullet train"],
+    "synonyms_ru": ["Вызов такси", "Подземка", "Сапсан / Высокоскоростной поезд"],
+    "synonyms_zh": ["滴滴", "打车", "动车"],
+    "related_terms": ["where_is_location", "airport_flight"]
+  },
+  {
+    "id": "hotel_checkin",
+    "category": "travel_city",
+    "en": "Hotel Check-in / Room Reservation",
+    "ru": "Заселение в отель / Бронь номера",
+    "zh": "酒店入住 / 预订房间",
+    "zh_trad": "酒店入住 / 預訂房間",
+    "pinyin": "jiǔ diàn rù zhù / yù dìng fáng jiān",
+    "definition_ru": "Регистрация прибытия в гостиницу по предварительной брони.",
+    "definition_en": "Checking into a hotel with an existing reservation and getting the room key.",
+    "definition_zh": "到达酒店前台办理入住登记手续并领取房卡。",
+    "examples": [
+      {
+        "en": "Hello, I have a reservation. I would like to check in.",
+        "ru": "Здравствуйте, у меня есть бронь. Я хочу заселиться.",
+        "zh": "你好，我有预订，我想办理入住。",
+        "pinyin": "nǐ hǎo, wǒ yǒu yù dìng, wǒ xiǎng bàn lǐ rù zhù."
+      }
+    ],
+    "synonyms_en": ["Check in", "Book a room"],
+    "synonyms_ru": ["Оформить номер", "Чек-ин в гостинице"],
+    "synonyms_zh": ["办入住", "订房", "退房 (чек-аут)"],
+    "related_terms": ["where_is_location"]
+  },
+  {
+    "id": "meeting_schedule_deadline",
+    "category": "work_office",
+    "en": "Meeting / Schedule / Deadline",
+    "ru": "Встреча (Совещание) / Расписание / Дедлайн",
+    "zh": "开会 (会议) / 日程安排 / 截止日期 (Deadline)",
+    "zh_trad": "開會 / 日程安排 / 截止日期",
+    "pinyin": "kāi huì (huì yì) / rì chéng ān pái / jié zhǐ rì qī",
+    "definition_ru": "Базовые рабочие понятия делового расписания, планерок и сроков сдачи проектов.",
+    "definition_en": "Key office and project terms regarding business meetings, calendars, and project due dates.",
+    "definition_zh": "职场中关于工作会议、时间规划和项目最终交付时间节点的核心词汇。",
+    "examples": [
+      {
+        "en": "Our project deadline is next Friday. Let's schedule a meeting.",
+        "ru": "Дедлайн нашего проекта — следующая пятница. Давайте назначим встречу.",
+        "zh": "我们项目的截止日期是下周五。我们安排一次会议吧。",
+        "pinyin": "wǒ men xiàng mù de jié zhǐ rì qī shì xià zhōu wǔ. wǒ men ān pái yí cì huì yì ba."
+      }
+    ],
+    "synonyms_en": ["Call", "Sync", "Due date"],
+    "synonyms_ru": ["Созвон", "Сроки", "Планерка"],
+    "synonyms_zh": ["开会讨论", "排期", "截稿日"],
+    "related_terms": ["remote_work_collab"]
+  },
+  {
+    "id": "remote_work_collab",
+    "category": "work_office",
+    "en": "Remote Work / Team Collaboration",
+    "ru": "Удаленная работа / Командное сотрудничество",
+    "zh": "远程办公 / 团队协作",
+    "zh_trad": "遠程辦公 / 團隊協作",
+    "pinyin": "yuǎn chéng bàn gōng / tuán duì xié zuò",
+    "definition_ru": "Формат работы вне офиса с использованием видеосвязи, мессенджеров и систем управления задачами.",
+    "definition_en": "Working outside a traditional office using online communication and task management tools.",
+    "definition_zh": "利用在线协作工具和即时通讯在非固定物理办公室开展工作的方式。",
+    "examples": [
+      {
+        "en": "Remote work requires effective communication and collaboration.",
+        "ru": "Удаленная работа требует эффективной коммуникации и командного взаимодействия.",
+        "zh": "远程办公需要高效的沟通与团队协作。",
+        "pinyin": "yuǎn chéng bàn gōng xū yào gāo xiào de gōu tōng yǔ tuán duì xié zuò."
+      }
+    ],
+    "synonyms_en": ["Work from home", "WFH", "Telecommuting"],
+    "synonyms_ru": ["Удаленка", "Работа из дома", "Коллаборация"],
+    "synonyms_zh": ["居家办公", "WFH", "在线协同"],
+    "related_terms": ["meeting_schedule_deadline"]
   }
 ]

@@ -1,5 +1,45 @@
 [
   {
+    "id": "daily_dialogue",
+    "icon": "💬",
+    "name_ru": "Повседневное общение и этикет",
+    "name_en": "Daily Conversation & Etiquette",
+    "name_zh": "日常交流与礼貌用语",
+    "description_ru": "Приветствия, благодарность, знакомство, согласие, вежливые фразы",
+    "description_en": "Greetings, gratitude, introductions, agreement, polite phrases",
+    "description_zh": "问候、感谢、自我介绍、赞同与礼貌表达"
+  },
+  {
+    "id": "travel_city",
+    "icon": "✈️",
+    "name_ru": "Путешествия, город и транспорт",
+    "name_en": "Travel, City & Transportation",
+    "name_zh": "旅行、城市与交通",
+    "description_ru": "Аэропорт, метро, такси, отель, направления, как спросить дорогу",
+    "description_en": "Airport, metro, taxi, hotel, directions, asking the way",
+    "description_zh": "机场、地铁、出租车、酒店、方向与问路"
+  },
+  {
+    "id": "food_shopping",
+    "icon": "🍜",
+    "name_ru": "Еда, рестораны и покупки",
+    "name_en": "Food, Dining & Shopping",
+    "name_zh": "餐饮美食与日常购物",
+    "description_ru": "Заказ блюд в кафе, счет, меню, торг, оплата через WeChat/Alipay",
+    "description_en": "Ordering food, the bill, menu, bargaining, paying with WeChat/Alipay",
+    "description_zh": "餐厅点餐、结账、菜单、砍价与微信/支付宝支付"
+  },
+  {
+    "id": "work_office",
+    "icon": "💼",
+    "name_ru": "Работа, офис и деловое общение",
+    "name_en": "Work, Office & Business Communication",
+    "name_zh": "职场办公与商务沟通",
+    "description_ru": "Встречи, созвоны, дедлайны, проектные обсуждения, резюме",
+    "description_en": "Meetings, calls, deadlines, project discussions, resume",
+    "description_zh": "开会、通话、截止日期、项目讨论与个人简历"
+  },
+  {
     "id": "ai_ml",
     "icon": "🤖",
     "name_ru": "Искусственный интеллект и ML",
