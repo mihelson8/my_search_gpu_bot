@@ -160,16 +160,21 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
 
 
 def get_term_keyboard(term: TechTerm) -> InlineKeyboardMarkup:
-    """Создает инлайн-кнопки для термина (озвучка, похожие термины, случайный термин)."""
+    """Создает инлайн-кнопки для термина (озвучка Путунхуа/Байхуа, English, похожие термины, случайный термин)."""
     buttons = []
     row_voice = [
-        InlineKeyboardButton("🔊 Озвучить (Китайский)", callback_data=f"voice:zh:{term.id}"),
-        InlineKeyboardButton("🔊 Озвучить (English)", callback_data=f"voice:en:{term.id}"),
+        InlineKeyboardButton("🔊 Путунхуа (Mandarin)", callback_data=f"voice:zh:{term.id}"),
+        InlineKeyboardButton("🔊 Байхуа / Кантонский", callback_data=f"voice:yue:{term.id}"),
     ]
     buttons.append(row_voice)
 
-    row1 = [
+    row_en = [
+        InlineKeyboardButton("🔊 Озвучить (English)", callback_data=f"voice:en:{term.id}"),
         InlineKeyboardButton("🎲 Другой случайный", callback_data="random_term"),
+    ]
+    buttons.append(row_en)
+
+    row1 = [
         InlineKeyboardButton("📚 В категорию", callback_data=f"cat_terms:{term.category}"),
     ]
     buttons.append(row1)
@@ -507,13 +512,18 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         term_id = parts[2]
         term = engine.get_term_by_id(term_id)
         if term:
-            text_to_speak = term.zh if lang_code == "zh" else term.en
+            text_to_speak = term.zh if lang_code in ["zh", "yue"] else term.en
             audio_io = generate_tts_audio(text_to_speak, lang=lang_code)
             if audio_io:
-                flag = "🇨🇳" if lang_code == "zh" else "🇬🇧"
-                caption = f"{flag} <b>{html.escape(text_to_speak)}</b>"
-                if lang_code == "zh" and term.pinyin:
-                    caption += f" (<i>{html.escape(term.pinyin)}</i>)"
+                if lang_code == "yue":
+                    caption = f"🇨🇳 <b>{html.escape(text_to_speak)}</b> <i>(Байхуа / Кантонский)</i>"
+                elif lang_code == "zh":
+                    caption = f"🇨🇳 <b>{html.escape(text_to_speak)}</b>"
+                    if term.pinyin:
+                        caption += f" (<i>{html.escape(term.pinyin)}</i>)"
+                else:
+                    caption = f"🇬🇧 <b>{html.escape(text_to_speak)}</b>"
+
                 await query.message.reply_voice(
                     voice=audio_io,
                     caption=caption,

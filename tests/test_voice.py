@@ -12,6 +12,13 @@ def test_generate_tts_audio_chinese():
     assert len(bytes_data) > 0
 
 
+def test_generate_tts_audio_cantonese_baihua():
+    audio_stream = generate_tts_audio("人工智能", lang="yue")
+    assert audio_stream is not None
+    bytes_data = audio_stream.read()
+    assert len(bytes_data) > 0
+
+
 def test_generate_tts_audio_english():
     audio_stream = generate_tts_audio("Deep Learning", lang="en")
     assert audio_stream is not None
