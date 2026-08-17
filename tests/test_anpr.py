@@ -148,6 +148,18 @@ def test_config_roundtrip(tmp_path):
     assert loaded["rtsp_url"] == DEFAULTS["rtsp_url"]
 
 
+def test_newest_image_path(tmp_path):
+    from anpr.capture import newest_image_path
+
+    older = tmp_path / "old.jpg"
+    newer = tmp_path / "new.jpg"
+    older.write_bytes(b"old")
+    newer.write_bytes(b"new")
+    os.utime(older, (1000, 1000))
+    os.utime(newer, (2000, 2000))
+    assert newest_image_path(str(tmp_path)).endswith("new.jpg")
+
+
 def test_crop_roi():
     numpy = pytest.importorskip("numpy")
     from anpr.capture import crop_roi

@@ -18,6 +18,7 @@ STATUS_COLORS = {
     "unknown": "#ca8a04",
 }
 SOURCE_LABELS = {
+    "seetong_folder": "Папка снимков Seetong",
     "http": "Камера по сети (снимок)",
     "rtsp": "Камера по сети (RTSP)",
     "seetong_window": "Скриншот окна Seetong",
@@ -44,7 +45,7 @@ class AnprApp:
         self.db = AnprDB()
         self.cfg = load_config()
         if self.cfg.get("source") == "monitor":
-            self.cfg["source"] = "http"
+            self.cfg["source"] = "seetong_folder"
         self._running = False
         self._busy = False
         self._last_frame = None
@@ -61,7 +62,7 @@ class AnprApp:
         self._set_detection(
             "—",
             "unknown",
-            "Нажмите «Камера по IP» и укажите адрес камеры в локальной сети. Не используйте «Весь экран».",
+            "Нажмите Main View в Seetong, сделайте снимок (значок фото), затем в автономерах выберите «Папка снимков Seetong». Не используйте весь экран.",
             0.0,
         )
         self.root.after(200, self._warn_missing_packages)
@@ -118,7 +119,7 @@ class AnprApp:
         ttk.Button(top, text="Камера по IP", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
 
         ttk.Label(top, text="Источник:").pack(side="left")
-        self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["http"]))
+        self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["seetong_folder"]))
         self.source_combo = ttk.Combobox(
             top,
             textvariable=self.source_var,
@@ -254,6 +255,9 @@ class AnprApp:
         self.rtsp_var = tk.StringVar(value=self.cfg.get("rtsp_url", ""))
         self.http_var = tk.StringVar(value=self.cfg.get("http_url", ""))
         self.file_var = tk.StringVar(value=self.cfg.get("file_path", ""))
+        self.shots_dir_var = tk.StringVar(
+            value=self.cfg.get("shots_dir", r"C:\Program Files (x86)\Seetong\pi")
+        )
         self.crop_l = tk.StringVar(value=str(int(float(self.cfg.get("crop_left", 0.20)) * 100)))
         self.crop_t = tk.StringVar(value=str(int(float(self.cfg.get("crop_top", 0.12)) * 100)))
         self.crop_r = tk.StringVar(value=str(int(float(self.cfg.get("crop_right", 0.01)) * 100)))
@@ -270,6 +274,7 @@ class AnprApp:
             ("Окно Seetong (часть заголовка)", self.window_var),
             ("RTSP URL", self.rtsp_var),
             ("HTTP snapshot URL", self.http_var),
+            ("Папка снимков Seetong", self.shots_dir_var),
             ("Файл изображения", self.file_var),
             ("Обрезка слева % (дерево устройств)", self.crop_l),
             ("Обрезка сверху % (вкладки Main View)", self.crop_t),
@@ -290,10 +295,8 @@ class AnprApp:
         ttk.Button(grid, text="Обновить список окон", command=self.refresh_windows).grid(
             row=1, column=2, padx=8, sticky="w"
         )
-        ttk.Button(grid, text="Выбрать файл…", command=self.pick_file).grid(row=4, column=2, padx=8, sticky="w")
-        ttk.Button(grid, text="Пресет Lite / парковка", command=self.apply_lite_preset).grid(
-            row=5, column=2, padx=8, sticky="w"
-        )
+        ttk.Button(grid, text="Папка снимков…", command=self.pick_shots_dir).grid(row=4, column=2, padx=8, sticky="w")
+        ttk.Button(grid, text="Выбрать файл…", command=self.pick_file).grid(row=5, column=2, padx=8, sticky="w")
 
         checks = ttk.Frame(self.tab_set)
         checks.pack(fill="x", pady=8)
@@ -342,7 +345,7 @@ class AnprApp:
         def _pct(var, default):
             return max(0.0, min(0.65, _float(var, default * 100) / 100.0))
 
-        source_key = SOURCE_VALUES.get(self.source_var.get(), "http")
+        source_key = SOURCE_VALUES.get(self.source_var.get(), "seetong_folder")
         return {
             "source": source_key,
             "interval_sec": max(0.4, _float(self.interval_var, 1.5)),
@@ -353,6 +356,7 @@ class AnprApp:
             "rtsp_url": self.rtsp_var.get().strip(),
             "http_url": self.http_var.get().strip(),
             "file_path": self.file_var.get().strip(),
+            "shots_dir": self.shots_dir_var.get().strip(),
             "crop_left": min(0.45, _pct(self.crop_l, 0.20)),
             "crop_top": min(0.45, _pct(self.crop_t, 0.12)),
             "crop_right": min(0.45, _pct(self.crop_r, 0.01)),
@@ -447,6 +451,12 @@ class AnprApp:
         self.skip_top_var.set("28")
         self.conf_var.set("0.35")
 
+    def pick_shots_dir(self) -> None:
+        path = filedialog.askdirectory(title="Папка снимков Seetong")
+        if path:
+            self.shots_dir_var.set(path)
+            self.source_var.set(SOURCE_LABELS["seetong_folder"])
+
     def pick_file(self) -> None:
         path = filedialog.askopenfilename(
             title="Кадр с камеры",
@@ -507,14 +517,15 @@ class AnprApp:
             from anpr.recognizer import recognize_image
 
             frame, source_name = grab_frame(
-                source=self.cfg.get("source", "seetong_window"),
+                source=self.cfg.get("source", "seetong_folder"),
                 window_title=self.cfg.get("window_title", ""),
                 rtsp_url=self.cfg.get("rtsp_url", ""),
                 http_url=self.cfg.get("http_url", ""),
                 file_path=self.cfg.get("file_path", ""),
+                shots_dir=self.cfg.get("shots_dir", r"C:\Program Files (x86)\Seetong\pi"),
             )
-            source = self.cfg.get("source", "http")
-            if source in ("http", "rtsp", "file"):
+            source = self.cfg.get("source", "seetong_folder")
+            if source in ("http", "rtsp", "file", "seetong_folder"):
                 frame = crop_roi(
                     frame,
                     left=0.0,

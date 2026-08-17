@@ -359,6 +359,29 @@ def grab_http_snapshot(url: str):
     return frame
 
 
+def newest_image_path(folder: str) -> str:
+    import glob
+
+    if not folder or not os.path.isdir(folder):
+        raise RuntimeError(f"Нет папки снимков Seetong: {folder}")
+    files = []
+    for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.PNG"):
+        files.extend(glob.glob(os.path.join(folder, pattern)))
+        files.extend(glob.glob(os.path.join(folder, "*", pattern)))
+    files = [path for path in files if os.path.isfile(path)]
+    if not files:
+        raise RuntimeError(
+            f"В папке нет снимков: {folder}\n"
+            "Откройте Main View в Seetong и нажмите кнопку снимка (фотоаппарат)."
+        )
+    return max(files, key=os.path.getmtime)
+
+
+def grab_newest_in_folder(folder: str):
+    path = newest_image_path(folder)
+    return grab_file(path), os.path.basename(path)
+
+
 def grab_file(path: str):
     try:
         import cv2  # type: ignore
@@ -378,6 +401,7 @@ def grab_frame(
     rtsp_url: str = "",
     http_url: str = "",
     file_path: str = "",
+    shots_dir: str = "",
 ):
     source = (source or "seetong_window").strip().lower()
     if source == "seetong_window":
@@ -394,6 +418,8 @@ def grab_frame(
         return grab_rtsp(rtsp_url), "rtsp"
     if source == "http":
         return grab_http_snapshot(http_url), "http"
+    if source in ("seetong_folder", "shots"):
+        return grab_newest_in_folder(shots_dir or file_path)
     if source == "file":
         return grab_file(file_path), os.path.basename(file_path)
     raise RuntimeError(f"Неизвестный источник: {source}")
