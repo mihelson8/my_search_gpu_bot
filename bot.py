@@ -92,7 +92,11 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 
 def start_health_check_server(port: int):
     try:
-        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        # Bind to 0.0.0.0 and handle port reuse cleanly
+        class ReusableHTTPServer(HTTPServer):
+            allow_reuse_address = True
+
+        server = ReusableHTTPServer(("0.0.0.0", port), HealthCheckHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         logger.info(f"Health check HTTP-сервер успешно запущен на порту {port}")
@@ -747,11 +751,12 @@ def main():
 
     application = build_application()
 
-    print("\n" + "=" * 60)
-    print("🤖 Бот-переводчик технических терминов (ZH - EN - RU) запущен!")
-    print(f"📚 Загружено терминов: {len(engine.terms)}")
-    print(f"📁 Загружено категорий: {len(engine.categories)}")
-    print("=" * 60 + "\n")
+    print("\n" + "=" * 60, flush=True)
+    print("🤖 Бот-переводчик технических терминов (ZH - EN - RU) запущен!", flush=True)
+    print(f"📚 Загружено терминов: {len(engine.terms)}", flush=True)
+    print(f"📁 Загружено категорий: {len(engine.categories)}", flush=True)
+    print(f"🌐 Health check порт: {PORT}", flush=True)
+    print("=" * 60 + "\n", flush=True)
 
     application.run_polling(
         poll_interval=0.2,
