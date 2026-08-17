@@ -126,13 +126,20 @@ def plate_is_valid(plate: str) -> bool:
     return not any(token in latin.upper() for token in junk)
 
 
-def format_plate(plate: str) -> str:
-    """Type-1 grouping as on the plate: «А 000 АА 00». Invalid text is not shown."""
+def format_plate_parts(plate: str) -> tuple[str, str]:
+    """Split a Type-1 plate into body «А 000 АА» and region «00»."""
     p = normalize_plate(plate)
     if not plate_is_valid(p):
+        return "—", "—"
+    return f"{p[0]} {p[1:4]} {p[4:6]}", p[6:]
+
+
+def format_plate(plate: str) -> str:
+    """Type-1 grouping as on the plate: «А 000 АА | 00». Invalid text is not shown."""
+    body, region = format_plate_parts(plate)
+    if body == "—":
         return "—"
-    body = f"{p[0]} {p[1:4]} {p[4:6]}"
-    return f"{body} {p[6:]}"
+    return f"{body} | {region}"
 
 
 def type1_body(text: str) -> str:

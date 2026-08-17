@@ -10,7 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from anpr.config import load_config, save_config
 from anpr.database import AnprDB
-from anpr.plates import category_label, format_plate, is_osd_text, normalize_plate, parse_category, plate_is_valid
+from anpr.plates import category_label, format_plate, format_plate_parts, is_osd_text, normalize_plate, parse_category, plate_is_valid
 
 STATUS_COLORS = {
     "own": "#16a34a",
@@ -156,9 +156,32 @@ class AnprApp:
         side = tk.Frame(body, bg=self.card, width=360)
         side.pack(side="right", fill="y")
         side.pack_propagate(False)
-        ttk.Label(side, text="Распознанный номер", style="Card.TLabel").pack(anchor="w", padx=16, pady=(14, 4))
-        self.plate_label = tk.Label(side, text="—", bg=self.card, fg=self.accent, font=("Consolas", 28, "bold"))
-        self.plate_label.pack(anchor="w", padx=16)
+        ttk.Label(side, text="Распознанный номер (тип 1)", style="Card.TLabel").pack(anchor="w", padx=16, pady=(14, 4))
+        plate_outer = tk.Frame(side, bg="#111111", padx=2, pady=2)
+        plate_outer.pack(anchor="w", padx=16, pady=(0, 6))
+        self.plate_widget = tk.Frame(plate_outer, bg="#f4f4f4")
+        self.plate_widget.pack()
+        left_plate = tk.Frame(self.plate_widget, bg="#f4f4f4")
+        left_plate.pack(side="left", padx=(12, 8), pady=8)
+        self.plate_body_label = tk.Label(
+            left_plate, text="А 000 АА", bg="#f4f4f4", fg="#111111", font=("Consolas", 22, "bold")
+        )
+        self.plate_body_label.pack()
+        tk.Frame(self.plate_widget, bg="#111111", width=2).pack(side="left", fill="y", pady=6)
+        right_plate = tk.Frame(self.plate_widget, bg="#f4f4f4")
+        right_plate.pack(side="left", padx=(8, 10), pady=4)
+        self.plate_region_label = tk.Label(
+            right_plate, text="00", bg="#f4f4f4", fg="#111111", font=("Consolas", 18, "bold")
+        )
+        self.plate_region_label.pack()
+        rus_row = tk.Frame(right_plate, bg="#f4f4f4")
+        rus_row.pack(pady=(2, 0))
+        tk.Label(rus_row, text="RUS", bg="#f4f4f4", fg="#111111", font=("Segoe UI", 8, "bold")).pack(side="left")
+        flag = tk.Frame(rus_row, bg="#f4f4f4")
+        flag.pack(side="left", padx=(6, 0))
+        for color in ("#ffffff", "#0039a6", "#d52b1e"):
+            tk.Frame(flag, bg=color, width=18, height=4).pack()
+        self.plate_label = self.plate_body_label
         self.category_label_widget = tk.Label(
             side, text="НЕИЗВЕСТНЫЙ", bg=self.card, fg=STATUS_COLORS["unknown"], font=("Segoe UI", 20, "bold")
         )
@@ -617,8 +640,12 @@ class AnprApp:
         self.preview_label.config(image=self._preview_photo, text="")
 
     def _set_detection(self, plate: str, category: str, detail: str, _confidence: float) -> None:
-        shown = format_plate(plate) if plate and plate != "—" else "—"
-        self.plate_label.config(text=shown)
+        if plate and plate != "—":
+            body, region = format_plate_parts(plate)
+        else:
+            body, region = "А 000 АА", "00"
+        self.plate_body_label.config(text=body)
+        self.plate_region_label.config(text=region)
         self.category_label_widget.config(
             text=category_label(category),
             fg=STATUS_COLORS.get(category, STATUS_COLORS["unknown"]),

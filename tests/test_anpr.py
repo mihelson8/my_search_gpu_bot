@@ -77,10 +77,10 @@ def test_overlay_text_is_not_a_plate():
 
 
 def test_format_and_labels():
-    assert format_plate("А123ВС777") == "А 123 ВС 777"
-    assert format_plate("А123ВС77") == "А 123 ВС 77"
-    assert format_plate("С292НТ01") == "С 292 НТ 01"
-    assert format_plate("А000АА00") == "А 000 АА 00"
+    assert format_plate("А123ВС777") == "А 123 ВС | 777"
+    assert format_plate("А123ВС77") == "А 123 ВС | 77"
+    assert format_plate("С292НТ01") == "С 292 НТ | 01"
+    assert format_plate("А000АА00") == "А 000 АА | 00"
     assert category_label("own") == "СВОЙ"
     assert category_label("foreign") == "ЧУЖОЙ"
     assert parse_category("свой") == "own"
@@ -98,6 +98,9 @@ def test_type1_split_ocr_parts():
     assert "С292НТ01" in combine_type1_parts(["С292НТ", "01"])
     assert "А000АА00" in combine_type1_parts(["А 000 АА", "00 RUS"])
     assert combine_type1_parts(["HD IPCAM", "2880"]) == []
+    from anpr.plates import format_plate_parts
+
+    assert format_plate_parts("С292НТ01") == ("С 292 НТ", "01")
 
 
 def test_compact_alnum_strips_junk():
@@ -227,7 +230,7 @@ def test_extract_from_recognizer_without_ocr():
 def test_find_vehicle_silhouette_on_parking_lot():
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
-    from anpr.vehicles import crop_to_vehicles, find_vehicle_rois
+    from anpr.vehicles import apply_silhouette_mask, cut_away_background, find_vehicle_rois, find_vehicle_silhouettes
 
     frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
     frame[0:40, :] = 200  # sky / OSD
@@ -239,8 +242,13 @@ def test_find_vehicle_silhouette_on_parking_lot():
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
     assert 70 < cx < 250
     assert 120 < cy < 210
-    cropped = crop_to_vehicles(frame, boxes)
-    assert cropped.shape[0] < frame.shape[0] or cropped.shape[1] < frame.shape[1]
+    silhouettes = find_vehicle_silhouettes(frame)
+    assert silhouettes and silhouettes[0].contour is not None
+    masked = apply_silhouette_mask(frame, silhouettes)
+    assert int(masked[10, 160].mean()) == 0  # sky / OSD cut away
+    assert int(masked[160, 160].mean()) > 20  # car kept
+    cut = cut_away_background(frame, silhouettes)
+    assert cut.shape[0] < frame.shape[0] or cut.shape[1] < frame.shape[1]
 
 
 def test_type1_plate_region_aspect():

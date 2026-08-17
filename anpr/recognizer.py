@@ -367,8 +367,15 @@ def _ocr_regions(region_map, min_confidence: float) -> List[PlateHit]:
 
 
 def recognize_scene(image, min_confidence: float = 0.35):
-    """Detect cars, cut away the rest, then read Type-1 plates only on the cars."""
-    from anpr.vehicles import annotate_scene, bumper_box, crop_box, crop_to_vehicles, find_vehicle_rois
+    """Detect the car silhouette, cut away the rest, read Type-1 plates on the car."""
+    from anpr.vehicles import (
+        annotate_scene,
+        apply_silhouette_mask,
+        bumper_box,
+        crop_box,
+        crop_to_vehicles,
+        find_vehicle_silhouettes,
+    )
 
     if image is None or getattr(image, "size", 0) == 0:
         return [], [], image
@@ -379,25 +386,23 @@ def recognize_scene(image, min_confidence: float = 0.35):
     except Exception:
         work = image
 
-    vehicles = []
+    silhouettes = []
     try:
-        vehicles = find_vehicle_rois(work)
+        silhouettes = find_vehicle_silhouettes(work)
     except Exception:
-        vehicles = []
+        silhouettes = []
+    vehicles = [item.box for item in silhouettes]
 
     hits: List[PlateHit] = []
-    if vehicles:
-        for box in vehicles:
-            for roi in (bumper_box(box), box):
-                crop = crop_box(work, roi)
+    if silhouettes:
+        masked = apply_silhouette_mask(work, silhouettes)
+        for item in silhouettes:
+            for roi in (bumper_box(item.box), item.box):
+                crop = crop_box(masked, roi)
                 if crop is None or getattr(crop, "size", 0) == 0:
                     continue
                 regions = _collect_plate_regions(crop, origin=(roi[0], roi[1]), inside_vehicle=True)
                 hits.extend(_ocr_regions(regions, min_confidence))
-    else:
-        # No silhouette: still look for Type-1 plate rectangles on the lot, not OSD/sky.
-        regions = _collect_plate_regions(work, origin=(0, 0), inside_vehicle=False)
-        hits = _ocr_regions(regions, min_confidence)
 
     unique = []
     seen = set()
@@ -408,9 +413,9 @@ def recognize_scene(image, min_confidence: float = 0.35):
         unique.append(hit)
     unique.sort(key=lambda item: item.confidence, reverse=True)
     try:
-        annotated = annotate_scene(image, vehicles, unique)
-        if vehicles:
-            annotated = crop_to_vehicles(annotated, vehicles)
+        annotated = annotate_scene(image, silhouettes, unique)
+        if silhouettes:
+            annotated = crop_to_vehicles(annotated, silhouettes)
     except Exception:
         annotated = image
     return unique, vehicles, annotated
