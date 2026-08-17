@@ -58,6 +58,7 @@ except ImportError:
 
 TOKEN = os.getenv("BOT_TOKEN", "8995959559:AAHIrwMnaQpMGELlwrO-WfRh-ulCt65UIJ4")
 PORT = int(os.getenv("PORT", 10000))
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "")
 
 # Инициализация движка словаря
 engine = TerminologyEngine()
@@ -107,9 +108,16 @@ def start_health_check_server(port: int):
     # Запускаем встроенный фоновый самопингер для предотвращения засыпания Render Free
     def keep_alive_worker():
         while True:
-            time.sleep(180)  # каждые 3 минуты
+            time.sleep(120)  # каждые 2 минуты
+            # 1. Пинг внешнего публичного URL Render (если задан)
+            if RENDER_EXTERNAL_URL:
+                try:
+                    with httpx.Client(timeout=10.0) as client:
+                        client.get(RENDER_EXTERNAL_URL)
+                except Exception:
+                    pass
+            # 2. Пинг локального HTTP порта
             try:
-                # Пингуем локальный сервер
                 with httpx.Client(timeout=5.0) as client:
                     client.get(f"http://127.0.0.1:{port}")
             except Exception:
