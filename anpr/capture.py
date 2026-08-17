@@ -407,11 +407,28 @@ def grab_frame(
     if source == "seetong_window":
         info = find_seetong_window(window_title)
         if info is None:
+            if shots_dir:
+                try:
+                    return grab_newest_in_folder(shots_dir)
+                except Exception:
+                    pass
             raise RuntimeError(
-                "Окно Seetong не найдено. Откройте клиент Seetong с картинкой камеры "
-                "или выберите окно вручную в настройках."
+                "Окно Seetong не найдено. Откройте клиент с картинкой камеры "
+                "или в источнике выберите «Папка снимков Seetong» / «Камера / IP»."
             )
-        return grab_window(info), info.title
+        frame = grab_window(info)
+        if _is_mostly_black(frame) and shots_dir:
+            try:
+                return grab_newest_in_folder(shots_dir)
+            except Exception:
+                pass
+        if _is_mostly_black(frame):
+            raise RuntimeError(
+                "Окно Seetong чёрное (видео через видеокарту). "
+                "Источник: «Папка снимков Seetong» — сделайте снимок в клиенте. "
+                "Или кнопка «Камера / IP», если камера в локальной сети."
+            )
+        return frame, info.title
     if source == "monitor":
         return grab_monitor(), "monitor"
     if source == "rtsp":
