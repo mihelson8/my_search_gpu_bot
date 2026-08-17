@@ -475,9 +475,12 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Если есть китайский онлайн перевод, озвучиваем его
             if "zh" in output.online_translations:
                 zh_text = output.online_translations["zh"]
-                audio_io = generate_tts_audio(zh_text, lang="zh")
-                if audio_io:
-                    await update.message.reply_voice(voice=audio_io, caption=f"🔊 {zh_text}")
+                try:
+                    audio_io = generate_tts_audio(zh_text, lang="zh")
+                    if audio_io:
+                        await update.message.reply_voice(voice=audio_io, caption=f"🔊 {zh_text}")
+                except Exception as ex_tts:
+                    logger.warning(f"Voice TTS reply failed: {ex_tts}")
 
     except Exception as e:
         logger.error(f"Error handling voice message: {e}", exc_info=True)

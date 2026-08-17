@@ -6,6 +6,7 @@ import os
 import json
 import difflib
 import logging
+import asyncio
 from typing import List, Optional, Dict, Tuple
 
 import httpx
@@ -270,18 +271,37 @@ class OnlineTranslationFallback:
         lang_code_map = {
             Language.EN: "en",
             Language.RU: "ru",
-            Language.ZH: "zh-CN",
+            Language.ZH: "zh",
             Language.AUTO: "auto",
         }
 
         sl = lang_code_map.get(source_lang, "auto")
         tl = lang_code_map.get(target_lang, "en")
 
+        # Fallback endpoints: MyMemory and Google Translate endpoint
         try:
-            # MyMemory Translation API (Free tier: 50,000 chars/day)
-            pair = f"{sl}|{tl}"
+            # 1. Try Google Translate public endpoint first (very fast and reliable for phrases)
+            g_url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={sl}&tl={tl}&dt=t&q={httpx.URL('', params={'q': text}).params['q']}"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.get(g_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data and isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                        translated_parts = [part[0] for part in data[0] if part and len(part) > 0 and part[0]]
+                        res = "".join(translated_parts).strip()
+                        if res and res != text:
+                            return res
+        except Exception as e:
+            logger.debug(f"Google fallback failed: {e}")
+
+        try:
+            # 2. Try MyMemory Translation API
+            sl_mymemory = "zh-CN" if sl == "zh" else sl
+            tl_mymemory = "zh-CN" if tl == "zh" else tl
+            pair = f"{sl_mymemory}|{tl_mymemory}"
             if sl == "auto":
-                pair = f"autodetect|{tl}"
+                pair = f"autodetect|{tl_mymemory}"
 
             url = "https://api.mymemory.translated.net/get"
             params = {"q": text, "langpair": pair}
