@@ -66,9 +66,9 @@ translator = TechTranslator(engine)
 # Главное меню (Reply Keyboard) с удобным выбором языков и режимов
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
-        [KeyboardButton("🇷🇺 Русский"), KeyboardButton("🇬🇧 English")],
+        [KeyboardButton("🇷🇺 Русский"), KeyboardButton("🇺🇸 American English")],
         [KeyboardButton("🇨🇳 Путунхуа"), KeyboardButton("🇭🇰 Кантонский / Байхуа")],
-        [KeyboardButton("🔍 Поиск термина"), KeyboardButton("📚 Категории")],
+        [KeyboardButton("🔍 Поиск фразы / термина"), KeyboardButton("📚 Категории")],
         [KeyboardButton("🎲 Случайная фраза"), KeyboardButton("🧠 Викторина")],
     ],
     resize_keyboard=True,
@@ -121,7 +121,7 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
         f"🇨🇳 <b>Путунхуа (Mandarin):</b> <code>{zh_clean}</code>\n"
         f"   🗣 <i>Pinyin:</i> <code>{pinyin_clean}</code>\n"
         f"🇭🇰 <b>Кантонский / Байхуа:</b> <code>{zh_clean}</code>{trad_clean}\n"
-        f"🇬🇧 <b>English:</b> <code>{en_clean}</code>\n\n"
+        f"🇺🇸 <b>American English:</b> <code>{en_clean}</code>\n\n"
     )
 
     if not compact:
@@ -163,7 +163,7 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
 
 
 def get_term_keyboard(term: TechTerm) -> InlineKeyboardMarkup:
-    """Создает инлайн-кнопки для термина (озвучка Путунхуа/Байхуа/Русский/English, похожие термины, случайный термин)."""
+    """Создает инлайн-кнопки для термина (озвучка Путунхуа/Байхуа/Русский/American English, похожие термины, случайный термин)."""
     buttons = []
     row_voice1 = [
         InlineKeyboardButton("🔊 Путунхуа (Mandarin)", callback_data=f"voice:zh:{term.id}"),
@@ -172,8 +172,8 @@ def get_term_keyboard(term: TechTerm) -> InlineKeyboardMarkup:
     buttons.append(row_voice1)
 
     row_voice2 = [
-        InlineKeyboardButton("🔊 Озвучить (Русский)", callback_data=f"voice:ru:{term.id}"),
-        InlineKeyboardButton("🔊 Озвучить (English)", callback_data=f"voice:en:{term.id}"),
+        InlineKeyboardButton("🔊 Русский", callback_data=f"voice:ru:{term.id}"),
+        InlineKeyboardButton("🔊 American English (US)", callback_data=f"voice:en_us:{term.id}"),
     ]
     buttons.append(row_voice2)
 
@@ -211,7 +211,7 @@ def get_online_translation_keyboard(output_translations: dict, query: str = "") 
     if "ru" in output_translations or not is_chinese_text(query):
         row_voice2.append(InlineKeyboardButton("🔊 Русский", callback_data="voice_txt:ru"))
     if "en" in output_translations:
-        row_voice2.append(InlineKeyboardButton("🔊 English", callback_data="voice_txt:en"))
+        row_voice2.append(InlineKeyboardButton("🔊 American (US)", callback_data="voice_txt:en_us"))
     if row_voice2:
         buttons.append(row_voice2)
 
@@ -343,15 +343,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_text == "🇷🇺 Русский":
         await update.message.reply_text(
             "🇷🇺 <b>Режим русского языка:</b>\n"
-            "Напишите или наговорите голосом фразу на русском языке — бот переведет её на Путунхуа, Кантонский (Байхуа) и English, покажет пиньинь и озвучит на всех языках!",
+            "Напишите или наговорите голосом фразу на русском языке — бот переведет её на Путунхуа, Кантонский (Байхуа) и Американский английский (US), покажет пиньинь и озвучит на всех диалектах!",
             parse_mode=ParseMode.HTML,
             reply_markup=MAIN_KEYBOARD,
         )
         return
-    elif user_text == "🇬🇧 English":
+    elif user_text in ["🇺🇸 American English", "🇬🇧 English"]:
         await update.message.reply_text(
-            "🇬🇧 <b>English Mode:</b>\n"
-            "Type or voice any phrase in English — the bot will translate it to Russian, Mandarin, and Cantonese with full audio pronunciation and Pinyin!",
+            "🇺🇸 <b>American English Mode:</b>\n"
+            "Type or voice any phrase in American English — the bot will translate it to Russian, Mandarin, and Cantonese with full audio pronunciation (General American accent) and Pinyin!",
             parse_mode=ParseMode.HTML,
             reply_markup=MAIN_KEYBOARD,
         )
@@ -372,9 +372,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=MAIN_KEYBOARD,
         )
         return
-    elif user_text == "🔍 Поиск термина":
+    elif user_text in ["🔍 Поиск термина", "🔍 Поиск фразы / термина"]:
         await update.message.reply_text(
-            "🔍 Введите слово или фразу на русском, английском, путунхуа или кантонском (иероглифы или пиньинь):",
+            "🔍 Введите слово или фразу на русском, американском английском, путунхуа или кантонском (иероглифы или пиньинь):",
             reply_markup=MAIN_KEYBOARD,
         )
         return
@@ -631,13 +631,15 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             audio_io = generate_tts_audio(text_to_speak, lang=lang_code)
             if audio_io:
                 if lang_code == "yue":
-                    caption = f"🇨🇳 <b>{html.escape(text_to_speak)}</b> <i>(Байхуа / Кантонский)</i>"
+                    caption = f"🇭🇰 <b>{html.escape(text_to_speak)}</b> <i>(Байхуа / Кантонский)</i>"
                 elif lang_code == "zh":
                     caption = f"🇨🇳 <b>{html.escape(text_to_speak)}</b>"
                     if term.pinyin:
                         caption += f" (<i>{html.escape(term.pinyin)}</i>)"
                 elif lang_code == "ru":
                     caption = f"🇷🇺 <b>{html.escape(text_to_speak)}</b>"
+                elif lang_code == "en_us":
+                    caption = f"🇺🇸 <b>{html.escape(text_to_speak)}</b> <i>(American English)</i>"
                 else:
                     caption = f"🇬🇧 <b>{html.escape(text_to_speak)}</b>"
 
@@ -666,7 +668,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 text_to_speak = query_text
             else:
                 text_to_speak = translations.get("ru", "")
-        elif lang_code == "en":
+        elif lang_code in ["en", "en_us"]:
             if detected_lang == Language.EN.value:
                 text_to_speak = query_text
             else:
@@ -684,6 +686,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                         cap += f" (<i>{html.escape(py)}</i>)"
                 elif lang_code == "ru":
                     cap = f"🇷🇺 <b>{html.escape(text_to_speak)}</b>"
+                elif lang_code == "en_us":
+                    cap = f"🇺🇸 <b>{html.escape(text_to_speak)}</b> <i>(American English)</i>"
                 else:
                     cap = f"🇬🇧 <b>{html.escape(text_to_speak)}</b>"
 

@@ -31,12 +31,21 @@ def generate_tts_audio(text: str, lang: str = "zh") -> Optional[io.BytesIO]:
         "yue": "yue",
         "cantonese": "yue",
         "en": "en",
+        "en_us": "en",
+        "en_uk": "en",
         "ru": "ru",
     }
     target_lang = lang_map.get(lang, "zh-CN")
 
+    # Select proper top-level domain (TLD) for English regional accents
+    tld = "com"
+    if lang in ["en", "en_us"]:
+        tld = "com"     # American English accent
+    elif lang in ["en_uk", "uk"]:
+        tld = "co.uk"   # British English accent
+
     try:
-        tts = gTTS(text=text.strip(), lang=target_lang, slow=False)
+        tts = gTTS(text=text.strip(), lang=target_lang, tld=tld, slow=False)
         audio_buffer = io.BytesIO()
         tts.write_to_fp(audio_buffer)
         audio_buffer.seek(0)
