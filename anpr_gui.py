@@ -62,7 +62,7 @@ class AnprApp:
         self._set_detection(
             "—",
             "unknown",
-            "Нажмите Main View в Seetong, сделайте снимок (значок фото), затем в автономерах выберите «Папка снимков Seetong». Не используйте весь экран.",
+            "Снимок из Seetong → Старт. Программа ищет силуэт авто, отсекает двор и надписи, читает номер вида «А 000 АА | 00».",
             0.0,
         )
         self.root.after(200, self._warn_missing_packages)
@@ -142,10 +142,10 @@ class AnprApp:
 
         preview_card = tk.Frame(body, bg=self.card, highlightthickness=0)
         preview_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        ttk.Label(preview_card, text="Кадр с Seetong / камеры", style="Card.TLabel").pack(anchor="w", padx=12, pady=(10, 4))
+        ttk.Label(preview_card, text="Силуэт авто (остальное отсечено)", style="Card.TLabel").pack(anchor="w", padx=12, pady=(10, 4))
         self.preview_label = tk.Label(
             preview_card,
-            text="Нет кадра.\nОткройте программу Seetong и нажмите Старт.",
+            text="Нет кадра.\nСнимок Seetong → Старт.\nИщем машину, номер вида «А 000 АА 00».",
             bg="#020617",
             fg=self.muted,
             font=("Segoe UI", 11),
@@ -310,9 +310,9 @@ class AnprApp:
         ttk.Label(
             self.tab_set,
             text=(
-                "Картинку нужно брать с камеры по сети (кнопка «Камера по IP»), а не со всего экрана. "
-                "IP смотрите в Seetong у устройства. Логин обычно admin, пароль 123456. "
-                "«Весь экран» использовать нельзя — программа видит свои окна и надпись seetong."
+                "Облачная камера: снимки из папки Seetong (не весь экран и не IP). "
+                "На кадре ищется силуэт машины — дорога, небо и надписи HD IPCAM отсекаются. "
+                "Номер только типа 1: буква + 3 цифры + 2 буквы и регион 2–3 цифры справа (А 000 АА | 00 RUS)."
             ),
             style="Muted.TLabel",
             wraplength=900,
@@ -504,7 +504,7 @@ class AnprApp:
         self._busy = True
         try:
             from anpr.capture import crop_roi, grab_frame, save_screenshot
-            from anpr.recognizer import recognize_image
+            from anpr.recognizer import recognize_scene
 
             frame, source_name = grab_frame(
                 source=self.cfg.get("source", "seetong_folder"),
@@ -538,14 +538,19 @@ class AnprApp:
             shot = ""
             if force_save or self.cfg.get("save_all_shots"):
                 shot = save_screenshot(frame, prefix="live")
-            hits = recognize_image(frame, min_confidence=float(self.cfg.get("min_confidence", 0.4)))
+            hits, vehicles, annotated = recognize_scene(
+                frame, min_confidence=float(self.cfg.get("min_confidence", 0.4))
+            )
+            preview = annotated if annotated is not None else frame
+            self.root.after(0, lambda img=preview: self._show_preview(img))
+            car_note = f"авто: {len(vehicles)}" if vehicles else "силуэт авто не найден"
             if not hits:
                 self.root.after(
                     0,
                     lambda: self._set_detection(
                         self._last_plate or "—",
                         "unknown" if not self._last_plate else self._last_category,
-                        f"Номер не прочитан ({source_name}). Можно ввести вручную.",
+                        f"Номер не прочитан ({source_name}, {car_note}). Нужен вид «А 000 АА 00». Можно ввести вручную.",
                         0.0,
                     ),
                 )
@@ -557,14 +562,14 @@ class AnprApp:
                     lambda: self._set_detection(
                         "—",
                         "unknown",
-                        f"Номер не прочитан ({source_name}). Можно ввести вручную.",
+                        f"Номер не прочитан ({source_name}, {car_note}). Можно ввести вручную.",
                         0.0,
                     ),
                 )
                 return
             info = self.db.classify(hit.plate, unknown_as_foreign=bool(self.cfg.get("unknown_as_foreign")))
             if not shot and info["category"] != "own":
-                shot = save_screenshot(frame, prefix=info["category"])
+                shot = save_screenshot(preview, prefix=info["category"])
             duplicate = self.db.event_is_duplicate(hit.plate, int(self.cfg.get("duplicate_sec", 30)))
             if not duplicate:
                 self.db.log_event(
@@ -580,7 +585,8 @@ class AnprApp:
             self._last_plate = hit.plate
             self._last_category = info["category"]
             detail = (
-                f"{owner}  ·  уверенность {hit.confidence:.0%}  ·  {hit.engine or 'ocr'}  ·  {source_name}"
+                f"{owner}  ·  {car_note}  ·  уверенность {hit.confidence:.0%}  "
+                f"·  {hit.engine or 'ocr'}  ·  {source_name}"
             )
             self.root.after(
                 0,

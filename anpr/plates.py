@@ -55,7 +55,11 @@ DIGIT_SLOT_FIX = {
     "Ч": "4",
 }
 
+# Type 1 (ГОСТ): letter + 3 digits + 2 letters + region 2–3 digits. Layout: «А 000 АА | 00 RUS».
 PLATE_RE = re.compile(rf"^[{CYR_LETTERS}]\d{{3}}[{CYR_LETTERS}]{{2}}\d{{2,3}}$")
+TYPE1_BODY_RE = re.compile(rf"^[{CYR_LETTERS}]\d{{3}}[{CYR_LETTERS}]{{2}}$")
+TYPE1_REGION_RE = re.compile(r"^\d{2,3}$")
+RUS_SUFFIX_RE = re.compile(r"(RUS|РУС)$", re.IGNORECASE)
 NON_PLATE_CHARS = re.compile(r"[^A-ZА-ЯЁ0-9]+", re.IGNORECASE)
 
 
@@ -79,13 +83,8 @@ def compact_alnum(text: str) -> str:
     return "".join(chars)
 
 
-def apply_slot_rules(compact: str) -> str:
-    """Force letter/digit slots for 8–9 character Russian plates."""
-    if len(compact) not in (8, 9):
-        return "".join(_to_cyr_letter(ch) for ch in compact)
-
+def _apply_letter_digit_slots(compact: str, letter_slots: set[int]) -> str:
     out = []
-    letter_slots = {0, 4, 5}
     for i, ch in enumerate(compact):
         ch = ch.upper()
         if i in letter_slots:
@@ -97,6 +96,20 @@ def apply_slot_rules(compact: str) -> str:
                 ch = DIGIT_SLOT_FIX.get(_to_cyr_letter(ch), ch)
         out.append(ch)
     return "".join(out)
+
+
+def apply_slot_rules(compact: str) -> str:
+    """Force letter/digit slots for 8–9 character Russian plates."""
+    if len(compact) not in (8, 9):
+        return "".join(_to_cyr_letter(ch) for ch in compact)
+    return _apply_letter_digit_slots(compact, {0, 4, 5})
+
+
+def apply_body_slot_rules(compact: str) -> str:
+    """Force L DDD LL for the left half of a Type-1 plate (without region)."""
+    if len(compact) != 6:
+        return "".join(_to_cyr_letter(ch) for ch in compact)
+    return _apply_letter_digit_slots(compact, {0, 4, 5})
 
 
 def normalize_plate(text: str) -> str:
@@ -114,13 +127,60 @@ def plate_is_valid(plate: str) -> bool:
 
 
 def format_plate(plate: str) -> str:
-    """Human-readable grouping: A123BC 777. Invalid text is not shown as a plate."""
+    """Type-1 grouping as on the plate: «А 000 АА 00». Invalid text is not shown."""
     p = normalize_plate(plate)
     if not plate_is_valid(p):
         return "—"
-    if len(p) == 8:
-        return f"{p[0]}{p[1:4]}{p[4:6]} {p[6:8]}"
-    return f"{p[0]}{p[1:4]}{p[4:6]} {p[6:9]}"
+    body = f"{p[0]} {p[1:4]} {p[4:6]}"
+    return f"{body} {p[6:]}"
+
+
+def type1_body(text: str) -> str:
+    """Return the 6-character left part (А000АА) or empty."""
+    compact = apply_body_slot_rules(compact_alnum(text))
+    return compact if TYPE1_BODY_RE.match(compact) else ""
+
+
+def type1_region(text: str) -> str:
+    """Return a 2–3 digit region from a fragment like «00» or «00 RUS»."""
+    if not text or is_osd_text(text):
+        return ""
+    compact = compact_alnum(text)
+    latin = _latin_compact(compact)
+    stripped = RUS_SUFFIX_RE.sub("", latin).strip()
+    digits = "".join(ch for ch in stripped if ch.isdigit())
+    if TYPE1_REGION_RE.match(digits) and not _window_is_overlay_junk(digits):
+        return digits
+    return ""
+
+
+def combine_type1_parts(texts: List[str]) -> List[str]:
+    """Join OCR boxes: left «А 000 АА» + right «00 RUS» → А000АА00."""
+    bodies: List[str] = []
+    regions: List[str] = []
+    found: List[str] = []
+    seen = set()
+    for text in texts:
+        if not text or is_osd_text(text):
+            continue
+        body = type1_body(text)
+        if body and body not in bodies:
+            bodies.append(body)
+        region = type1_region(text)
+        # A 6-character body also contains three digits — do not treat those as region.
+        if region and not body and region not in regions:
+            regions.append(region)
+        for plate in extract_plates(text):
+            if plate not in seen:
+                seen.add(plate)
+                found.append(plate)
+    for body in bodies:
+        for region in regions:
+            plate = body + region
+            if plate_is_valid(plate) and plate not in seen:
+                seen.add(plate)
+                found.append(plate)
+    return found
 
 
 def _latin_compact(text: str) -> str:

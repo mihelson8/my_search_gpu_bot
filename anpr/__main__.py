@@ -108,7 +108,7 @@ def cmd_list() -> int:
         return 0
     for row in rows:
         print(
-            f"{row['id']:4}  {format_plate(row['plate_normalized']):12}  "
+            f"{row['id']:4}  {format_plate(row['plate_normalized']):16}  "
             f"{category_label(row['category']):12}  {row['owner_name'] or '—'}"
         )
     return 0

@@ -77,12 +77,27 @@ def test_overlay_text_is_not_a_plate():
 
 
 def test_format_and_labels():
-    assert format_plate("А123ВС777") == "А123ВС 777"
-    assert format_plate("А123ВС77") == "А123ВС 77"
+    assert format_plate("А123ВС777") == "А 123 ВС 777"
+    assert format_plate("А123ВС77") == "А 123 ВС 77"
+    assert format_plate("С292НТ01") == "С 292 НТ 01"
+    assert format_plate("А000АА00") == "А 000 АА 00"
     assert category_label("own") == "СВОЙ"
     assert category_label("foreign") == "ЧУЖОЙ"
     assert parse_category("свой") == "own"
     assert parse_category("чужой") == "foreign"
+
+
+def test_type1_split_ocr_parts():
+    from anpr.plates import combine_type1_parts, type1_body, type1_region
+
+    assert type1_body("А 000 АА") == "А000АА"
+    assert type1_body("C292HT") == "С292НТ"
+    assert type1_region("00 RUS") == "00"
+    assert type1_region("01") == "01"
+    assert type1_region("А 000 АА") == ""
+    assert "С292НТ01" in combine_type1_parts(["С292НТ", "01"])
+    assert "А000АА00" in combine_type1_parts(["А 000 АА", "00 RUS"])
+    assert combine_type1_parts(["HD IPCAM", "2880"]) == []
 
 
 def test_compact_alnum_strips_junk():
@@ -198,11 +213,49 @@ def test_mostly_black_frame():
 
 
 def test_extract_from_recognizer_without_ocr():
-    from anpr.recognizer import recognize_image
+    from anpr.recognizer import recognize_image, recognize_scene
 
     numpy = pytest.importorskip("numpy")
     blank = numpy.zeros((240, 320, 3), dtype=numpy.uint8)
     assert recognize_image(blank) == []
+    hits, vehicles, vis = recognize_scene(blank)
+    assert hits == []
+    assert vehicles == []
+    assert vis is not None
+
+
+def test_find_vehicle_silhouette_on_parking_lot():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import crop_to_vehicles, find_vehicle_rois
+
+    frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
+    frame[0:40, :] = 200  # sky / OSD
+    frame[120:200, 70:250] = (35, 38, 42)  # dark car
+    frame[128:155, 95:225] = (70, 72, 78)  # windshield
+    boxes = find_vehicle_rois(frame)
+    assert boxes, "car blob on asphalt should be found"
+    x0, y0, x1, y1 = boxes[0]
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    assert 70 < cx < 250
+    assert 120 < cy < 210
+    cropped = crop_to_vehicles(frame, boxes)
+    assert cropped.shape[0] < frame.shape[0] or cropped.shape[1] < frame.shape[1]
+
+
+def test_type1_plate_region_aspect():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.recognizer import find_plate_regions
+
+    frame = numpy.full((120, 200, 3), 80, dtype=numpy.uint8)
+    # White Type-1 plate ~4.6 aspect inside a car-like crop
+    frame[70:88, 28:168] = 230
+    regions = find_plate_regions(frame)
+    assert regions
+    (x0, y0, x1, y1), _crop = regions[0]
+    aspect = (x1 - x0) / float(max(y1 - y0, 1))
+    assert 2.5 <= aspect <= 8.0
 
 
 def test_seetong_window_keywords():

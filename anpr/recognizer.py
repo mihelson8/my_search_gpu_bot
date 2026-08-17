@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from anpr.plates import extract_plates, is_osd_text, plate_is_valid
+from anpr.plates import combine_type1_parts, is_osd_text, plate_is_valid
 
 
 @dataclass
@@ -124,8 +124,36 @@ def parking_band(image):
     return (x0, y0, x1, y1), image[y0:y1, x0:x1]
 
 
+def _plate_candidates_from_mask(image, mask, min_aspect: float, max_aspect: float, target_aspect: float):
+    import cv2
+
+    h, w = image.shape[:2]
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    scored = []
+    for contour in contours:
+        x, y, cw, ch = cv2.boundingRect(contour)
+        if ch < 7 or cw < 24:
+            continue
+        aspect = cw / float(ch)
+        if not (min_aspect <= aspect <= max_aspect):
+            continue
+        area = cw * ch
+        if area < 150 or area > 0.50 * w * h:
+            continue
+        pad_x, pad_y = int(cw * 0.10), int(ch * 0.24)
+        x0 = max(0, x - pad_x)
+        y0 = max(0, y - pad_y)
+        x1 = min(w, x + cw + pad_x)
+        y1 = min(h, y + ch + pad_y)
+        crop = image[y0:y1, x0:x1]
+        closeness = abs(aspect - target_aspect)
+        vertical_bonus = (y0 + y1) / (2.0 * max(h, 1))
+        scored.append((closeness - vertical_bonus * 0.4, -area, (x0, y0, x1, y1), crop))
+    return scored
+
+
 def find_plate_regions(image, max_candidates: int = 8) -> List[Tuple[Tuple[int, int, int, int], object]]:
-    """Return (x0,y0,x1,y1) boxes and BGR crops that look like license plates."""
+    """Return boxes that look like Type-1 plates: «А 000 АА | 00», aspect ~4.6."""
     import cv2
     import numpy as np
 
@@ -141,32 +169,27 @@ def find_plate_regions(image, max_candidates: int = 8) -> List[Tuple[Tuple[int, 
     _, thresh = cv2.threshold(grad, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
     closed = cv2.dilate(closed, None, iterations=1)
-    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    scored = _plate_candidates_from_mask(image, closed, 1.8, 7.5, 4.64)
 
-    scored = []
-    for contour in contours:
-        x, y, cw, ch = cv2.boundingRect(contour)
-        if ch < 8 or cw < 28:
-            continue
-        aspect = cw / float(ch)
-        if not (1.8 <= aspect <= 7.5):
-            continue
-        area = cw * ch
-        if area < 220 or area > 0.45 * w * h:
-            continue
-        pad_x, pad_y = int(cw * 0.10), int(ch * 0.22)
-        x0 = max(0, x - pad_x)
-        y0 = max(0, y - pad_y)
-        x1 = min(w, x + cw + pad_x)
-        y1 = min(h, y + ch + pad_y)
-        crop = image[y0:y1, x0:x1]
-        closeness = abs(aspect - 4.6)
-        # Prefer plates in the lower part of a high-angle parking view.
-        vertical_bonus = (y0 + y1) / (2.0 * max(h, 1))
-        scored.append((closeness - vertical_bonus * 0.4, -area, (x0, y0, x1, y1), crop))
+    # White Type-1 plate: light rectangle with a region box on the right.
+    mean = float(np.mean(gray))
+    _, light = cv2.threshold(gray, max(int(mean + 20), 135), 255, cv2.THRESH_BINARY)
+    light_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (17, 5))
+    light_closed = cv2.morphologyEx(light, cv2.MORPH_CLOSE, light_kernel, iterations=2)
+    scored.extend(_plate_candidates_from_mask(image, light_closed, 3.0, 6.8, 4.64))
 
     scored.sort(key=lambda item: (item[0], item[1]))
-    return [(box, crop) for _, _, box, crop in scored[:max_candidates]]
+    seen = set()
+    out = []
+    for _close, _area, box, crop in scored:
+        key = (box[0] // 12, box[1] // 12, box[2] // 12, box[3] // 12)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((box, crop))
+        if len(out) >= max_candidates:
+            break
+    return out
 
 
 def _search_views(image):
@@ -268,38 +291,43 @@ def _run_ocr(image) -> Tuple[str, List[Tuple[str, float]]]:
     return "", []
 
 
-def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
-    """Detect plates on a BGR numpy image. Works without OCR (empty list)."""
-    if image is None or getattr(image, "size", 0) == 0:
-        return []
+def _iter_search_views(image, origin=(0, 0), inside_vehicle: bool = False):
+    ox, oy = origin
+    if inside_vehicle:
+        h, w = image.shape[:2]
+        yield (ox, oy), image
+        y0 = int(h * 0.30)
+        if h - y0 >= 16:
+            yield (ox, oy + y0), image[y0:h, :]
+        return
+    for (x0, y0, _x1, _y1), view in _search_views(image):
+        yield (ox + x0, oy + y0), view
 
-    try:
-        image = mask_osd(image)
-    except Exception:
-        pass
 
+def _collect_plate_regions(image, origin=(0, 0), inside_vehicle: bool = False):
+    ox, oy = origin
     region_map = []
     seen_boxes = set()
     try:
-        for offset, view in _search_views(image):
-            ox, oy, _, _ = offset
+        for (vx, vy), view in _iter_search_views(image, origin, inside_vehicle):
             for (x0, y0, x1, y1), crop in find_plate_regions(view):
-                box = (x0 + ox, y0 + oy, x1 + ox, y1 + oy)
+                box = (x0 + vx, y0 + vy, x1 + vx, y1 + vy)
                 key = (box[0] // 20, box[1] // 20, box[2] // 20, box[3] // 20)
                 if key in seen_boxes:
                     continue
                 seen_boxes.add(key)
                 region_map.append((box, crop))
-                if len(region_map) >= 8:
-                    break
-            if len(region_map) >= 8:
-                break
+                if len(region_map) >= 6:
+                    return region_map
     except Exception:
-        region_map = []
-    if not region_map:
-        _off, band = parking_band(image)
-        region_map = [(_off, band)]
+        return region_map
+    if not region_map and inside_vehicle:
+        h, w = image.shape[:2]
+        region_map = [((ox, oy, ox + w, oy + h), image)]
+    return region_map
 
+
+def _ocr_regions(region_map, min_confidence: float) -> List[PlateHit]:
     hits: List[PlateHit] = []
     seen = set()
     for bbox, crop in region_map:
@@ -310,26 +338,83 @@ def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
         engine, raw_hits = _run_ocr(crop)
         if not raw_hits:
             continue
+        texts = []
+        best_score = 0.0
         for raw_text, score in raw_hits:
-            if score < min_confidence:
+            if score < min_confidence or is_osd_text(raw_text):
                 continue
-            if is_osd_text(raw_text):
+            texts.append(raw_text)
+            best_score = max(best_score, float(score))
+        if not texts:
+            continue
+        raw_joined = " ".join(texts)
+        for plate in combine_type1_parts(texts):
+            if not plate_is_valid(plate) or plate in seen:
                 continue
-            plates = extract_plates(raw_text)
-            if not plates:
-                continue
-            for plate in plates:
-                if not plate_is_valid(plate) or plate in seen:
-                    continue
-                seen.add(plate)
-                hits.append(
-                    PlateHit(
-                        plate=plate,
-                        confidence=float(score),
-                        raw_text=raw_text,
-                        bbox=bbox,
-                        engine=engine,
-                    )
+            seen.add(plate)
+            hits.append(
+                PlateHit(
+                    plate=plate,
+                    confidence=best_score,
+                    raw_text=raw_joined,
+                    bbox=bbox,
+                    engine=engine,
                 )
+            )
     hits.sort(key=lambda item: item.confidence, reverse=True)
+    return hits
+
+
+def recognize_scene(image, min_confidence: float = 0.35):
+    """Detect cars, cut away the rest, then read Type-1 plates only on the cars."""
+    from anpr.vehicles import annotate_scene, bumper_box, crop_box, crop_to_vehicles, find_vehicle_rois
+
+    if image is None or getattr(image, "size", 0) == 0:
+        return [], [], image
+
+    work = image
+    try:
+        work = mask_osd(image)
+    except Exception:
+        work = image
+
+    vehicles = []
+    try:
+        vehicles = find_vehicle_rois(work)
+    except Exception:
+        vehicles = []
+
+    hits: List[PlateHit] = []
+    if vehicles:
+        for box in vehicles:
+            for roi in (bumper_box(box), box):
+                crop = crop_box(work, roi)
+                if crop is None or getattr(crop, "size", 0) == 0:
+                    continue
+                regions = _collect_plate_regions(crop, origin=(roi[0], roi[1]), inside_vehicle=True)
+                hits.extend(_ocr_regions(regions, min_confidence))
+    else:
+        # No silhouette: still look for Type-1 plate rectangles on the lot, not OSD/sky.
+        regions = _collect_plate_regions(work, origin=(0, 0), inside_vehicle=False)
+        hits = _ocr_regions(regions, min_confidence)
+
+    unique = []
+    seen = set()
+    for hit in hits:
+        if hit.plate in seen:
+            continue
+        seen.add(hit.plate)
+        unique.append(hit)
+    unique.sort(key=lambda item: item.confidence, reverse=True)
+    try:
+        annotated = annotate_scene(image, vehicles, unique)
+        if vehicles:
+            annotated = crop_to_vehicles(annotated, vehicles)
+    except Exception:
+        annotated = image
+    return unique, vehicles, annotated
+
+
+def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
+    hits, _vehicles, _vis = recognize_scene(image, min_confidence=min_confidence)
     return hits
