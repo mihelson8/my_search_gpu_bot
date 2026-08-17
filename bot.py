@@ -40,6 +40,7 @@ from telegram.ext import (
 from translator.models import TechTerm, Language, CategoryInfo
 from translator.engine import TerminologyEngine, TechTranslator
 from translator.pinyin_helper import detect_language, get_pinyin, is_chinese_text
+from translator.voice_helper import generate_tts_audio, recognize_speech_from_ogg
 
 # Настройка логирования
 logging.basicConfig(
@@ -159,8 +160,14 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
 
 
 def get_term_keyboard(term: TechTerm) -> InlineKeyboardMarkup:
-    """Создает инлайн-кнопки для термина (похожие термины, случайный термин)."""
+    """Создает инлайн-кнопки для термина (озвучка, похожие термины, случайный термин)."""
     buttons = []
+    row_voice = [
+        InlineKeyboardButton("🔊 Озвучить (Китайский)", callback_data=f"voice:zh:{term.id}"),
+        InlineKeyboardButton("🔊 Озвучить (English)", callback_data=f"voice:en:{term.id}"),
+    ]
+    buttons.append(row_voice)
+
     row1 = [
         InlineKeyboardButton("🎲 Другой случайный", callback_data="random_term"),
         InlineKeyboardButton("📚 В категорию", callback_data=f"cat_terms:{term.category}"),
@@ -189,6 +196,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Я помогу вам переводить и изучать IT и технические термины на китайском, английском и русском языках.\n\n"
         "✨ <b>Что я умею:</b>\n"
         "• 🔍 <b>Мгновенный поиск:</b> отправьте мне любое слово на русском, английском, китайском (иероглифами или пиньинем)\n"
+        "• 🎙 <b>Голосовой перевод:</b> запишите голосовое сообщение на русском, английском или китайском!\n"
+        "• 🔊 <b>Озвучка произношения:</b> кнопки голосового воспроизведения терминов на китайском и английском\n"
         "• 📚 <b>Категории:</b> ИИ/ML, разработка ПО, железо, сети, базы данных, DevOps, кибербезопасность\n"
         "• 🗣 <b>Пиньинь с тонами:</b> правильное произношение для каждого китайского термина\n"
         "• 🧠 <b>Викторина:</b> проверяйте знания терминов в интерактивном тесте\n"
@@ -382,6 +391,99 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# === Обработка голосовых сообщений (Voice Input) ===
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.voice:
+        return
+
+    await update.message.reply_text("🎙 <i>Распознаю голосовое сообщение...</i>", parse_mode=ParseMode.HTML)
+
+    try:
+        voice_file = await update.message.voice.get_file()
+        ogg_bytes = await voice_file.download_as_bytearray()
+
+        text, detected_lang = recognize_speech_from_ogg(bytes(ogg_bytes))
+
+        if not text:
+            await update.message.reply_text(
+                "❌ Не удалось распознать речь. Попробуйте сказать четче или написать текстом.",
+                reply_markup=MAIN_KEYBOARD,
+            )
+            return
+
+        lang_name = detected_lang.display_name_ru if detected_lang else "Авто"
+        await update.message.reply_text(
+            f"🗣 <b>Распознано:</b> «<code>{html.escape(text)}</code>» <i>({lang_name})</i>\n"
+            f"🔍 Ищу перевод...",
+            parse_mode=ParseMode.HTML,
+        )
+
+        # Выполняем поиск/перевод по распознанному тексту
+        output = await translator.translate(text)
+
+        if output.direct_match:
+            card = format_term_html(output.direct_match)
+            keyboard = get_term_keyboard(output.direct_match)
+            await update.message.reply_text(card, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+            # Отправляем также аудио-произношение китайского термина
+            audio_io = generate_tts_audio(output.direct_match.zh, lang="zh")
+            if audio_io:
+                await update.message.reply_voice(
+                    voice=audio_io,
+                    caption=f"🔊 Произношение: {output.direct_match.zh} ({output.direct_match.pinyin})",
+                )
+        elif output.search_results:
+            response_text = f"🔍 <b>Результаты поиска по запросу '<code>{html.escape(text)}</code>':</b>\n\n"
+            buttons = []
+            for i, res in enumerate(output.search_results[:5], 1):
+                t = res.term
+                match_pct = int(res.score * 100)
+                response_text += (
+                    f"{i}. <b>{html.escape(t.en)}</b> ↔ <b>{html.escape(t.zh)}</b> (<i>{html.escape(t.pinyin)}</i>)\n"
+                    f"   🇷🇺 {html.escape(t.ru)}\n\n"
+                )
+                buttons.append([
+                    InlineKeyboardButton(
+                        f"📖 {t.en} ({match_pct}%)",
+                        callback_data=f"show_term:{t.id}",
+                    )
+                ])
+            markup = InlineKeyboardMarkup(buttons)
+            await update.message.reply_text(response_text, parse_mode=ParseMode.HTML, reply_markup=markup)
+        else:
+            response_text = (
+                f"ℹ️ Термин '<b>{html.escape(text)}</b>' не найден в словаре.\n\n"
+            )
+            if output.pinyin:
+                response_text += f"🇨🇳 <b>Pinyin:</b> <code>{html.escape(output.pinyin)}</code>\n\n"
+            if output.online_translations:
+                response_text += "🌐 <b>Онлайн-перевод:</b>\n"
+                for lang, trans_text in output.online_translations.items():
+                    flag = "🇬🇧" if lang == "en" else "🇷🇺" if lang == "ru" else "🇨🇳"
+                    if lang == "zh":
+                        zh_pinyin = get_pinyin(trans_text)
+                        if zh_pinyin:
+                            response_text += f"{flag} {html.escape(trans_text)} (<i>Pinyin: {html.escape(zh_pinyin)}</i>)\n"
+                        else:
+                            response_text += f"{flag} {html.escape(trans_text)}\n"
+                    else:
+                        response_text += f"{flag} {html.escape(trans_text)}\n"
+
+            await update.message.reply_text(response_text, parse_mode=ParseMode.HTML, reply_markup=MAIN_KEYBOARD)
+
+            # Если есть китайский онлайн перевод, озвучиваем его
+            if "zh" in output.online_translations:
+                zh_text = output.online_translations["zh"]
+                audio_io = generate_tts_audio(zh_text, lang="zh")
+                if audio_io:
+                    await update.message.reply_voice(voice=audio_io, caption=f"🔊 {zh_text}")
+
+    except Exception as e:
+        logger.error(f"Error handling voice message: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка при обработке голосового сообщения. Попробуйте еще раз.")
+
+
 # === Обработка нажатий на инлайн-кнопки (Callback Query) ===
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -395,6 +497,27 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             text = f"🎲 <b>Случайный технический термин:</b>\n\n" + format_term_html(term)
             keyboard = get_term_keyboard(term)
             await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+    elif data.startswith("voice:"):
+        parts = data.split(":")
+        lang_code = parts[1]
+        term_id = parts[2]
+        term = engine.get_term_by_id(term_id)
+        if term:
+            text_to_speak = term.zh if lang_code == "zh" else term.en
+            audio_io = generate_tts_audio(text_to_speak, lang=lang_code)
+            if audio_io:
+                flag = "🇨🇳" if lang_code == "zh" else "🇬🇧"
+                caption = f"{flag} <b>{html.escape(text_to_speak)}</b>"
+                if lang_code == "zh" and term.pinyin:
+                    caption += f" (<i>{html.escape(term.pinyin)}</i>)"
+                await query.message.reply_voice(
+                    voice=audio_io,
+                    caption=caption,
+                    parse_mode=ParseMode.HTML,
+                )
+            else:
+                await query.message.reply_text("❌ Не удалось сгенерировать озвучку.")
 
     elif data.startswith("show_term:"):
         term_id = data.split(":", 1)[1]
@@ -596,6 +719,9 @@ def build_application():
 
     # Текстовые сообщения
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    # Голосовые сообщения (Voice Input)
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
 
     return app
 
