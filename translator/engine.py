@@ -287,7 +287,7 @@ class OnlineTranslationFallback:
             params = {"q": text, "langpair": pair}
             headers = {"User-Agent": "TechTermsTranslator/1.0"}
 
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with httpx.AsyncClient(timeout=4.0) as client:
                 resp = await client.get(url, params=params, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -332,16 +332,21 @@ class TechTranslator:
         if detected_lang == Language.ZH or is_chinese_text(query):
             output.pinyin = get_pinyin(query)
 
-        # If no direct dictionary match and fallback enabled, fetch online translations
+        # If no direct dictionary match and fallback enabled, fetch online translations in parallel
         if not output.direct_match and enable_online_fallback:
-            target_langs = [Language.EN, Language.RU, Language.ZH]
-            for t_lang in target_langs:
-                if t_lang != detected_lang:
-                    trans = await self.online.translate_text(query, detected_lang, t_lang)
+            target_langs = [l for l in [Language.EN, Language.RU, Language.ZH] if l != detected_lang]
+            async def _fetch(tl: Language):
+                res = await self.online.translate_text(query, detected_lang, tl)
+                return tl, res
+
+            tasks = [_fetch(tl) for tl in target_langs]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for item in results:
+                if isinstance(item, tuple):
+                    tl, trans = item
                     if trans:
-                        output.online_translations[t_lang.value] = trans
-                        # If online translation gave Chinese, compute Pinyin for it
-                        if t_lang == Language.ZH and not output.pinyin:
+                        output.online_translations[tl.value] = trans
+                        if tl == Language.ZH and not output.pinyin:
                             output.pinyin = get_pinyin(trans)
 
         return output
