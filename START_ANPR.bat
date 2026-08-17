@@ -14,19 +14,8 @@ if not exist "anpr_gui.py" (
     exit /b 1
 )
 
-rem Put a shortcut on the Desktop so you do not open this folder every time.
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$d=[Environment]::GetFolderPath('Desktop');" ^
-  "$n=[string]([char]0x0410)+[char]0x0432+[char]0x0442+[char]0x043E+[char]0x043D+[char]0x043E+[char]0x043C+[char]0x0435+[char]0x0440+[char]0x0430;" ^
-  "$p=Join-Path $d ($n + ' Seetong.lnk');" ^
-  "$w=New-Object -ComObject WScript.Shell;" ^
-  "$s=$w.CreateShortcut($p);" ^
-  "$s.TargetPath='%~dp0START_ANPR.bat';" ^
-  "$s.WorkingDirectory='%~dp0';" ^
-  "$s.WindowStyle=1;" ^
-  "$s.Description='ANPR Seetong';" ^
-  "if (Test-Path '%~dp0anpr_icon.ico') { $s.IconLocation='%~dp0anpr_icon.ico,0' };" ^
-  "$s.Save()" >nul 2>&1
+rem Desktop shortcut with the plate icon (not the Python snakes).
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0MAKE_DESKTOP_SHORTCUT.ps1" >nul 2>&1
 
 set "LAUNCH="
 py -3 --version >nul 2>&1 && set "LAUNCH=py -3"
