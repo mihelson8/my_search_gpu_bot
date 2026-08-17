@@ -59,10 +59,30 @@ class AnprApp:
         self._set_detection(
             "—",
             "unknown",
-            "Seetong Lite Client: оставьте картинку камеры на экране и нажмите Старт",
+            "Поставьте окна рядом: Seetong с камерой должен быть ВИДЕН, его нельзя закрывать окном автономеров",
             0.0,
         )
+        self.root.after(200, self._warn_missing_packages)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def _warn_missing_packages(self) -> None:
+        try:
+            from anpr.capture import missing_capture_packages
+
+            missing = missing_capture_packages()
+        except Exception:
+            missing = ["numpy", "Pillow", "mss"]
+        if not missing:
+            return
+        names = ", ".join(missing)
+        text = (
+            "Нет библиотек для скриншота: "
+            + names
+            + "\n\nВ командной строке выполните:\npython -m pip install -r requirements-anpr.txt\n\n"
+            "Потом закройте это окно и снова запустите:\npython anpr_gui.py"
+        )
+        self.preview_label.config(text=text)
+        messagebox.showwarning("Нужна установка пакетов", text)
 
     def _setup_styles(self) -> None:
         style = ttk.Style()
@@ -466,9 +486,13 @@ class AnprApp:
                 self.root.after(0, self._beep)
         except Exception as exc:
             message = str(exc)
-            self.root.after(0, lambda m=message: self._set_detection("—", "unknown", m, 0.0))
+            self.root.after(0, lambda m=message: self._show_capture_error(m))
         finally:
             self._busy = False
+
+    def _show_capture_error(self, message: str) -> None:
+        self._set_detection("—", "unknown", message, 0.0)
+        self.preview_label.config(image="", text="Нет кадра.\n" + message)
 
     def _show_preview(self, frame) -> None:
         try:

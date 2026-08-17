@@ -153,6 +153,16 @@ def test_crop_skips_distant_road():
     assert cropped.shape[1] == 100
 
 
+def test_mostly_black_frame():
+    numpy = pytest.importorskip("numpy")
+    from anpr.capture import _is_mostly_black
+
+    black = numpy.zeros((40, 40, 3), dtype=numpy.uint8)
+    white = numpy.full((40, 40, 3), 200, dtype=numpy.uint8)
+    assert _is_mostly_black(black)
+    assert not _is_mostly_black(white)
+
+
 def test_extract_from_recognizer_without_ocr():
     from anpr.recognizer import recognize_image
 

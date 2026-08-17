@@ -247,11 +247,48 @@ def _grab_printwindow(hwnd: int, width: int, height: int):
     return bgra[:, :, :3].copy()
 
 
+def missing_capture_packages():
+    missing = []
+    for label, module in (("numpy", "numpy"), ("Pillow", "PIL"), ("mss", "mss")):
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(label)
+    return missing
+
+
+def _is_mostly_black(frame, threshold: float = 16.0) -> bool:
+    try:
+        return float(frame.mean()) < threshold
+    except Exception:
+        return True
+
+
 def grab_window(info: WindowInfo):
-    frame = _grab_printwindow(info.hwnd, info.width, info.height)
-    if frame is not None and getattr(frame, "size", 0) > 0:
-        return frame
-    return _grab_mss_region(info.left, info.top, info.width, info.height)
+    """Prefer a real screen screenshot: Seetong video is often black via PrintWindow."""
+    mss_frame = None
+    pw_frame = None
+    try:
+        mss_frame = _grab_mss_region(info.left, info.top, info.width, info.height)
+    except Exception:
+        mss_frame = None
+    try:
+        pw_frame = _grab_printwindow(info.hwnd, info.width, info.height)
+    except Exception:
+        pw_frame = None
+
+    if mss_frame is not None and getattr(mss_frame, "size", 0) > 0 and not _is_mostly_black(mss_frame):
+        return mss_frame
+    if pw_frame is not None and getattr(pw_frame, "size", 0) > 0 and not _is_mostly_black(pw_frame):
+        return pw_frame
+    if mss_frame is not None and getattr(mss_frame, "size", 0) > 0:
+        return mss_frame
+    if pw_frame is not None and getattr(pw_frame, "size", 0) > 0:
+        return pw_frame
+    raise RuntimeError(
+        "Не удалось снять окно Seetong. Поставьте пакеты: python -m pip install -r requirements-anpr.txt "
+        "и сдвиньте окно автономеров, чтобы картинка камеры была видна."
+    )
 
 
 def grab_monitor(monitor_index: int = 1):
