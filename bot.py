@@ -58,7 +58,12 @@ except ImportError:
 
 TOKEN = os.getenv("BOT_TOKEN", "8995959559:AAHIrwMnaQpMGELlwrO-WfRh-ulCt65UIJ4")
 PORT = int(os.getenv("PORT", 10000))
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "")
+
+# Автоматически определяем Render URL (из переменной Render RENDER_EXTERNAL_HOSTNAME или дефолтного сервиса)
+RENDER_EXTERNAL_URL = os.getenv(
+    "RENDER_EXTERNAL_URL",
+    f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}" if os.getenv("RENDER_EXTERNAL_HOSTNAME") else "https://my-search-gpu-bot-2.onrender.com"
+)
 
 # Инициализация движка словаря
 engine = TerminologyEngine()
@@ -107,21 +112,25 @@ def start_health_check_server(port: int):
 
     # Автоматический пингер через внешний сервис, чтобы Render никогда не спал
     def keep_alive_worker():
+        # Даем серверу 15 секунд на полный запуск перед первым пингом
+        time.sleep(15)
         while True:
-            time.sleep(60)  # каждую 1 минуту
-            # 1. Пинг внешнего публичного URL Render (если задан)
+            # 1. Пинг внешнего публичного URL Render
             if RENDER_EXTERNAL_URL:
                 try:
                     with httpx.Client(timeout=10.0, follow_redirects=True) as client:
-                        client.get(RENDER_EXTERNAL_URL)
-                except Exception:
-                    pass
+                        resp = client.get(RENDER_EXTERNAL_URL)
+                        logger.debug(f"Keep-alive ping to {RENDER_EXTERNAL_URL}: {resp.status_code}")
+                except Exception as e:
+                    logger.debug(f"Keep-alive ping error: {e}")
             # 2. Пинг локального HTTP порта
             try:
                 with httpx.Client(timeout=5.0) as client:
                     client.get(f"http://127.0.0.1:{port}")
             except Exception:
                 pass
+
+            time.sleep(60)  # каждую 1 минуту
 
     pinger_thread = threading.Thread(target=keep_alive_worker, daemon=True)
     pinger_thread.start()
