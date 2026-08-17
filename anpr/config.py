@@ -11,11 +11,14 @@ from anpr.database import DATA_DIR
 DEFAULT_CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
 DEFAULTS: Dict[str, Any] = {
-    "source": "seetong_window",
+    "source": "http",
     "interval_sec": 1.5,
     "window_title": "Seetong Lite Client",
+    "camera_ip": "192.168.0.123",
+    "camera_user": "admin",
+    "camera_password": "123456",
     "rtsp_url": "rtsp://admin:123456@192.168.0.123:554/mpeg4",
-    "http_url": "http://192.168.0.123/snapshot.cgi",
+    "http_url": "http://admin:123456@192.168.0.123/snapshot.cgi",
     "file_path": "",
     "crop_left": 0.20,
     "crop_top": 0.12,

@@ -54,10 +54,23 @@ def test_extract_plates_from_noisy_ocr():
     assert "А123ВС777" in plates
 
 
+def test_camera_urls():
+    from anpr.camera import build_http_url, build_rtsp_url
+
+    http_url = build_http_url("192.168.0.123", "admin", "123456")
+    assert http_url.startswith("http://admin:123456@192.168.0.123/")
+    assert "snapshot.cgi" in http_url
+    rtsp_url = build_rtsp_url("192.168.1.50", "admin", "123456")
+    assert rtsp_url == "rtsp://admin:123456@192.168.1.50:554/mpeg4"
+
+
 def test_overlay_text_is_not_a_plate():
     assert extract_plates("HD IPCAM 2880X1620") == []
     assert extract_plates("H001PC AM") == []
     assert not plate_is_valid(normalize_plate("HDIPCAM"))
+
+
+def test_format_and_labels():
     assert format_plate("А123ВС777") == "А123ВС 777"
     assert format_plate("А123ВС77") == "А123ВС 77"
     assert category_label("own") == "СВОЙ"

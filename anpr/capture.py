@@ -329,6 +329,7 @@ def grab_rtsp(url: str):
 def grab_http_snapshot(url: str):
     np = _require_numpy()
     try:
+        import urllib.parse
         import urllib.request
         import cv2  # type: ignore
     except ImportError as exc:
@@ -336,7 +337,20 @@ def grab_http_snapshot(url: str):
             "Для HTTP-снимка нужен opencv-python. Установите: pip install -r requirements-anpr.txt"
         ) from exc
     request = urllib.request.Request(url, headers={"User-Agent": "anpr-seetong/1.0"})
-    with urllib.request.urlopen(request, timeout=8) as response:
+    parsed = urllib.parse.urlparse(url)
+    opener = urllib.request.build_opener()
+    if parsed.username is not None:
+        password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        host = parsed.hostname or ""
+        port = f":{parsed.port}" if parsed.port else ""
+        password_mgr.add_password(
+            None,
+            f"{parsed.scheme}://{host}{port}/",
+            urllib.parse.unquote(parsed.username),
+            urllib.parse.unquote(parsed.password or ""),
+        )
+        opener = urllib.request.build_opener(urllib.request.HTTPBasicAuthHandler(password_mgr))
+    with opener.open(request, timeout=8) as response:
         data = response.read()
     array = np.frombuffer(data, dtype=np.uint8)
     frame = cv2.imdecode(array, cv2.IMREAD_COLOR)

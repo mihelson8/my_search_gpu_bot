@@ -18,11 +18,11 @@ STATUS_COLORS = {
     "unknown": "#ca8a04",
 }
 SOURCE_LABELS = {
-    "seetong_window": "Окно Seetong (скриншот)",
-    "monitor": "Весь экран",
-    "rtsp": "RTSP поток камеры",
-    "http": "HTTP снимок камеры",
+    "http": "Камера по сети (снимок)",
+    "rtsp": "Камера по сети (RTSP)",
+    "seetong_window": "Скриншот окна Seetong",
     "file": "Файл / фото",
+    "monitor": "Весь экран — не использовать",
 }
 SOURCE_VALUES = {label: key for key, label in SOURCE_LABELS.items()}
 
@@ -43,6 +43,8 @@ class AnprApp:
 
         self.db = AnprDB()
         self.cfg = load_config()
+        if self.cfg.get("source") == "monitor":
+            self.cfg["source"] = "http"
         self._running = False
         self._busy = False
         self._last_frame = None
@@ -59,7 +61,7 @@ class AnprApp:
         self._set_detection(
             "—",
             "unknown",
-            "Поставьте окна рядом: Seetong с камерой должен быть ВИДЕН, его нельзя закрывать окном автономеров",
+            "Нажмите «Камера по IP» и укажите адрес камеры в локальной сети. Не используйте «Весь экран».",
             0.0,
         )
         self.root.after(200, self._warn_missing_packages)
@@ -112,10 +114,11 @@ class AnprApp:
         self.btn_start.pack(side="left", padx=(0, 6))
         self.btn_stop = ttk.Button(top, text="■ Стоп", command=self.stop_capture, state="disabled")
         self.btn_stop.pack(side="left", padx=(0, 6))
-        ttk.Button(top, text="Снимок сейчас", command=self.capture_once).pack(side="left", padx=(0, 16))
+        ttk.Button(top, text="Снимок сейчас", command=self.capture_once).pack(side="left", padx=(0, 8))
+        ttk.Button(top, text="Камера по IP", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
 
         ttk.Label(top, text="Источник:").pack(side="left")
-        self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["seetong_window"]))
+        self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["http"]))
         self.source_combo = ttk.Combobox(
             top,
             textvariable=self.source_var,
@@ -127,6 +130,10 @@ class AnprApp:
 
         self.run_label = ttk.Label(top, text="остановлено", style="Muted.TLabel")
         self.run_label.pack(side="right")
+
+        self.camera_ip_var = tk.StringVar(value=self.cfg.get("camera_ip", "192.168.0.123"))
+        self.camera_user_var = tk.StringVar(value=self.cfg.get("camera_user", "admin"))
+        self.camera_pass_var = tk.StringVar(value=self.cfg.get("camera_password", "123456"))
 
         body = ttk.Frame(self.root, padding="14 10")
         body.pack(fill="both", expand=True)
@@ -299,10 +306,9 @@ class AnprApp:
         ttk.Label(
             self.tab_set,
             text=(
-                "Сейчас настроен захват окна Seetong Lite Client (канал вроде CH_02). "
-                "Окно не сворачивайте. Камера смотрит сверху на парковку: номера читаются "
-                "у машин на площадке под камерой, а не у транспорта на дальней дороге. "
-                "Если номер не распознался — нажмите «Снимок сейчас» и введите его вручную."
+                "Картинку нужно брать с камеры по сети (кнопка «Камера по IP»), а не со всего экрана. "
+                "IP смотрите в Seetong у устройства. Логин обычно admin, пароль 123456. "
+                "«Весь экран» использовать нельзя — программа видит свои окна и надпись seetong."
             ),
             style="Muted.TLabel",
             wraplength=900,
@@ -336,11 +342,14 @@ class AnprApp:
         def _pct(var, default):
             return max(0.0, min(0.65, _float(var, default * 100) / 100.0))
 
-        source_key = SOURCE_VALUES.get(self.source_var.get(), "seetong_window")
+        source_key = SOURCE_VALUES.get(self.source_var.get(), "http")
         return {
             "source": source_key,
             "interval_sec": max(0.4, _float(self.interval_var, 1.5)),
             "window_title": self.window_var.get().strip() or "Seetong Lite Client",
+            "camera_ip": self.camera_ip_var.get().strip(),
+            "camera_user": self.camera_user_var.get().strip() or "admin",
+            "camera_password": self.camera_pass_var.get(),
             "rtsp_url": self.rtsp_var.get().strip(),
             "http_url": self.http_var.get().strip(),
             "file_path": self.file_var.get().strip(),
@@ -373,6 +382,61 @@ class AnprApp:
         if not self.window_var.get():
             self.window_var.set("Seetong Lite Client")
 
+    def open_camera_dialog(self) -> None:
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Камера по сети")
+        dlg.geometry("460x340")
+        dlg.configure(bg=self.bg)
+        ttk.Label(
+            dlg,
+            text="Берём картинку напрямую с камеры, не со скриншота экрана.\n"
+            "IP смотрите в Seetong: устройство 35918051 → свойства / LAN.",
+            wraplength=420,
+            justify="left",
+        ).pack(anchor="w", padx=20, pady=(16, 8))
+        ttk.Label(dlg, text="IP камеры").pack(anchor="w", padx=20)
+        ttk.Entry(dlg, textvariable=self.camera_ip_var, width=40).pack(padx=20, pady=(0, 8))
+        ttk.Label(dlg, text="Логин").pack(anchor="w", padx=20)
+        ttk.Entry(dlg, textvariable=self.camera_user_var, width=40).pack(padx=20, pady=(0, 8))
+        ttk.Label(dlg, text="Пароль").pack(anchor="w", padx=20)
+        ttk.Entry(dlg, textvariable=self.camera_pass_var, width=40, show="*").pack(padx=20, pady=(0, 12))
+
+        def connect() -> None:
+            ip = self.camera_ip_var.get().strip()
+            if not ip:
+                messagebox.showwarning("Нет IP", "Введите IP камеры.")
+                return
+            try:
+                from anpr.camera import connect_camera
+
+                result = connect_camera(ip, self.camera_user_var.get().strip(), self.camera_pass_var.get())
+            except Exception as exc:
+                messagebox.showerror("Камера не открылась", str(exc))
+                return
+            self.http_var.set(result.get("http_url", self.http_var.get()))
+            self.rtsp_var.set(result.get("rtsp_url", self.rtsp_var.get()))
+            source = result.get("source", "http")
+            self.source_var.set(SOURCE_LABELS.get(source, SOURCE_LABELS["http"]))
+            self.cfg.update(self._settings_from_form())
+            save_config(self.cfg)
+            dlg.destroy()
+            messagebox.showinfo(
+                "Камера подключена",
+                "Источник: "
+                + SOURCE_LABELS.get(source, source)
+                + "\nТеперь нажмите Старт. Seetong можно оставить открытым, но кадр идёт с камеры.",
+            )
+
+        ttk.Button(dlg, text="Проверить и подключить", command=connect).pack(pady=8)
+        ttk.Label(
+            dlg,
+            text="Частые адреса Topsee/Seetong: 192.168.0.123 или адрес из роутера.\n"
+            "Логин admin, пароль часто 123456.",
+            style="Muted.TLabel",
+            wraplength=420,
+            justify="left",
+        ).pack(anchor="w", padx=20, pady=8)
+
     def apply_lite_preset(self) -> None:
         self.window_var.set("Seetong Lite Client")
         self.source_var.set(SOURCE_LABELS["seetong_window"])
@@ -395,6 +459,23 @@ class AnprApp:
         if self._running:
             return
         self.cfg.update(self._settings_from_form())
+        source = self.cfg.get("source")
+        if source == "monitor":
+            if not messagebox.askyesno(
+                "Весь экран",
+                "«Весь экран» снимает рабочий стол и читает надписи Seetong, а не номера машин.\n\n"
+                "Лучше нажать «Камера по IP». Всё равно включить весь экран?",
+            ):
+                return
+        if source in ("http", "rtsp") and "192.168.0.123" in (
+            self.cfg.get("http_url", "") + self.cfg.get("rtsp_url", "")
+        ):
+            if messagebox.askyesno(
+                "Нужен IP камеры",
+                "Сейчас стоит примерный адрес 192.168.0.123.\nОткрыть окно «Камера по IP»?",
+            ):
+                self.open_camera_dialog()
+                return
         save_config(self.cfg)
         self._running = True
         self.btn_start.config(state="disabled")
@@ -432,14 +513,25 @@ class AnprApp:
                 http_url=self.cfg.get("http_url", ""),
                 file_path=self.cfg.get("file_path", ""),
             )
-            frame = crop_roi(
-                frame,
-                left=self.cfg.get("crop_left", 0),
-                top=self.cfg.get("crop_top", 0),
-                right=self.cfg.get("crop_right", 0),
-                bottom=self.cfg.get("crop_bottom", 0),
-                skip_top=self.cfg.get("skip_top", 0),
-            )
+            source = self.cfg.get("source", "http")
+            if source in ("http", "rtsp", "file"):
+                frame = crop_roi(
+                    frame,
+                    left=0.0,
+                    top=0.02,
+                    right=0.0,
+                    bottom=0.06,
+                    skip_top=self.cfg.get("skip_top", 0),
+                )
+            else:
+                frame = crop_roi(
+                    frame,
+                    left=self.cfg.get("crop_left", 0),
+                    top=self.cfg.get("crop_top", 0),
+                    right=self.cfg.get("crop_right", 0),
+                    bottom=self.cfg.get("crop_bottom", 0),
+                    skip_top=self.cfg.get("skip_top", 0),
+                )
             self._last_frame = frame
             self.root.after(0, lambda: self._show_preview(frame))
             shot = ""
