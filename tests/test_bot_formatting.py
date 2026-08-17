@@ -24,7 +24,11 @@ def test_get_term_keyboard():
     assert term is not None
     keyboard = get_term_keyboard(term)
     assert keyboard is not None
-    assert len(keyboard.inline_keyboard) >= 1
+    assert len(keyboard.inline_keyboard) >= 2
+    # Verify Russian voice button exists
+    cb_data_list = [btn.callback_data for row in keyboard.inline_keyboard for btn in row]
+    assert any("voice:ru:" in cb for cb in cb_data_list)
+    assert any("voice:zh:" in cb for cb in cb_data_list)
 
 
 def test_build_application():

@@ -164,24 +164,25 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
 
 
 def get_term_keyboard(term: TechTerm) -> InlineKeyboardMarkup:
-    """Создает инлайн-кнопки для термина (озвучка Путунхуа/Байхуа, English, похожие термины, случайный термин)."""
+    """Создает инлайн-кнопки для термина (озвучка Путунхуа/Байхуа/Русский/English, похожие термины, случайный термин)."""
     buttons = []
-    row_voice = [
+    row_voice1 = [
         InlineKeyboardButton("🔊 Путунхуа (Mandarin)", callback_data=f"voice:zh:{term.id}"),
-        InlineKeyboardButton("🔊 Байхуа / Кантонский", callback_data=f"voice:yue:{term.id}"),
+        InlineKeyboardButton("🔊 Байхуа (Cantonese)", callback_data=f"voice:yue:{term.id}"),
     ]
-    buttons.append(row_voice)
+    buttons.append(row_voice1)
 
-    row_en = [
+    row_voice2 = [
+        InlineKeyboardButton("🔊 Озвучить (Русский)", callback_data=f"voice:ru:{term.id}"),
         InlineKeyboardButton("🔊 Озвучить (English)", callback_data=f"voice:en:{term.id}"),
-        InlineKeyboardButton("🎲 Другой случайный", callback_data="random_term"),
     ]
-    buttons.append(row_en)
+    buttons.append(row_voice2)
 
-    row1 = [
+    row_nav = [
+        InlineKeyboardButton("🎲 Другой случайный", callback_data="random_term"),
         InlineKeyboardButton("📚 В категорию", callback_data=f"cat_terms:{term.category}"),
     ]
-    buttons.append(row1)
+    buttons.append(row_nav)
 
     if term.related_terms:
         rel_buttons = []
@@ -437,12 +438,18 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = get_term_keyboard(output.direct_match)
             await update.message.reply_text(card, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
-            # Отправляем также аудио-произношение китайского термина
-            audio_io = generate_tts_audio(output.direct_match.zh, lang="zh")
+            # Если пользователь сказал на китайском, озвучиваем русский перевод, иначе китайский
+            if detected_lang == Language.ZH or is_chinese_text(text):
+                audio_io = generate_tts_audio(output.direct_match.ru, lang="ru")
+                caption_text = f"🔊 Перевод на русском: {output.direct_match.ru}"
+            else:
+                audio_io = generate_tts_audio(output.direct_match.zh, lang="zh")
+                caption_text = f"🔊 Произношение: {output.direct_match.zh} ({output.direct_match.pinyin})"
+
             if audio_io:
                 await update.message.reply_voice(
                     voice=audio_io,
-                    caption=f"🔊 Произношение: {output.direct_match.zh} ({output.direct_match.pinyin})",
+                    caption=caption_text,
                 )
         elif output.search_results:
             response_text = f"🔍 <b>Результаты поиска по запросу '<code>{html.escape(text)}</code>':</b>\n\n"
@@ -483,15 +490,23 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(response_text, parse_mode=ParseMode.HTML, reply_markup=MAIN_KEYBOARD)
 
-            # Если есть китайский онлайн перевод, озвучиваем его
-            if "zh" in output.online_translations:
+            # Если пользователь сказал на китайском, озвучиваем русский перевод, иначе китайский
+            if (detected_lang == Language.ZH or is_chinese_text(text)) and "ru" in output.online_translations:
+                ru_text = output.online_translations["ru"]
+                try:
+                    audio_io = generate_tts_audio(ru_text, lang="ru")
+                    if audio_io:
+                        await update.message.reply_voice(voice=audio_io, caption=f"🔊 Перевод (RU): {ru_text}")
+                except Exception as ex_tts:
+                    logger.warning(f"Voice Russian TTS reply failed: {ex_tts}")
+            elif "zh" in output.online_translations:
                 zh_text = output.online_translations["zh"]
                 try:
                     audio_io = generate_tts_audio(zh_text, lang="zh")
                     if audio_io:
-                        await update.message.reply_voice(voice=audio_io, caption=f"🔊 {zh_text}")
+                        await update.message.reply_voice(voice=audio_io, caption=f"🔊 Произношение (ZH): {zh_text}")
                 except Exception as ex_tts:
-                    logger.warning(f"Voice TTS reply failed: {ex_tts}")
+                    logger.warning(f"Voice Chinese TTS reply failed: {ex_tts}")
 
     except Exception as e:
         logger.error(f"Error handling voice message: {e}", exc_info=True)
@@ -518,7 +533,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         term_id = parts[2]
         term = engine.get_term_by_id(term_id)
         if term:
-            text_to_speak = term.zh if lang_code in ["zh", "yue"] else term.en
+            if lang_code in ["zh", "yue"]:
+                text_to_speak = term.zh
+            elif lang_code == "ru":
+                text_to_speak = term.ru
+            else:
+                text_to_speak = term.en
+
             audio_io = generate_tts_audio(text_to_speak, lang=lang_code)
             if audio_io:
                 if lang_code == "yue":
@@ -527,6 +548,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     caption = f"🇨🇳 <b>{html.escape(text_to_speak)}</b>"
                     if term.pinyin:
                         caption += f" (<i>{html.escape(term.pinyin)}</i>)"
+                elif lang_code == "ru":
+                    caption = f"🇷🇺 <b>{html.escape(text_to_speak)}</b>"
                 else:
                     caption = f"🇬🇧 <b>{html.escape(text_to_speak)}</b>"
 

@@ -26,6 +26,13 @@ def test_generate_tts_audio_english():
     assert len(bytes_data) > 0
 
 
+def test_generate_tts_audio_russian():
+    audio_stream = generate_tts_audio("Искусственный интеллект", lang="ru")
+    assert audio_stream is not None
+    bytes_data = audio_stream.read()
+    assert len(bytes_data) > 0
+
+
 def test_generate_tts_audio_empty():
     assert generate_tts_audio("") is None
     assert generate_tts_audio("   ") is None
