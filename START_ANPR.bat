@@ -7,15 +7,10 @@ if not exist "anpr_gui.py" (
     echo anpr_gui.py not found in:
     echo %CD%
     echo.
-    echo Open the extracted folder
-    echo my_search_gpu_bot-cursor-anpr-seetong-plates-6b83
-    echo and double-click START_ANPR.bat there.
+    echo Open the yellow folder on Desktop and run START_ANPR.bat there.
     pause
     exit /b 1
 )
-
-rem Desktop shortcut with the plate icon (not the Python snakes).
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0MAKE_DESKTOP_SHORTCUT.ps1" >nul 2>&1
 
 set "LAUNCH="
 py -3 --version >nul 2>&1 && set "LAUNCH=py -3"
@@ -40,8 +35,7 @@ if errorlevel 1 (
     )
 )
 
-echo Keep Seetong open. Click Start in the app window.
-echo Desktop shortcut: Avtonomera Seetong
+echo Starting ANPR window...
 %LAUNCH% anpr_gui.py
 if errorlevel 1 (
     echo Failed to start anpr_gui.py

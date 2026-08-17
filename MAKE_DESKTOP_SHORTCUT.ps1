@@ -8,9 +8,7 @@ $n = [string]([char]0x0410) + [char]0x0432 + [char]0x0442 + [char]0x043E + [char
 $name = $n + " Seetong.lnk"
 $p = Join-Path $d $name
 
-# Old shortcut pointed at python.exe — remove it so the Python snakes go away.
-if (Test-Path $p) { Remove-Item -Force $p }
-
+# Overwrite in place. Do not delete the .lnk first: START from that icon would kill itself.
 $w = New-Object -ComObject WScript.Shell
 $s = $w.CreateShortcut($p)
 $s.TargetPath = $bat
