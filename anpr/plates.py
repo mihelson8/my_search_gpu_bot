@@ -80,7 +80,11 @@ def compact_alnum(text: str) -> str:
             chars.append(LATIN_TO_CYR[ch])
         elif ch.isalnum():
             chars.append(ch)
-    return "".join(chars)
+    compact = "".join(chars)
+    latin = "".join(CYR_TO_LATIN.get(ch, ch) for ch in compact).upper()
+    if latin.endswith("RUS") and len(compact) >= 3:
+        compact = compact[:-3]
+    return compact
 
 
 def _apply_letter_digit_slots(compact: str, letter_slots: set[int]) -> str:
@@ -242,6 +246,14 @@ def extract_plates(raw_text: str) -> List[str]:
     if plate_is_valid(whole) and not _window_is_overlay_junk(compact_alnum(raw_text)) and whole not in seen:
         found.insert(0, whole)
 
+    # 3-digit region wins over the 8-character prefix (Н778ЕМ799 vs Н778ЕМ79).
+    nines = [plate for plate in found if len(plate) == 9]
+    if nines:
+        found = [
+            plate
+            for plate in found
+            if not (len(plate) == 8 and any(nine.startswith(plate) for nine in nines))
+        ]
     return found
 
 

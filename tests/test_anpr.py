@@ -286,14 +286,56 @@ def test_cli_add_and_list(tmp_path, monkeypatch, capsys):
 
     from anpr.__main__ import main
 
-    # Re-bind AnprDB default by constructing with patched path via add command:
-    # the CLI uses AnprDB() which reads DEFAULT_DB_PATH at call time.
-    import anpr.database as database_mod
-
-    monkeypatch.setattr(database_mod, "DEFAULT_DB_PATH", db_path)
-
     assert main(["add", "A123BC777", "--name", "Гараж", "--category", "свой"]) == 0
     assert main(["list"]) == 0
     out = capsys.readouterr().out
     assert "Гараж" in out
     assert "СВОЙ" in out
+
+
+def test_user_type1_sample_plates():
+    from anpr.plates import combine_type1_parts, extract_plates, format_plate, normalize_plate, plate_is_valid
+    from anpr.type1_samples import TYPE1_SAMPLES
+
+    assert TYPE1_SAMPLES
+    for raw, compact, shown in TYPE1_SAMPLES:
+        assert plate_is_valid(compact), compact
+        assert compact in extract_plates(raw), raw
+        assert normalize_plate(raw) == compact or compact in extract_plates(raw)
+        assert format_plate(compact) == shown
+        body, region = shown.split(" | ")
+        assert compact in combine_type1_parts([body, f"{region} RUS"])
+
+
+def test_oo_are_letters_not_zeros():
+    from anpr.plates import format_plate, normalize_plate
+
+    # «E 441 OO 61» — OO in letter slots are О, not 0
+    assert normalize_plate("E441OO61") == "Е441ОО61"
+    assert format_plate("E441OO61") == "Е 441 ОО | 61"
+    assert normalize_plate("E4410061") == "Е441ОО61"
+
+
+def test_three_digit_region_799():
+    from anpr.plates import format_plate, extract_plates
+
+    assert extract_plates("H 778 EM 799 RUS") == ["Н778ЕМ799"]
+    assert format_plate("Н778ЕМ799") == "Н 778 ЕМ | 799"
+
+
+def test_rendered_type1_plate_on_car_silhouette():
+    pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.recognizer import find_plate_regions
+    from anpr.type1_render import scene_with_car_and_plate
+    from anpr.vehicles import apply_silhouette_mask, find_vehicle_silhouettes
+
+    frame = scene_with_car_and_plate("Е999КХ70")
+    silhouettes = find_vehicle_silhouettes(frame)
+    assert silhouettes, "car under the sample plate should be found"
+    masked = apply_silhouette_mask(frame, silhouettes)
+    assert int(masked[10, 240].mean()) == 0
+    crop = masked[silhouettes[0].box[1] : silhouettes[0].box[3], silhouettes[0].box[0] : silhouettes[0].box[2]]
+    regions = find_plate_regions(crop)
+    assert regions, "Type-1 plate on the bumper should be a candidate"
+

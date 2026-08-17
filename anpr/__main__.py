@@ -27,6 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--notes", default="")
 
     sub.add_parser("list", help="Показать базу Свой/Чужой")
+    sub.add_parser("samples", help="Сравнительный тест номеров типа 1 (эталоны с фото)")
     sub.add_parser("gui", help="Открыть графическую программу")
     return parser
 
@@ -114,6 +115,30 @@ def cmd_list() -> int:
     return 0
 
 
+def cmd_samples() -> int:
+    from anpr.plates import combine_type1_parts, extract_plates, format_plate, normalize_plate, plate_is_valid
+    from anpr.type1_samples import TYPE1_SAMPLES
+
+    print("Сравнительный тест · номер типа 1  (А 000 АА | 00 RUS)")
+    print("-" * 72)
+    failed = 0
+    for raw, compact, shown in TYPE1_SAMPLES:
+        got = extract_plates(raw)
+        ok = compact in got and format_plate(compact) == shown and plate_is_valid(normalize_plate(raw))
+        mark = "OK" if ok else "FAIL"
+        if not ok:
+            failed += 1
+        print(f"{mark:4}  {raw:22}  →  {shown}")
+        body, region = shown.split(" | ")
+        parts = combine_type1_parts([body, region + " RUS"])
+        if compact not in parts:
+            print(f"      split-OCR miss: {parts}")
+            failed += 1
+    print("-" * 72)
+    print(f"Эталонов: {len(TYPE1_SAMPLES)}, ошибок: {failed}")
+    return 1 if failed else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -123,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_add(args)
     if args.command == "list":
         return cmd_list()
+    if args.command == "samples":
+        return cmd_samples()
     if args.command == "gui" or args.command is None:
         from anpr_gui import main as gui_main
 
