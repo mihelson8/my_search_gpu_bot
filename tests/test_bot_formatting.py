@@ -11,11 +11,11 @@ def test_format_term_html():
     term = engine.get_term_by_id("artificial_intelligence")
     assert term is not None
     html_text = format_term_html(term)
-    assert "<b>Artificial Intelligence</b>" in html_text
+    assert "Artificial Intelligence" in html_text
     assert "人工智能" in html_text
     assert "rén gōng zhì néng" in html_text
     assert "Искусственный интеллект" in html_text
-    assert "Определения:" in html_text
+    assert "Определения" in html_text
 
 
 def test_get_term_keyboard():

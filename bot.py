@@ -63,12 +63,13 @@ PORT = int(os.getenv("PORT", 10000))
 engine = TerminologyEngine()
 translator = TechTranslator(engine)
 
-# Главное меню (Reply Keyboard)
+# Главное меню (Reply Keyboard) с удобным выбором языков и режимов
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
+        [KeyboardButton("🇷🇺 Русский"), KeyboardButton("🇬🇧 English")],
+        [KeyboardButton("🇨🇳 Путунхуа"), KeyboardButton("🇭🇰 Кантонский / Байхуа")],
         [KeyboardButton("🔍 Поиск термина"), KeyboardButton("📚 Категории")],
-        [KeyboardButton("🎲 Случайный термин"), KeyboardButton("🧠 Викторина")],
-        [KeyboardButton("📈 Курсы валют"), KeyboardButton("ℹ️ Помощь")],
+        [KeyboardButton("🎲 Случайная фраза"), KeyboardButton("🧠 Викторина")],
     ],
     resize_keyboard=True,
 )
@@ -114,17 +115,18 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
     trad_clean = f" [{html.escape(term.zh_trad)}]" if term.zh_trad else ""
 
     text = (
-        f"📘 <b>{en_clean}</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🇨🇳 <b>Китайский:</b> <code>{zh_clean}</code>{trad_clean}\n"
+        f"📘 <b>{ru_clean} ↔ {zh_clean} ↔ {en_clean}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🇷🇺 <b>Русский:</b> <code>{ru_clean}</code>\n"
+        f"🇨🇳 <b>Путунхуа (Mandarin):</b> <code>{zh_clean}</code>\n"
         f"   🗣 <i>Pinyin:</i> <code>{pinyin_clean}</code>\n"
-        f"🇬🇧 <b>Английский:</b> <code>{en_clean}</code>\n"
-        f"🇷🇺 <b>Русский:</b> <code>{ru_clean}</code>\n\n"
+        f"🇭🇰 <b>Кантонский / Байхуа:</b> <code>{zh_clean}</code>{trad_clean}\n"
+        f"🇬🇧 <b>English:</b> <code>{en_clean}</code>\n\n"
     )
 
     if not compact:
         if term.definition_ru or term.definition_en or term.definition_zh:
-            text += "📖 <b>Определения:</b>\n"
+            text += "📖 <b>Определения / Пояснения:</b>\n"
             if term.definition_ru:
                 text += f"🇷🇺 {html.escape(term.definition_ru)}\n"
             if term.definition_en:
@@ -134,21 +136,21 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
             text += "\n"
 
         if term.examples:
-            text += "💡 <b>Пример употребления:</b>\n"
+            text += "💡 <b>Пример употребления в речи:</b>\n"
             ex = term.examples[0]
-            text += f"🇬🇧 {html.escape(ex.en)}\n"
+            text += f"🇷🇺 {html.escape(ex.ru)}\n"
             text += f"🇨🇳 {html.escape(ex.zh)}"
             if ex.pinyin:
                 text += f" (<i>{html.escape(ex.pinyin)}</i>)"
-            text += f"\n🇷🇺 {html.escape(ex.ru)}\n\n"
+            text += f"\n🇬🇧 {html.escape(ex.en)}\n\n"
 
         synonyms = []
-        if term.synonyms_en:
-            synonyms.append(f"EN: {', '.join(term.synonyms_en)}")
-        if term.synonyms_zh:
-            synonyms.append(f"ZH: {', '.join(term.synonyms_zh)}")
         if term.synonyms_ru:
             synonyms.append(f"RU: {', '.join(term.synonyms_ru)}")
+        if term.synonyms_zh:
+            synonyms.append(f"ZH: {', '.join(term.synonyms_zh)}")
+        if term.synonyms_en:
+            synonyms.append(f"EN: {', '.join(term.synonyms_en)}")
 
         if synonyms:
             text += f"🏷 <b>Синонимы:</b> {html.escape(' | '.join(synonyms))}\n"
@@ -156,9 +158,6 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
         cat_info = engine.get_category_by_id(term.category)
         cat_name = cat_info.name_ru if cat_info else term.category
         text += f"📁 <b>Категория:</b> {cat_name}\n"
-    else:
-        # В компактном режиме также выводим транскрипцию
-        pass
 
     return text
 
@@ -198,6 +197,27 @@ def get_term_keyboard(term: TechTerm) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+def get_online_translation_keyboard(output_translations: dict, query: str = "") -> InlineKeyboardMarkup:
+    """Создает инлайн-кнопки озвучки для любого онлайн-перевода произвольного текста."""
+    buttons = []
+    row_voice1 = []
+    if "zh" in output_translations or is_chinese_text(query):
+        row_voice1.append(InlineKeyboardButton("🔊 Путунхуа", callback_data="voice_txt:zh"))
+        row_voice1.append(InlineKeyboardButton("🔊 Кантонский", callback_data="voice_txt:yue"))
+    if row_voice1:
+        buttons.append(row_voice1)
+
+    row_voice2 = []
+    if "ru" in output_translations or not is_chinese_text(query):
+        row_voice2.append(InlineKeyboardButton("🔊 Русский", callback_data="voice_txt:ru"))
+    if "en" in output_translations:
+        row_voice2.append(InlineKeyboardButton("🔊 English", callback_data="voice_txt:en"))
+    if row_voice2:
+        buttons.append(row_voice2)
+
+    return InlineKeyboardMarkup(buttons)
+
+
 # === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
@@ -207,7 +227,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✨ <b>Что я умею:</b>\n"
         "• 🔍 <b>Мгновенный поиск:</b> отправьте любое слово или фразу текстом (на русском, английском, китайском или пиньине)\n"
         "• 🎙 <b>Голосовой перевод:</b> отправляйте голосовые сообщения на русском, английском, путунхуа или байхуа\n"
-        "• 🔊 <b>Озвучка произношения:</b> кнопки воспроизведения на Путунхуа (Mandarin), Байхуа (Кантонском) и English\n"
+        "• 🔊 <b>Озвучка произношения:</b> кнопки воспроизведения на Путунхуа (Mandarin), Байхуа (Кантонском), Русском и English\n"
+        "• 🔤 <b>Основное меню:</b> удобные кнопки языков [🇷🇺 Русский] [🇬🇧 English] [🇨🇳 Путунхуа] [🇭🇰 Кантонский]\n"
         "• 📚 <b>Разделы словаря:</b>\n"
         "   💬 <i>Повседневное общение, рестораны, покупки, отели, такси, офис</i>\n"
         "   🤖 <i>IT, искусственный интеллект, программирование, базы данных, сети, железо</i>\n"
@@ -319,16 +340,48 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Обработка нажатий на постоянные кнопки
-    if user_text == "🔍 Поиск термина":
+    if user_text == "🇷🇺 Русский":
         await update.message.reply_text(
-            "🔍 Введите слово или термин на русском, английском или китайском (иероглифы или пиньинь):",
+            "🇷🇺 <b>Режим русского языка:</b>\n"
+            "Напишите или наговорите голосом фразу на русском языке — бот переведет её на Путунхуа, Кантонский (Байхуа) и English, покажет пиньинь и озвучит на всех языках!",
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return
+    elif user_text == "🇬🇧 English":
+        await update.message.reply_text(
+            "🇬🇧 <b>English Mode:</b>\n"
+            "Type or voice any phrase in English — the bot will translate it to Russian, Mandarin, and Cantonese with full audio pronunciation and Pinyin!",
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return
+    elif user_text == "🇨🇳 Путунхуа":
+        await update.message.reply_text(
+            "🇨🇳 <b>Режим Путунхуа (Mandarin):</b>\n"
+            "Напишите иероглифами, пиньинем или наговорите фразу на китайском — бот выдаст перевод на русский и английский с озвучкой на русском, кантонском и путунхуа!",
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return
+    elif user_text == "🇭🇰 Кантонский / Байхуа":
+        await update.message.reply_text(
+            "🇭🇰 <b>Режим Кантонского языка / Байхуа (Cantonese):</b>\n"
+            "Напишите или наговорите фразу на кантонском/байхуа — бот переведет её на русский, английский и путунхуа и предложит послушать произношение на всех языках!",
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return
+    elif user_text == "🔍 Поиск термина":
+        await update.message.reply_text(
+            "🔍 Введите слово или фразу на русском, английском, путунхуа или кантонском (иероглифы или пиньинь):",
             reply_markup=MAIN_KEYBOARD,
         )
         return
     elif user_text == "📚 Категории":
         await categories_command(update, context)
         return
-    elif user_text == "🎲 Случайный термин":
+    elif user_text in ["🎲 Случайный термин", "🎲 Случайная фраза"]:
         await random_term(update, context)
         return
     elif user_text == "🧠 Викторина":
@@ -374,32 +427,49 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Термин не найден в словаре -> онлайн перевод
         det_lang = output.detected_lang.display_name_ru
         response_text = (
-            f"ℹ️ Термин '<b>{html.escape(user_text)}</b>' не найден в словаре.\n"
-            f"Определен язык: <i>{det_lang}</i>\n\n"
+            f"🌐 <b>Перевод фразы «<code>{html.escape(user_text)}</code>»:</b>\n"
+            f"<i>Определен язык: {det_lang}</i>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         )
 
-        if output.pinyin:
-            response_text += f"🇨🇳 <b>Pinyin:</b> <code>{html.escape(output.pinyin)}</code>\n\n"
+        # Сохраняем переводы в user_data для озвучки по кнопкам
+        context.user_data["last_translations"] = output.online_translations
+        context.user_data["last_query"] = user_text
+        context.user_data["last_detected_lang"] = output.detected_lang.value
 
-        if output.online_translations:
-            response_text += "🌐 <b>Онлайн-перевод:</b>\n"
-            for lang, trans_text in output.online_translations.items():
-                flag = "🇬🇧" if lang == "en" else "🇷🇺" if lang == "ru" else "🇨🇳"
-                if lang == "zh":
-                    zh_pinyin = get_pinyin(trans_text)
-                    if zh_pinyin:
-                        response_text += f"{flag} {html.escape(trans_text)} (<i>Pinyin: {html.escape(zh_pinyin)}</i>)\n"
-                    else:
-                        response_text += f"{flag} {html.escape(trans_text)}\n"
-                else:
-                    response_text += f"{flag} {html.escape(trans_text)}\n"
+        # Отображаем переводы по всем ключевым языкам
+        if output.detected_lang != Language.RU:
+            ru_val = output.online_translations.get("ru", "")
+            if ru_val:
+                response_text += f"🇷🇺 <b>Русский:</b> <code>{html.escape(ru_val)}</code>\n"
+
+        if output.detected_lang != Language.ZH:
+            zh_val = output.online_translations.get("zh", "")
+            if zh_val:
+                zh_py = get_pinyin(zh_val)
+                response_text += f"🇨🇳 <b>Путунхуа (Mandarin):</b> <code>{html.escape(zh_val)}</code>\n"
+                if zh_py:
+                    response_text += f"   🗣 <i>Pinyin:</i> <code>{html.escape(zh_py)}</code>\n"
+                response_text += f"🇭🇰 <b>Кантонский / Байхуа:</b> <code>{html.escape(zh_val)}</code>\n"
         else:
-            response_text += "Попробуйте изменить формулировку или проверьте правильность написания."
+            # Исходный китайский
+            py = output.pinyin or get_pinyin(user_text)
+            response_text += f"🇨🇳 <b>Путунхуа (Mandarin):</b> <code>{html.escape(user_text)}</code>\n"
+            if py:
+                response_text += f"   🗣 <i>Pinyin:</i> <code>{html.escape(py)}</code>\n"
+            response_text += f"🇭🇰 <b>Кантонский / Байхуа:</b> <code>{html.escape(user_text)}</code>\n"
+
+        if output.detected_lang != Language.EN:
+            en_val = output.online_translations.get("en", "")
+            if en_val:
+                response_text += f"🇬🇧 <b>English:</b> <code>{html.escape(en_val)}</code>\n"
+
+        keyboard = get_online_translation_keyboard(output.online_translations, user_text)
 
         await update.message.reply_text(
             response_text,
             parse_mode=ParseMode.HTML,
-            reply_markup=MAIN_KEYBOARD,
+            reply_markup=keyboard,
         )
 
 
@@ -471,26 +541,44 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(response_text, parse_mode=ParseMode.HTML, reply_markup=markup)
         else:
             response_text = (
-                f"ℹ️ Термин '<b>{html.escape(text)}</b>' не найден в словаре.\n\n"
+                f"🌐 <b>Перевод голосовой фразы «<code>{html.escape(text)}</code>»:</b>\n"
+                f"<i>Определен язык: {lang_name}</i>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             )
-            if output.pinyin:
-                response_text += f"🇨🇳 <b>Pinyin:</b> <code>{html.escape(output.pinyin)}</code>\n\n"
-            if output.online_translations:
-                response_text += "🌐 <b>Онлайн-перевод:</b>\n"
-                for lang, trans_text in output.online_translations.items():
-                    flag = "🇬🇧" if lang == "en" else "🇷🇺" if lang == "ru" else "🇨🇳"
-                    if lang == "zh":
-                        zh_pinyin = get_pinyin(trans_text)
-                        if zh_pinyin:
-                            response_text += f"{flag} {html.escape(trans_text)} (<i>Pinyin: {html.escape(zh_pinyin)}</i>)\n"
-                        else:
-                            response_text += f"{flag} {html.escape(trans_text)}\n"
-                    else:
-                        response_text += f"{flag} {html.escape(trans_text)}\n"
+            # Сохраняем переводы в user_data для озвучки по кнопкам
+            context.user_data["last_translations"] = output.online_translations
+            context.user_data["last_query"] = text
+            context.user_data["last_detected_lang"] = output.detected_lang.value
 
-            await update.message.reply_text(response_text, parse_mode=ParseMode.HTML, reply_markup=MAIN_KEYBOARD)
+            if output.detected_lang != Language.RU:
+                ru_val = output.online_translations.get("ru", "")
+                if ru_val:
+                    response_text += f"🇷🇺 <b>Русский:</b> <code>{html.escape(ru_val)}</code>\n"
 
-            # Если пользователь сказал на китайском, озвучиваем русский перевод, иначе китайский
+            if output.detected_lang != Language.ZH:
+                zh_val = output.online_translations.get("zh", "")
+                if zh_val:
+                    zh_py = get_pinyin(zh_val)
+                    response_text += f"🇨🇳 <b>Путунхуа (Mandarin):</b> <code>{html.escape(zh_val)}</code>\n"
+                    if zh_py:
+                        response_text += f"   🗣 <i>Pinyin:</i> <code>{html.escape(zh_py)}</code>\n"
+                    response_text += f"🇭🇰 <b>Кантонский / Байхуа:</b> <code>{html.escape(zh_val)}</code>\n"
+            else:
+                py = output.pinyin or get_pinyin(text)
+                response_text += f"🇨🇳 <b>Путунхуа (Mandarin):</b> <code>{html.escape(text)}</code>\n"
+                if py:
+                    response_text += f"   🗣 <i>Pinyin:</i> <code>{html.escape(py)}</code>\n"
+                response_text += f"🇭🇰 <b>Кантонский / Байхуа:</b> <code>{html.escape(text)}</code>\n"
+
+            if output.detected_lang != Language.EN:
+                en_val = output.online_translations.get("en", "")
+                if en_val:
+                    response_text += f"🇬🇧 <b>English:</b> <code>{html.escape(en_val)}</code>\n"
+
+            keyboard = get_online_translation_keyboard(output.online_translations, text)
+            await update.message.reply_text(response_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+            # Автоматическая озвучка: если спросили на китайском — озвучиваем русский перевод, если на русском — китайский
             if (detected_lang == Language.ZH or is_chinese_text(text)) and "ru" in output.online_translations:
                 ru_text = output.online_translations["ru"]
                 try:
@@ -560,6 +648,54 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             else:
                 await query.message.reply_text("❌ Не удалось сгенерировать озвучку.")
+
+    elif data.startswith("voice_txt:"):
+        lang_code = data.split(":", 1)[1]
+        translations = context.user_data.get("last_translations", {})
+        query_text = context.user_data.get("last_query", "")
+        detected_lang = context.user_data.get("last_detected_lang", "")
+
+        text_to_speak = ""
+        if lang_code in ["zh", "yue"]:
+            if detected_lang == Language.ZH.value or is_chinese_text(query_text):
+                text_to_speak = query_text
+            else:
+                text_to_speak = translations.get("zh", "")
+        elif lang_code == "ru":
+            if detected_lang == Language.RU.value:
+                text_to_speak = query_text
+            else:
+                text_to_speak = translations.get("ru", "")
+        elif lang_code == "en":
+            if detected_lang == Language.EN.value:
+                text_to_speak = query_text
+            else:
+                text_to_speak = translations.get("en", "")
+
+        if text_to_speak:
+            audio_io = generate_tts_audio(text_to_speak, lang=lang_code)
+            if audio_io:
+                if lang_code == "yue":
+                    cap = f"🇭🇰 <b>{html.escape(text_to_speak)}</b> <i>(Кантонский / Байхуа)</i>"
+                elif lang_code == "zh":
+                    py = get_pinyin(text_to_speak)
+                    cap = f"🇨🇳 <b>{html.escape(text_to_speak)}</b>"
+                    if py:
+                        cap += f" (<i>{html.escape(py)}</i>)"
+                elif lang_code == "ru":
+                    cap = f"🇷🇺 <b>{html.escape(text_to_speak)}</b>"
+                else:
+                    cap = f"🇬🇧 <b>{html.escape(text_to_speak)}</b>"
+
+                await query.message.reply_voice(
+                    voice=audio_io,
+                    caption=cap,
+                    parse_mode=ParseMode.HTML,
+                )
+            else:
+                await query.message.reply_text("❌ Не удалось сгенерировать озвучку.")
+        else:
+            await query.message.reply_text("❌ Текст для озвучки не найден.")
 
     elif data.startswith("show_term:"):
         term_id = data.split(":", 1)[1]
