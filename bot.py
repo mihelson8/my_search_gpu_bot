@@ -193,7 +193,7 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
 
 
 def get_term_keyboard(term: TechTerm) -> InlineKeyboardMarkup:
-    """Создает инлайн-кнопки для термина (озвучка Путунхуа/Байхуа/Русский/American English, похожие термины, случайный термин)."""
+    """Создает инлайн-кнопки для термина (озвучка Путунхуа/Байхуа/Русский/American English/Бурятский, похожие термины, случайный термин)."""
     buttons = []
     row_voice1 = [
         InlineKeyboardButton("🔊 Путунхуа (Mandarin)", callback_data=f"voice:zh:{term.id}"),
@@ -203,8 +203,10 @@ def get_term_keyboard(term: TechTerm) -> InlineKeyboardMarkup:
 
     row_voice2 = [
         InlineKeyboardButton("🔊 Русский", callback_data=f"voice:ru:{term.id}"),
-        InlineKeyboardButton("🔊 American English (US)", callback_data=f"voice:en_us:{term.id}"),
+        InlineKeyboardButton("🔊 American (US)", callback_data=f"voice:en_us:{term.id}"),
     ]
+    if term.bua:
+        row_voice2.append(InlineKeyboardButton("🔊 Бурятский", callback_data=f"voice:bua:{term.id}"))
     buttons.append(row_voice2)
 
     row_nav = [
@@ -242,6 +244,8 @@ def get_online_translation_keyboard(output_translations: dict, query: str = "") 
         row_voice2.append(InlineKeyboardButton("🔊 Русский", callback_data="voice_txt:ru"))
     if "en" in output_translations:
         row_voice2.append(InlineKeyboardButton("🔊 American (US)", callback_data="voice_txt:en_us"))
+    if "bua" in output_translations:
+        row_voice2.append(InlineKeyboardButton("🔊 Бурятский", callback_data="voice_txt:bua"))
     if row_voice2:
         buttons.append(row_voice2)
 
@@ -673,6 +677,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 text_to_speak = term.zh
             elif lang_code == "ru":
                 text_to_speak = term.ru
+            elif lang_code == "bua":
+                text_to_speak = term.bua or term.ru
             else:
                 text_to_speak = term.en
 
@@ -684,6 +690,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     caption = f"🇨🇳 <b>{html.escape(text_to_speak)}</b>"
                     if term.pinyin:
                         caption += f" (<i>{html.escape(term.pinyin)}</i>)"
+                elif lang_code == "bua":
+                    caption = f"🔵 <b>{html.escape(text_to_speak)}</b> <i>(Буряад хэлэн)</i>"
                 elif lang_code == "ru":
                     caption = f"🇷🇺 <b>{html.escape(text_to_speak)}</b>"
                 elif lang_code == "en_us":
@@ -716,6 +724,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 text_to_speak = query_text
             else:
                 text_to_speak = translations.get("ru", "")
+        elif lang_code == "bua":
+            if detected_lang == Language.BUA.value:
+                text_to_speak = query_text
+            else:
+                text_to_speak = translations.get("bua", "")
         elif lang_code in ["en", "en_us"]:
             if detected_lang == Language.EN.value:
                 text_to_speak = query_text
@@ -732,6 +745,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     cap = f"🇨🇳 <b>{html.escape(text_to_speak)}</b>"
                     if py:
                         cap += f" (<i>{html.escape(py)}</i>)"
+                elif lang_code == "bua":
+                    cap = f"🔵 <b>{html.escape(text_to_speak)}</b> <i>(Буряад хэлэн)</i>"
                 elif lang_code == "ru":
                     cap = f"🇷🇺 <b>{html.escape(text_to_speak)}</b>"
                 elif lang_code == "en_us":

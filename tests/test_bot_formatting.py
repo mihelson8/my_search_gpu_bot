@@ -20,16 +20,17 @@ def test_format_term_html():
 
 def test_get_term_keyboard():
     engine = TerminologyEngine()
-    term = engine.get_term_by_id("artificial_intelligence")
+    term = engine.get_term_by_id("hello_greeting")
     assert term is not None
     keyboard = get_term_keyboard(term)
     assert keyboard is not None
     assert len(keyboard.inline_keyboard) >= 2
-    # Verify Russian and American English voice buttons exist
+    # Verify Russian, Chinese, American English and Buryat voice buttons exist
     cb_data_list = [btn.callback_data for row in keyboard.inline_keyboard for btn in row]
     assert any("voice:ru:" in cb for cb in cb_data_list)
     assert any("voice:zh:" in cb for cb in cb_data_list)
     assert any("voice:en_us:" in cb for cb in cb_data_list)
+    assert any("voice:bua:" in cb for cb in cb_data_list)
 
 
 def test_build_application():

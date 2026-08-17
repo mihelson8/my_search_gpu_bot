@@ -40,6 +40,13 @@ def test_generate_tts_audio_russian():
     assert len(bytes_data) > 0
 
 
+def test_generate_tts_audio_buryat():
+    audio_stream = generate_tts_audio("Мэндээ! Сайн байна уу?", lang="bua")
+    assert audio_stream is not None
+    bytes_data = audio_stream.read()
+    assert len(bytes_data) > 0
+
+
 def test_generate_tts_audio_empty():
     assert generate_tts_audio("") is None
     assert generate_tts_audio("   ") is None

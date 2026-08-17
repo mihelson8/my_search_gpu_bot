@@ -17,10 +17,26 @@ from translator.pinyin_helper import detect_language, is_chinese_text
 logger = logging.getLogger(__name__)
 
 
+def buryat_to_phonetic(text: str) -> str:
+    """
+    Adapt Buryat Cyrillic characters (Ү, Ө, Һ) to phonetic equivalents
+    so that Cyrillic voice synthesizer pronounces them naturally.
+    """
+    replacements = {
+        'ү': 'у', 'Ү': 'У',
+        'ө': 'о', 'Ө': 'О',
+        'һ': 'х', 'Һ': 'Х',
+    }
+    res = text
+    for k, v in replacements.items():
+        res = res.replace(k, v)
+    return res
+
+
 def generate_tts_audio(text: str, lang: str = "zh") -> Optional[io.BytesIO]:
     """
     Generate MP3 audio bytes using gTTS for pronunciation of words/sentences.
-    lang can be 'zh-CN', 'en', 'ru'.
+    lang can be 'zh-CN', 'yue', 'en', 'en_us', 'ru', 'bua'.
     """
     if not text or not text.strip():
         return None
@@ -34,8 +50,14 @@ def generate_tts_audio(text: str, lang: str = "zh") -> Optional[io.BytesIO]:
         "en_us": "en",
         "en_uk": "en",
         "ru": "ru",
+        "bua": "ru",  # Uses adapted phonetic Cyrillic synthesis for Buryat
     }
     target_lang = lang_map.get(lang, "zh-CN")
+
+    # Adapt Buryat text phonetically if lang is bua
+    text_to_speak = text.strip()
+    if lang == "bua":
+        text_to_speak = buryat_to_phonetic(text_to_speak)
 
     # Select proper top-level domain (TLD) for English regional accents
     tld = "com"
@@ -45,7 +67,7 @@ def generate_tts_audio(text: str, lang: str = "zh") -> Optional[io.BytesIO]:
         tld = "co.uk"   # British English accent
 
     try:
-        tts = gTTS(text=text.strip(), lang=target_lang, tld=tld, slow=False)
+        tts = gTTS(text=text_to_speak, lang=target_lang, tld=tld, slow=False)
         audio_buffer = io.BytesIO()
         tts.write_to_fp(audio_buffer)
         audio_buffer.seek(0)
