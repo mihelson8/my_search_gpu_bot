@@ -143,6 +143,16 @@ def test_crop_roi():
     assert cropped.shape[1] == 160
 
 
+def test_crop_skips_distant_road():
+    numpy = pytest.importorskip("numpy")
+    from anpr.capture import crop_roi
+
+    image = numpy.zeros((100, 100, 3), dtype=numpy.uint8)
+    cropped = crop_roi(image, skip_top=0.3)
+    assert cropped.shape[0] == 70
+    assert cropped.shape[1] == 100
+
+
 def test_extract_from_recognizer_without_ocr():
     from anpr.recognizer import recognize_image
 
@@ -154,8 +164,10 @@ def test_extract_from_recognizer_without_ocr():
 def test_seetong_window_keywords():
     from anpr.capture import WindowInfo, find_seetong_window, list_windows
 
-    info = WindowInfo(hwnd=1, title="Seetong PC Client", left=0, top=0, right=800, bottom=600)
+    info = WindowInfo(hwnd=1, title="Seetong Lite Client", left=0, top=0, right=800, bottom=600)
     assert info.matches_seetong()
+    assert info.is_lite_client()
+    assert WindowInfo(1, "Seetong PC Client", 0, 0, 800, 600).matches_seetong()
     assert not WindowInfo(1, "Notepad", 0, 0, 100, 100).matches_seetong()
     # On Linux CI there is no Win32 window list.
     assert list_windows() == []

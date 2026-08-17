@@ -56,7 +56,12 @@ class AnprApp:
         self.refresh_windows()
         self.refresh_vehicles()
         self.refresh_events()
-        self._set_detection("—", "unknown", "Откройте Seetong с камерой и нажмите Старт", 0.0)
+        self._set_detection(
+            "—",
+            "unknown",
+            "Seetong Lite Client: оставьте картинку камеры на экране и нажмите Старт",
+            0.0,
+        )
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def _setup_styles(self) -> None:
@@ -77,7 +82,7 @@ class AnprApp:
     def _build(self) -> None:
         header = ttk.Frame(self.root, padding="14 10")
         header.pack(fill="x")
-        ttk.Label(header, text="Автономера с камеры Seetong", style="Header.TLabel").pack(side="left")
+        ttk.Label(header, text="Автономера · Seetong Lite Client", style="Header.TLabel").pack(side="left")
         self.stats_label = ttk.Label(header, text="", style="Muted.TLabel")
         self.stats_label.pack(side="right")
 
@@ -222,12 +227,13 @@ class AnprApp:
         self.rtsp_var = tk.StringVar(value=self.cfg.get("rtsp_url", ""))
         self.http_var = tk.StringVar(value=self.cfg.get("http_url", ""))
         self.file_var = tk.StringVar(value=self.cfg.get("file_path", ""))
-        self.crop_l = tk.StringVar(value=str(int(float(self.cfg.get("crop_left", 0.16)) * 100)))
-        self.crop_t = tk.StringVar(value=str(int(float(self.cfg.get("crop_top", 0.10)) * 100)))
-        self.crop_r = tk.StringVar(value=str(int(float(self.cfg.get("crop_right", 0.02)) * 100)))
-        self.crop_b = tk.StringVar(value=str(int(float(self.cfg.get("crop_bottom", 0.10)) * 100)))
+        self.crop_l = tk.StringVar(value=str(int(float(self.cfg.get("crop_left", 0.20)) * 100)))
+        self.crop_t = tk.StringVar(value=str(int(float(self.cfg.get("crop_top", 0.12)) * 100)))
+        self.crop_r = tk.StringVar(value=str(int(float(self.cfg.get("crop_right", 0.01)) * 100)))
+        self.crop_b = tk.StringVar(value=str(int(float(self.cfg.get("crop_bottom", 0.12)) * 100)))
+        self.skip_top_var = tk.StringVar(value=str(int(float(self.cfg.get("skip_top", 0.28)) * 100)))
         self.dup_var = tk.StringVar(value=str(self.cfg.get("duplicate_sec", 30)))
-        self.conf_var = tk.StringVar(value=str(self.cfg.get("min_confidence", 0.4)))
+        self.conf_var = tk.StringVar(value=str(self.cfg.get("min_confidence", 0.35)))
         self.save_all_var = tk.BooleanVar(value=bool(self.cfg.get("save_all_shots")))
         self.unknown_foreign_var = tk.BooleanVar(value=bool(self.cfg.get("unknown_as_foreign")))
         self.beep_var = tk.BooleanVar(value=bool(self.cfg.get("beep_on_foreign", True)))
@@ -238,10 +244,11 @@ class AnprApp:
             ("RTSP URL", self.rtsp_var),
             ("HTTP snapshot URL", self.http_var),
             ("Файл изображения", self.file_var),
-            ("Обрезка слева % (меню Seetong)", self.crop_l),
-            ("Обрезка сверху %", self.crop_t),
+            ("Обрезка слева % (дерево устройств)", self.crop_l),
+            ("Обрезка сверху % (вкладки Main View)", self.crop_t),
             ("Обрезка справа %", self.crop_r),
-            ("Обрезка снизу %", self.crop_b),
+            ("Обрезка снизу % (панель PTZ)", self.crop_b),
+            ("Отбросить дальнюю дорогу сверху %", self.skip_top_var),
             ("Не повторять один номер, сек", self.dup_var),
             ("Мин. уверенность OCR (0-1)", self.conf_var),
         ]
@@ -257,6 +264,9 @@ class AnprApp:
             row=1, column=2, padx=8, sticky="w"
         )
         ttk.Button(grid, text="Выбрать файл…", command=self.pick_file).grid(row=4, column=2, padx=8, sticky="w")
+        ttk.Button(grid, text="Пресет Lite / парковка", command=self.apply_lite_preset).grid(
+            row=5, column=2, padx=8, sticky="w"
+        )
 
         checks = ttk.Frame(self.tab_set)
         checks.pack(fill="x", pady=8)
@@ -269,10 +279,10 @@ class AnprApp:
         ttk.Label(
             self.tab_set,
             text=(
-                "Как это работает: программа не встраивается внутрь Seetong, а периодически снимает "
-                "видимое окно клиента (или берёт RTSP, если камера в локальной сети). "
-                "Для облачного просмотра Seetong используйте режим «Окно Seetong» — окно не сворачивайте. "
-                "Типичный RTSP Topsee/Seetong: rtsp://admin:123456@IP:554/mpeg4"
+                "Сейчас настроен захват окна Seetong Lite Client (канал вроде CH_02). "
+                "Окно не сворачивайте. Камера смотрит сверху на парковку: номера читаются "
+                "у машин на площадке под камерой, а не у транспорта на дальней дороге. "
+                "Если номер не распознался — нажмите «Снимок сейчас» и введите его вручную."
             ),
             style="Muted.TLabel",
             wraplength=900,
@@ -304,22 +314,23 @@ class AnprApp:
                 return default
 
         def _pct(var, default):
-            return max(0.0, min(0.45, _float(var, default * 100) / 100.0))
+            return max(0.0, min(0.65, _float(var, default * 100) / 100.0))
 
         source_key = SOURCE_VALUES.get(self.source_var.get(), "seetong_window")
         return {
             "source": source_key,
             "interval_sec": max(0.4, _float(self.interval_var, 1.5)),
-            "window_title": self.window_var.get().strip(),
+            "window_title": self.window_var.get().strip() or "Seetong Lite Client",
             "rtsp_url": self.rtsp_var.get().strip(),
             "http_url": self.http_var.get().strip(),
             "file_path": self.file_var.get().strip(),
-            "crop_left": _pct(self.crop_l, 0.16),
-            "crop_top": _pct(self.crop_t, 0.10),
-            "crop_right": _pct(self.crop_r, 0.02),
-            "crop_bottom": _pct(self.crop_b, 0.10),
+            "crop_left": min(0.45, _pct(self.crop_l, 0.20)),
+            "crop_top": min(0.45, _pct(self.crop_t, 0.12)),
+            "crop_right": min(0.45, _pct(self.crop_r, 0.01)),
+            "crop_bottom": min(0.45, _pct(self.crop_b, 0.12)),
+            "skip_top": _pct(self.skip_top_var, 0.28),
             "duplicate_sec": int(_float(self.dup_var, 30)),
-            "min_confidence": max(0.0, min(1.0, _float(self.conf_var, 0.4))),
+            "min_confidence": max(0.0, min(1.0, _float(self.conf_var, 0.35))),
             "save_all_shots": bool(self.save_all_var.get()),
             "unknown_as_foreign": bool(self.unknown_foreign_var.get()),
             "beep_on_foreign": bool(self.beep_var.get()),
@@ -339,6 +350,18 @@ class AnprApp:
             found = find_seetong_window()
             if found:
                 self.window_var.set(found.title)
+        if not self.window_var.get():
+            self.window_var.set("Seetong Lite Client")
+
+    def apply_lite_preset(self) -> None:
+        self.window_var.set("Seetong Lite Client")
+        self.source_var.set(SOURCE_LABELS["seetong_window"])
+        self.crop_l.set("20")
+        self.crop_t.set("12")
+        self.crop_r.set("1")
+        self.crop_b.set("12")
+        self.skip_top_var.set("28")
+        self.conf_var.set("0.35")
 
     def pick_file(self) -> None:
         path = filedialog.askopenfilename(
@@ -395,6 +418,7 @@ class AnprApp:
                 top=self.cfg.get("crop_top", 0),
                 right=self.cfg.get("crop_right", 0),
                 bottom=self.cfg.get("crop_bottom", 0),
+                skip_top=self.cfg.get("skip_top", 0),
             )
             self._last_frame = frame
             self.root.after(0, lambda: self._show_preview(frame))

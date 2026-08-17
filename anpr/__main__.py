@@ -57,6 +57,7 @@ def cmd_once(args: argparse.Namespace) -> int:
         top=cfg.get("crop_top", 0),
         right=cfg.get("crop_right", 0),
         bottom=cfg.get("crop_bottom", 0),
+        skip_top=cfg.get("skip_top", 0),
     )
     shot = save_screenshot(frame, prefix="once") if args.save else ""
     engines = available_engines()

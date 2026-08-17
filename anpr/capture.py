@@ -13,6 +13,8 @@ from anpr.database import DATA_DIR
 SHOTS_DIR = os.path.join(DATA_DIR, "shots")
 
 SEETONG_KEYWORDS = (
+    "seetong lite",
+    "lite client",
     "seetong",
     "see tong",
     "sitong",
@@ -46,6 +48,10 @@ class WindowInfo:
         title = self.title.lower()
         return any(key in title for key in SEETONG_KEYWORDS)
 
+    def is_lite_client(self) -> bool:
+        title = self.title.lower()
+        return "lite client" in title or "seetong lite" in title
+
 
 def _require_numpy():
     try:
@@ -63,8 +69,9 @@ def crop_roi(
     top: float = 0.0,
     right: float = 0.0,
     bottom: float = 0.0,
+    skip_top: float = 0.0,
 ):
-    """Crop fractional margins from an HxWxC numpy image."""
+    """Crop UI margins, then optionally drop the distant top of a high-angle camera view."""
     if image is None or getattr(image, "size", 0) == 0:
         return image
     h, w = image.shape[:2]
@@ -74,7 +81,15 @@ def crop_roi(
     y1 = h - int(max(0.0, min(0.45, float(bottom))) * h)
     if x1 - x0 < 20 or y1 - y0 < 20:
         return image
-    return image[y0:y1, x0:x1]
+    cropped = image[y0:y1, x0:x1]
+    skip = max(0.0, min(0.65, float(skip_top or 0)))
+    if skip <= 0:
+        return cropped
+    ch = cropped.shape[0]
+    y_skip = int(skip * ch)
+    if ch - y_skip < 40:
+        return cropped
+    return cropped[y_skip:, :]
 
 
 def list_windows() -> List[WindowInfo]:
@@ -119,7 +134,13 @@ def list_windows() -> List[WindowInfo]:
         return True
 
     user32.EnumWindows(EnumWindowsProc(_callback), 0)
-    results.sort(key=lambda item: (not item.matches_seetong(), item.title.lower()))
+    results.sort(
+        key=lambda item: (
+            not item.is_lite_client(),
+            not item.matches_seetong(),
+            item.title.lower(),
+        )
+    )
     return results
 
 
@@ -130,6 +151,9 @@ def find_seetong_window(preferred_title: str = "") -> Optional[WindowInfo]:
         for item in windows:
             if needle in item.title.lower():
                 return item
+    for item in windows:
+        if item.is_lite_client():
+            return item
     for item in windows:
         if item.matches_seetong():
             return item
