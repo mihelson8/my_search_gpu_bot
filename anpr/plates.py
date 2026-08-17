@@ -106,7 +106,11 @@ def normalize_plate(text: str) -> str:
 
 
 def plate_is_valid(plate: str) -> bool:
-    return bool(plate) and bool(PLATE_RE.match(plate))
+    if not plate or not PLATE_RE.match(plate):
+        return False
+    latin = "".join(CYR_TO_LATIN.get(ch, ch) for ch in plate)
+    junk = ("IPCAM", "HDIP", "CAMERA", "SEETONG", "MAINVIEW")
+    return not any(token in latin.upper() for token in junk)
 
 
 def format_plate(plate: str) -> str:
@@ -119,6 +123,16 @@ def format_plate(plate: str) -> str:
     return p or plate
 
 
+def _latin_compact(text: str) -> str:
+    return "".join(CYR_TO_LATIN.get(ch, ch) for ch in text).upper()
+
+
+def _window_is_overlay_junk(chunk: str) -> bool:
+    latin = _latin_compact(chunk)
+    markers = ("IPCAM", "HDIP", "CAMERA", "2880", "1620", "SEETONG", "MAINVIEW")
+    return any(marker in latin for marker in markers)
+
+
 def extract_plates(raw_text: str) -> List[str]:
     """Find all valid Russian plates inside noisy OCR text."""
     if not raw_text:
@@ -128,19 +142,20 @@ def extract_plates(raw_text: str) -> List[str]:
     seen = set()
 
     compact = compact_alnum(raw_text)
-    # Sliding windows over the compact string (8 and 9 chars).
     for size in (9, 8):
         if len(compact) < size:
             continue
         for i in range(0, len(compact) - size + 1):
-            candidate = apply_slot_rules(compact[i : i + size])
+            chunk = compact[i : i + size]
+            if _window_is_overlay_junk(chunk):
+                continue
+            candidate = apply_slot_rules(chunk)
             if plate_is_valid(candidate) and candidate not in seen:
                 seen.add(candidate)
                 found.append(candidate)
 
-    # Also try the whole string as one plate.
     whole = normalize_plate(raw_text)
-    if plate_is_valid(whole) and whole not in seen:
+    if plate_is_valid(whole) and not _window_is_overlay_junk(compact_alnum(raw_text)) and whole not in seen:
         found.insert(0, whole)
 
     return found

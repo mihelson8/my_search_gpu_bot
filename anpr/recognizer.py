@@ -300,18 +300,6 @@ def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
                     )
                 )
         if not region_found:
-            joined = " ".join(text for text, _ in raw_hits)
-            compact = normalize_plate(joined)
-            if len(compact) in (8, 9) and compact not in seen:
-                seen.add(compact)
-                hits.append(
-                    PlateHit(
-                        plate=compact,
-                        confidence=max(score for _, score in raw_hits),
-                        raw_text=joined,
-                        bbox=bbox,
-                        engine=engine,
-                    )
-                )
+            continue
     hits.sort(key=lambda item: item.confidence, reverse=True)
     return hits

@@ -54,7 +54,10 @@ def test_extract_plates_from_noisy_ocr():
     assert "А123ВС777" in plates
 
 
-def test_format_and_labels():
+def test_overlay_text_is_not_a_plate():
+    assert extract_plates("HD IPCAM 2880X1620") == []
+    assert extract_plates("H001PC AM") == []
+    assert not plate_is_valid(normalize_plate("HDIPCAM"))
     assert format_plate("А123ВС777") == "А123ВС 777"
     assert format_plate("А123ВС77") == "А123ВС 77"
     assert category_label("own") == "СВОЙ"
