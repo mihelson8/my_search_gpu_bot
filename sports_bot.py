@@ -7,6 +7,8 @@ import os
 import sys
 import html
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Optional, List, Dict
 
 try:
@@ -444,13 +446,41 @@ def build_sports_bot_application(token: str):
     return app
 
 
+# HTTP Health-check сервер для предотвращения засыпания (для Render/Fly.io/Koyeb)
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Sports Analytics Telegram Bot is running 24/7 OK!")
+
+    def log_message(self, format, *args):
+        pass  # Не засорять логи пингами
+
+
+def start_health_check_server(port: int = 10000):
+    """Запускает фоновый HTTP сервер для Render Health Check."""
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        logger.info(f"Health-check HTTP сервер запущен на порту {port}")
+    except Exception as e:
+        logger.warning(f"Не удалось запустить health-check сервер на порту {port}: {e}")
+
+
 def main():
     token = os.getenv("BOT_TOKEN", DEFAULT_BOT_TOKEN)
+    port = int(os.getenv("PORT", 10000))
+
     if not token:
         print("Ошибка: Переменная окружения BOT_TOKEN не установлена.")
         print("Установите токен: export BOT_TOKEN='your_token'")
         print("Или запустите консольный скрипт: python3 sports_analytics_cli.py")
         sys.exit(1)
+
+    # Запускаем Health-check сервер для хостинга 24/7
+    start_health_check_server(port)
 
     print("Запуск Спортивно-Аналитического Telegram Бота...")
     app = build_sports_bot_application(token)
