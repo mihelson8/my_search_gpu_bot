@@ -197,6 +197,8 @@ python3 -m pytest
 3. В программе нажмите **Старт**. Источник по умолчанию — окно `Seetong Lite Client`.
 4. Во вкладке **База Свой / Чужой** добавьте свои машины.
 
+**Другой компьютер в локальной сети с камерой:** скачайте ZIP этой ветки, поставьте Python 3 (галочка Add to PATH), в папке проекта `python -m pip install -r requirements-anpr.txt`, затем `python anpr_gui.py`. Кнопка **Камера / IP** — введите IP, логин `admin`, пароль (часто `123456`). Сначала HTTP-снимок, если не выйдет — RTSP: `rtsp://admin:ПАРОЛЬ@IP:554/mpeg4`.
+
 ```bash
 pip install -r requirements-anpr.txt
 python anpr_gui.py

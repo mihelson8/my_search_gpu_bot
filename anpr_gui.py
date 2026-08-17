@@ -117,7 +117,7 @@ class AnprApp:
         self.btn_stop = ttk.Button(top, text="■ Стоп", command=self.stop_capture, state="disabled")
         self.btn_stop.pack(side="left", padx=(0, 6))
         ttk.Button(top, text="Снимок сейчас", command=self.capture_once).pack(side="left", padx=(0, 8))
-        ttk.Button(top, text="Облачная камера", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
+        ttk.Button(top, text="Камера / IP", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
 
         ttk.Label(top, text="Источник:").pack(side="left")
         self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["seetong_folder"]))
@@ -426,19 +426,68 @@ class AnprApp:
 
     def open_camera_dialog(self) -> None:
         dlg = tk.Toplevel(self.root)
-        dlg.title("Облачная камера Seetong")
-        dlg.geometry("500x360")
+        dlg.title("Подключение камеры")
+        dlg.geometry("520x560")
         dlg.configure(bg=self.bg)
+
         ttk.Label(
             dlg,
-            text="Камера работает через приложение Seetong, локального IP нет.\n"
-            "Картинку берём из снимков клиента, не с экрана и не по RTSP.",
-            wraplength=460,
+            text="Камера в той же сети, что и этот компьютер — подключайте по IP или RTSP.\n"
+            "Только облако Seetong без IP — снимки из папки клиента.",
+            wraplength=480,
             justify="left",
-        ).pack(anchor="w", padx=20, pady=(16, 8))
-        ttk.Label(dlg, text="ID устройства в Seetong").pack(anchor="w", padx=20)
-        ttk.Entry(dlg, textvariable=self.device_id_var, width=44).pack(padx=20, pady=(0, 8))
-        ttk.Label(dlg, text="Папка снимков (Path setting → Screenshot Path)").pack(anchor="w", padx=20)
+        ).pack(anchor="w", padx=20, pady=(16, 10))
+
+        ttk.Label(dlg, text="IP камеры в локальной сети").pack(anchor="w", padx=20)
+        ttk.Entry(dlg, textvariable=self.camera_ip_var, width=44).pack(padx=20, pady=(0, 6))
+        ttk.Label(dlg, text="Логин").pack(anchor="w", padx=20)
+        ttk.Entry(dlg, textvariable=self.camera_user_var, width=44).pack(padx=20, pady=(0, 6))
+        ttk.Label(dlg, text="Пароль").pack(anchor="w", padx=20)
+        ttk.Entry(dlg, textvariable=self.camera_pass_var, width=44, show="*").pack(padx=20, pady=(0, 10))
+
+        def use_ip(kind: str) -> None:
+            from anpr.camera import build_http_url, build_rtsp_url, connect_camera
+
+            ip = self.camera_ip_var.get().strip()
+            user = self.camera_user_var.get().strip() or "admin"
+            password = self.camera_pass_var.get()
+            if not ip or ip == "192.168.0.123":
+                messagebox.showwarning("Нет IP", "Введите IP камеры, например 192.168.1.64")
+                return
+            self.http_var.set(build_http_url(ip, user, password))
+            self.rtsp_var.set(build_rtsp_url(ip, user, password))
+            if kind == "auto":
+                try:
+                    found = connect_camera(ip, user, password)
+                except Exception as exc:
+                    messagebox.showerror("Камера не открылась", str(exc))
+                    return
+                self.source_var.set(SOURCE_LABELS.get(found["source"], SOURCE_LABELS["http"]))
+                if found.get("http_url"):
+                    self.http_var.set(found["http_url"])
+                if found.get("rtsp_url"):
+                    self.rtsp_var.set(found["rtsp_url"])
+            elif kind == "http":
+                self.source_var.set(SOURCE_LABELS["http"])
+            else:
+                self.source_var.set(SOURCE_LABELS["rtsp"])
+            self.cfg.update(self._settings_from_form())
+            save_config(self.cfg)
+            dlg.destroy()
+            messagebox.showinfo(
+                "Готово",
+                "Источник: камера по сети.\nНажмите Старт.\nSeetong на этом компьютере не обязателен.",
+            )
+
+        ttk.Button(dlg, text="Подключить по IP (найти HTTP или RTSP)", command=lambda: use_ip("auto")).pack(
+            padx=20, pady=4, fill="x"
+        )
+        ttk.Button(dlg, text="Только снимок HTTP", command=lambda: use_ip("http")).pack(padx=20, pady=2, fill="x")
+        ttk.Button(dlg, text="Только поток RTSP", command=lambda: use_ip("rtsp")).pack(padx=20, pady=2, fill="x")
+
+        ttk.Separator(dlg).pack(fill="x", padx=20, pady=14)
+        ttk.Label(dlg, text="Облако Seetong (нет локального IP)").pack(anchor="w", padx=20)
+        ttk.Label(dlg, text="Папка снимков").pack(anchor="w", padx=20, pady=(6, 0))
         ttk.Entry(dlg, textvariable=self.shots_dir_var, width=44).pack(padx=20, pady=(0, 8))
 
         def use_cloud() -> None:
@@ -448,24 +497,9 @@ class AnprApp:
             self.cfg.update(self._settings_from_form())
             save_config(self.cfg)
             dlg.destroy()
-            messagebox.showinfo(
-                "Готово",
-                "Источник: папка снимков Seetong.\n\n"
-                "1. В Seetong откройте Main View, канал с камерой.\n"
-                "2. Нажмите значок снимка (фотоаппарат).\n"
-                "3. В автономерах нажмите Старт.\n\n"
-                "Весь экран и IP не нужны.",
-            )
+            messagebox.showinfo("Готово", "Источник: папка снимков Seetong.\nСнимок в клиенте, затем Старт.")
 
-        ttk.Button(dlg, text="Использовать снимки Seetong", command=use_cloud).pack(pady=10)
-        ttk.Label(
-            dlg,
-            text="IP/RTSP у облачной камеры нет. Если позже камера будет в той же Wi‑Fi сети, "
-            "можно пробовать HTTP/RTSP отдельно.",
-            style="Muted.TLabel",
-            wraplength=460,
-            justify="left",
-        ).pack(anchor="w", padx=20, pady=8)
+        ttk.Button(dlg, text="Использовать снимки Seetong", command=use_cloud).pack(padx=20, pady=6, fill="x")
 
     def apply_lite_preset(self) -> None:
         self.window_var.set("Seetong Lite Client")
