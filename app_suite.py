@@ -22,6 +22,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CCTV & China Cargo Suite - Пульт управления бизнесом</title>
+    <link rel="icon" type="image/png" href="/app_icon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -1322,6 +1323,16 @@ class SuiteRequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(HTML_PAGE.encode("utf-8"))
             return
+
+        elif path == "/app_icon.png":
+            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon.png")
+            if os.path.exists(icon_path):
+                self.send_response(200)
+                self.send_header("Content-type", "image/png")
+                self.end_headers()
+                with open(icon_path, "rb") as f:
+                    self.wfile.write(f.read())
+                return
 
         elif path == "/api/stats":
             stats = db.get_stats()

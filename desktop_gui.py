@@ -15,6 +15,15 @@ class BusinessSuiteApp:
         self.root.geometry("1100x700")
         self.root.minsize(900, 600)
 
+        # Set window icon if exists
+        import os
+        ico_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon.ico")
+        if os.path.exists(ico_path):
+            try:
+                self.root.iconbitmap(ico_path)
+            except Exception:
+                pass
+
         self.db = BusinessDB()
         if len(self.db.get_clients()) == 0:
             self.db.seed_demo_clients()

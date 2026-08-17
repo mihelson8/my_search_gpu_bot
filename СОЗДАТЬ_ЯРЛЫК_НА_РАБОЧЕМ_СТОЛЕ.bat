@@ -15,6 +15,7 @@ echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%VBS_SCRIPT%"
 echo oLink.TargetPath = "%~dp0START_APP_WINDOWS.bat" >> "%VBS_SCRIPT%"
 echo oLink.WorkingDirectory = "%~dp0" >> "%VBS_SCRIPT%"
 echo oLink.Description = "CCTV & China Cargo Business Suite" >> "%VBS_SCRIPT%"
+if exist "%~dp0app_icon.ico" echo oLink.IconLocation = "%~dp0app_icon.ico,0" >> "%VBS_SCRIPT%"
 echo oLink.Save >> "%VBS_SCRIPT%"
 
 cscript //nologo "%VBS_SCRIPT%"
