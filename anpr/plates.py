@@ -114,13 +114,13 @@ def plate_is_valid(plate: str) -> bool:
 
 
 def format_plate(plate: str) -> str:
-    """Human-readable grouping: A123BC 777."""
+    """Human-readable grouping: A123BC 777. Invalid text is not shown as a plate."""
     p = normalize_plate(plate)
+    if not plate_is_valid(p):
+        return "—"
     if len(p) == 8:
         return f"{p[0]}{p[1:4]}{p[4:6]} {p[6:8]}"
-    if len(p) == 9:
-        return f"{p[0]}{p[1:4]}{p[4:6]} {p[6:9]}"
-    return p or plate
+    return f"{p[0]}{p[1:4]}{p[4:6]} {p[6:9]}"
 
 
 def _latin_compact(text: str) -> str:
@@ -129,8 +129,26 @@ def _latin_compact(text: str) -> str:
 
 def _window_is_overlay_junk(chunk: str) -> bool:
     latin = _latin_compact(chunk)
-    markers = ("IPCAM", "HDIP", "CAMERA", "2880", "1620", "SEETONG", "MAINVIEW")
+    markers = (
+        "IPCAM",
+        "HDIP",
+        "CAMERA",
+        "2880",
+        "1620",
+        "SEETONG",
+        "MAINVIEW",
+        "X162",
+        "880X",
+        "0X16",
+    )
     return any(marker in latin for marker in markers)
+
+
+def is_osd_text(text: str) -> bool:
+    """True for camera overlays like HD IPCAM 2880X1620."""
+    if not text:
+        return False
+    return _window_is_overlay_junk(compact_alnum(text))
 
 
 def extract_plates(raw_text: str) -> List[str]:

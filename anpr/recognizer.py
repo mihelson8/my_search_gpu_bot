@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from anpr.plates import extract_plates, normalize_plate, plate_is_valid
+from anpr.plates import extract_plates, is_osd_text, plate_is_valid
 
 
 @dataclass
@@ -83,15 +83,45 @@ def _upscale_for_ocr(crop):
     import cv2
 
     h, w = crop.shape[:2]
-    if h >= 64 and w >= 180:
-        return crop
-    scale_h = max(64 / max(h, 1), 2.8)
-    scale_w = max(200 / max(w, 1), 2.2)
-    return cv2.resize(
+    # High-angle plates are small and flattened; always enlarge for OCR.
+    scale_h = max(96 / max(h, 1), 3.5)
+    scale_w = max(280 / max(w, 1), 3.0)
+    out = cv2.resize(
         crop,
-        (max(int(w * scale_w), 180), max(int(h * scale_h), 64)),
+        (max(int(w * scale_w), 240), max(int(h * scale_h), 96)),
         interpolation=cv2.INTER_CUBIC,
     )
+    gray = _to_gray(out)
+    clahe = cv2.createCLAHE(clipLimit=2.4, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    if out.ndim == 2:
+        return gray
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+
+def mask_osd(image):
+    """Black out timestamp and HD IPCAM 2880x1620 overlay before OCR."""
+    if image is None or getattr(image, "size", 0) == 0:
+        return image
+    out = image.copy()
+    h, w = out.shape[:2]
+    out[0 : max(int(h * 0.10), 12), 0 : max(int(w * 0.50), 40)] = 0
+    out[int(h * 0.86) : h, int(w * 0.45) : w] = 0
+    out[int(h * 0.90) : h, :] = 0
+    return out
+
+
+def parking_band(image):
+    """Keep the lower parking area where plates are large enough to read."""
+    h, w = image.shape[:2]
+    y0 = int(h * 0.30)
+    y1 = int(h * 0.90)
+    x0 = int(w * 0.04)
+    x1 = int(w * 0.96)
+    if y1 - y0 < 40 or x1 - x0 < 40:
+        return (0, 0, w, h), image
+    return (x0, y0, x1, y1), image[y0:y1, x0:x1]
 
 
 def find_plate_regions(image, max_candidates: int = 8) -> List[Tuple[Tuple[int, int, int, int], object]]:
@@ -140,24 +170,23 @@ def find_plate_regions(image, max_candidates: int = 8) -> List[Tuple[Tuple[int, 
 
 
 def _search_views(image):
-    """Full frame plus lower parking zone tiles for a high-mounted camera."""
+    """Parking band plus tiles — skip the distant road and OSD corners."""
     h, w = image.shape[:2]
-    views = [((0, 0, w, h), image)]
-    y_mid = int(h * 0.28)
-    if h - y_mid >= 60:
-        views.append(((0, y_mid, w, h), image[y_mid:, :]))
-    tile_h = max(h // 2, 80)
-    tile_w = max(w // 2, 120)
-    step_y = max(tile_h // 2, 40)
-    step_x = max(tile_w // 2, 60)
-    for y in range(int(h * 0.25), max(h - 40, 1), step_y):
-        for x in range(0, max(w - 40, 1), step_x):
-            y1 = min(h, y + tile_h)
-            x1 = min(w, x + tile_w)
-            if y1 - y < 50 or x1 - x < 80:
+    (x0, y0, x1, y1), band = parking_band(image)
+    views = [((x0, y0, x1, y1), band)]
+    bh, bw = band.shape[:2]
+    tile_h = max(bh // 2, 90)
+    tile_w = max(bw // 2, 140)
+    step_y = max(tile_h // 2, 50)
+    step_x = max(tile_w // 2, 70)
+    for y in range(0, max(bh - 50, 1), step_y):
+        for x in range(0, max(bw - 50, 1), step_x):
+            yy = min(bh, y + tile_h)
+            xx = min(bw, x + tile_w)
+            if yy - y < 60 or xx - x < 90:
                 continue
-            views.append(((x, y, x1, y1), image[y:y1, x:x1]))
-            if len(views) >= 8:
+            views.append(((x0 + x, y0 + y, x0 + xx, y0 + yy), band[y:yy, x:xx]))
+            if len(views) >= 7:
                 return views
     return views
 
@@ -244,6 +273,11 @@ def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
     if image is None or getattr(image, "size", 0) == 0:
         return []
 
+    try:
+        image = mask_osd(image)
+    except Exception:
+        pass
+
     region_map = []
     seen_boxes = set()
     try:
@@ -263,8 +297,8 @@ def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
     except Exception:
         region_map = []
     if not region_map:
-        h, w = image.shape[:2]
-        region_map = [((0, 0, w, h), image)]
+        _off, band = parking_band(image)
+        region_map = [(_off, band)]
 
     hits: List[PlateHit] = []
     seen = set()
@@ -276,20 +310,18 @@ def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
         engine, raw_hits = _run_ocr(crop)
         if not raw_hits:
             continue
-        region_found = False
         for raw_text, score in raw_hits:
             if score < min_confidence:
                 continue
+            if is_osd_text(raw_text):
+                continue
             plates = extract_plates(raw_text)
             if not plates:
-                normalized = normalize_plate(raw_text)
-                if plate_is_valid(normalized):
-                    plates = [normalized]
+                continue
             for plate in plates:
-                if plate in seen:
+                if not plate_is_valid(plate) or plate in seen:
                     continue
                 seen.add(plate)
-                region_found = True
                 hits.append(
                     PlateHit(
                         plate=plate,
@@ -299,7 +331,5 @@ def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
                         engine=engine,
                     )
                 )
-        if not region_found:
-            continue
     hits.sort(key=lambda item: item.confidence, reverse=True)
     return hits

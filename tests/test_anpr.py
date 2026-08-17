@@ -65,9 +65,15 @@ def test_camera_urls():
 
 
 def test_overlay_text_is_not_a_plate():
+    from anpr.plates import is_osd_text
+
     assert extract_plates("HD IPCAM 2880X1620") == []
     assert extract_plates("H001PC AM") == []
+    assert extract_plates("2880X1 620") == []
+    assert format_plate("2880X1620") == "—"
     assert not plate_is_valid(normalize_plate("HDIPCAM"))
+    assert is_osd_text("HD IPCAM 2880X1620")
+    assert extract_plates("C 292 HT 01") == ["С292НТ01"]
 
 
 def test_format_and_labels():

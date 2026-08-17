@@ -10,7 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from anpr.config import load_config, save_config
 from anpr.database import AnprDB
-from anpr.plates import category_label, format_plate, normalize_plate, parse_category, plate_is_valid
+from anpr.plates import category_label, format_plate, is_osd_text, normalize_plate, parse_category, plate_is_valid
 
 STATUS_COLORS = {
     "own": "#16a34a",
@@ -551,6 +551,17 @@ class AnprApp:
                 )
                 return
             hit = hits[0]
+            if not plate_is_valid(hit.plate) or is_osd_text(hit.plate) or is_osd_text(hit.raw_text):
+                self.root.after(
+                    0,
+                    lambda: self._set_detection(
+                        "—",
+                        "unknown",
+                        f"Номер не прочитан ({source_name}). Можно ввести вручную.",
+                        0.0,
+                    ),
+                )
+                return
             info = self.db.classify(hit.plate, unknown_as_foreign=bool(self.cfg.get("unknown_as_foreign")))
             if not shot and info["category"] != "own":
                 shot = save_screenshot(frame, prefix=info["category"])
