@@ -571,10 +571,11 @@ def build_application():
     app = (
         ApplicationBuilder()
         .token(TOKEN)
-        .connect_timeout(30.0)
-        .read_timeout(30.0)
-        .write_timeout(30.0)
-        .pool_timeout(30.0)
+        .connect_timeout(10.0)
+        .read_timeout(10.0)
+        .write_timeout(10.0)
+        .pool_timeout(10.0)
+        .concurrent_updates(True)
         .build()
     )
 
@@ -612,9 +613,10 @@ def main():
     print("=" * 60 + "\n")
 
     application.run_polling(
-        poll_interval=1.0,
-        timeout=30,
+        poll_interval=0.2,
+        timeout=10,
         bootstrap_retries=-1,
+        drop_pending_updates=True,
     )
 
 
