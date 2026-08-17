@@ -52,6 +52,7 @@ class AnprApp:
         self._last_plate = ""
         self._last_category = "unknown"
         self._preview_photo = None
+        self._zoom_photo = None
         self._status_after = None
 
         self._setup_styles()
@@ -182,6 +183,18 @@ class AnprApp:
         for color in ("#ffffff", "#0039a6", "#d52b1e"):
             tk.Frame(flag, bg=color, width=18, height=4).pack()
         self.plate_label = self.plate_body_label
+        ttk.Label(side, text="Увеличение номера", style="Card.TLabel").pack(anchor="w", padx=16, pady=(10, 4))
+        self.zoom_label = tk.Label(
+            side,
+            text="После обнаружения табличка будет крупно здесь.",
+            bg="#020617",
+            fg=self.muted,
+            font=("Segoe UI", 9),
+            wraplength=320,
+            justify="center",
+            height=8,
+        )
+        self.zoom_label.pack(fill="x", padx=16, pady=(0, 8))
         self.category_label_widget = tk.Label(
             side, text="НЕИЗВЕСТНЫЙ", bg=self.card, fg=STATUS_COLORS["unknown"], font=("Segoe UI", 20, "bold")
         )
@@ -561,11 +574,12 @@ class AnprApp:
             shot = ""
             if force_save or self.cfg.get("save_all_shots"):
                 shot = save_screenshot(frame, prefix="live")
-            hits, vehicles, annotated = recognize_scene(
+            hits, vehicles, annotated, zoom = recognize_scene(
                 frame, min_confidence=float(self.cfg.get("min_confidence", 0.4))
             )
             preview = annotated if annotated is not None else frame
             self.root.after(0, lambda img=preview: self._show_preview(img))
+            self.root.after(0, lambda z=zoom: self._show_zoom(z))
             car_note = f"авто: {len(vehicles)}" if vehicles else "силуэт авто не найден"
             if not hits:
                 self.root.after(
@@ -635,9 +649,25 @@ class AnprApp:
             return
         rgb = frame[:, :, ::-1]
         image = Image.fromarray(rgb)
-        image.thumbnail((720, 420))
+        image.thumbnail((880, 520))
         self._preview_photo = ImageTk.PhotoImage(image)
         self.preview_label.config(image=self._preview_photo, text="")
+
+    def _show_zoom(self, crop) -> None:
+        if crop is None or getattr(crop, "size", 0) == 0:
+            self.zoom_label.config(image="", text="Табличка не выделена — введите номер вручную")
+            self._zoom_photo = None
+            return
+        try:
+            from PIL import Image, ImageTk
+        except ImportError:
+            self.zoom_label.config(text="Нужен Pillow для увеличения")
+            return
+        rgb = crop[:, :, ::-1]
+        image = Image.fromarray(rgb)
+        image.thumbnail((340, 170))
+        self._zoom_photo = ImageTk.PhotoImage(image)
+        self.zoom_label.config(image=self._zoom_photo, text="")
 
     def _set_detection(self, plate: str, category: str, detail: str, _confidence: float) -> None:
         if plate and plate != "—":

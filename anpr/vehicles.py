@@ -178,6 +178,34 @@ def bumper_box(box: Box) -> Box:
     return (x0, y0 + int(h * 0.32), x1, y1)
 
 
+def zoom_box(image, box: Box, min_w: int = 520, min_h: int = 140, pad: float = 0.28):
+    """Crop around a plate/car box and enlarge it so the Type-1 number is readable."""
+    import cv2
+
+    if image is None or getattr(image, "size", 0) == 0 or not box:
+        return image
+    h, w = image.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    pad_x = int(bw * pad) + 6
+    pad_y = int(bh * pad) + 8
+    x0 = max(0, x0 - pad_x)
+    y0 = max(0, y0 - pad_y)
+    x1 = min(w, x1 + pad_x)
+    y1 = min(h, y1 + pad_y)
+    crop = image[y0:y1, x0:x1]
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return image
+    ch, cw = crop.shape[:2]
+    scale = max(min_w / float(max(cw, 1)), min_h / float(max(ch, 1)), 3.2)
+    scale = min(scale, 14.0)
+    return cv2.resize(
+        crop,
+        (max(int(cw * scale), min_w), max(int(ch * scale), min_h)),
+        interpolation=cv2.INTER_CUBIC,
+    )
+
+
 def crop_to_vehicles(image, vehicles: Iterable[VehicleLike], pad_ratio: float = 0.10):
     """Cut the frame down to the union of car silhouettes."""
     vehicles = list(vehicles)

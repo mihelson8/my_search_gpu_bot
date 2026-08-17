@@ -375,10 +375,11 @@ def recognize_scene(image, min_confidence: float = 0.35):
         crop_box,
         crop_to_vehicles,
         find_vehicle_silhouettes,
+        zoom_box,
     )
 
     if image is None or getattr(image, "size", 0) == 0:
-        return [], [], image
+        return [], [], image, None
 
     work = image
     try:
@@ -394,6 +395,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
     vehicles = [item.box for item in silhouettes]
 
     hits: List[PlateHit] = []
+    plate_regions = []
     if silhouettes:
         masked = apply_silhouette_mask(work, silhouettes)
         for item in silhouettes:
@@ -402,7 +404,11 @@ def recognize_scene(image, min_confidence: float = 0.35):
                 if crop is None or getattr(crop, "size", 0) == 0:
                     continue
                 regions = _collect_plate_regions(crop, origin=(roi[0], roi[1]), inside_vehicle=True)
+                plate_regions.extend(regions)
                 hits.extend(_ocr_regions(regions, min_confidence))
+    else:
+        plate_regions = _collect_plate_regions(work, origin=(0, 0), inside_vehicle=False)
+        hits = _ocr_regions(plate_regions, min_confidence)
 
     unique = []
     seen = set()
@@ -412,15 +418,33 @@ def recognize_scene(image, min_confidence: float = 0.35):
         seen.add(hit.plate)
         unique.append(hit)
     unique.sort(key=lambda item: item.confidence, reverse=True)
+
+    zoom_src = None
+    if unique and unique[0].bbox:
+        zoom_src = unique[0].bbox
+    elif plate_regions:
+        zoom_src = plate_regions[0][0]
+
+    zoom = None
+    try:
+        if zoom_src:
+            zoom = zoom_box(image, zoom_src)
+        elif silhouettes:
+            zoom = zoom_box(image, bumper_box(silhouettes[0].box), min_w=560, min_h=200, pad=0.08)
+    except Exception:
+        zoom = None
+
     try:
         annotated = annotate_scene(image, silhouettes, unique)
-        if silhouettes:
+        if zoom_src:
+            annotated = zoom_box(image, zoom_src, min_w=760, min_h=240, pad=0.55)
+        elif silhouettes:
             annotated = crop_to_vehicles(annotated, silhouettes)
     except Exception:
         annotated = image
-    return unique, vehicles, annotated
+    return unique, vehicles, annotated, zoom
 
 
 def recognize_image(image, min_confidence: float = 0.35) -> List[PlateHit]:
-    hits, _vehicles, _vis = recognize_scene(image, min_confidence=min_confidence)
+    hits, _vehicles, _vis, _zoom = recognize_scene(image, min_confidence=min_confidence)
     return hits

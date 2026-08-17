@@ -221,10 +221,11 @@ def test_extract_from_recognizer_without_ocr():
     numpy = pytest.importorskip("numpy")
     blank = numpy.zeros((240, 320, 3), dtype=numpy.uint8)
     assert recognize_image(blank) == []
-    hits, vehicles, vis = recognize_scene(blank)
+    hits, vehicles, vis, zoom = recognize_scene(blank)
     assert hits == []
     assert vehicles == []
     assert vis is not None
+    assert zoom is None
 
 
 def test_find_vehicle_silhouette_on_parking_lot():
@@ -338,4 +339,16 @@ def test_rendered_type1_plate_on_car_silhouette():
     crop = masked[silhouettes[0].box[1] : silhouettes[0].box[3], silhouettes[0].box[0] : silhouettes[0].box[2]]
     regions = find_plate_regions(crop)
     assert regions, "Type-1 plate on the bumper should be a candidate"
+
+
+def test_zoom_box_enlarges_plate():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import zoom_box
+
+    frame = numpy.full((200, 300, 3), 40, dtype=numpy.uint8)
+    frame[80:100, 40:160] = 220
+    zoomed = zoom_box(frame, (40, 80, 160, 100))
+    assert zoomed.shape[1] > 160
+    assert zoomed.shape[0] > 20
 
