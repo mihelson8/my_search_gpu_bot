@@ -105,14 +105,14 @@ def start_health_check_server(port: int):
     except Exception as e:
         logger.warning(f"Не удалось запустить health check сервер на порту {port}: {e}")
 
-    # Запускаем встроенный фоновый самопингер для предотвращения засыпания Render Free
+    # Автоматический пингер через внешний сервис, чтобы Render никогда не спал
     def keep_alive_worker():
         while True:
-            time.sleep(120)  # каждые 2 минуты
+            time.sleep(60)  # каждую 1 минуту
             # 1. Пинг внешнего публичного URL Render (если задан)
             if RENDER_EXTERNAL_URL:
                 try:
-                    with httpx.Client(timeout=10.0) as client:
+                    with httpx.Client(timeout=10.0, follow_redirects=True) as client:
                         client.get(RENDER_EXTERNAL_URL)
                 except Exception:
                     pass
