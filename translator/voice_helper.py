@@ -76,8 +76,8 @@ def recognize_speech_from_ogg(ogg_bytes: bytes) -> Tuple[Optional[str], Optional
         with sr.AudioFile(wav_stream) as source:
             audio_data = recognizer.record(source)
 
-        # Try Google Speech Recognition with multi-language fallback (Russian, English, Mandarin, Cantonese / Baihua)
-        for lang_code, lang_enum in [("ru-RU", Language.RU), ("en-US", Language.EN), ("zh-CN", Language.ZH), ("zh-HK", Language.ZH), ("yue-Hant-HK", Language.ZH)]:
+        # Try Google Speech Recognition with multi-language fallback (Russian, English, Mandarin, Cantonese / Baihua, Buryat / Mongolian)
+        for lang_code, lang_enum in [("ru-RU", Language.RU), ("en-US", Language.EN), ("zh-CN", Language.ZH), ("zh-HK", Language.ZH), ("yue-Hant-HK", Language.ZH), ("mn-MN", Language.BUA)]:
             try:
                 text = recognizer.recognize_google(audio_data, language=lang_code)
                 if text and len(text.strip()) > 0:

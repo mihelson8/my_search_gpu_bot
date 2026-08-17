@@ -272,15 +272,16 @@ class OnlineTranslationFallback:
             Language.EN: "en",
             Language.RU: "ru",
             Language.ZH: "zh",
+            Language.BUA: "bua",
             Language.AUTO: "auto",
         }
 
         sl = lang_code_map.get(source_lang, "auto")
         tl = lang_code_map.get(target_lang, "en")
 
-        # Fallback endpoints: MyMemory and Google Translate endpoint
+        # Fallback endpoints: Google Translate and MyMemory
         try:
-            # 1. Try Google Translate public endpoint first (very fast and reliable for phrases)
+            # 1. Try Google Translate public endpoint
             g_url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={sl}&tl={tl}&dt=t&q={httpx.URL('', params={'q': text}).params['q']}"
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
             async with httpx.AsyncClient(timeout=4.0) as client:
@@ -295,25 +296,43 @@ class OnlineTranslationFallback:
         except Exception as e:
             logger.debug(f"Google fallback failed: {e}")
 
+        # If target language is Buryat, MyMemory doesn't support it, but bxr on google can be tried
+        if tl == "bua":
+            try:
+                g_url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={sl}&tl=bxr&dt=t&q={httpx.URL('', params={'q': text}).params['q']}"
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.get(g_url, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data and isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                            translated_parts = [part[0] for part in data[0] if part and len(part) > 0 and part[0]]
+                            res = "".join(translated_parts).strip()
+                            if res and res != text:
+                                return res
+            except Exception:
+                pass
+
         try:
-            # 2. Try MyMemory Translation API
-            sl_mymemory = "zh-CN" if sl == "zh" else sl
-            tl_mymemory = "zh-CN" if tl == "zh" else tl
-            pair = f"{sl_mymemory}|{tl_mymemory}"
-            if sl == "auto":
-                pair = f"autodetect|{tl_mymemory}"
+            # 2. Try MyMemory Translation API (for EN, RU, ZH)
+            if tl != "bua":
+                sl_mymemory = "zh-CN" if sl == "zh" else sl
+                tl_mymemory = "zh-CN" if tl == "zh" else tl
+                pair = f"{sl_mymemory}|{tl_mymemory}"
+                if sl == "auto":
+                    pair = f"autodetect|{tl_mymemory}"
 
-            url = "https://api.mymemory.translated.net/get"
-            params = {"q": text, "langpair": pair}
-            headers = {"User-Agent": "TechTermsTranslator/1.0"}
+                url = "https://api.mymemory.translated.net/get"
+                params = {"q": text, "langpair": pair}
+                headers = {"User-Agent": "TechTermsTranslator/1.0"}
 
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                resp = await client.get(url, params=params, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    res = data.get("responseData", {}).get("translatedText")
-                    if res and res != text:
-                        return res
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.get(url, params=params, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        res = data.get("responseData", {}).get("translatedText")
+                        if res and res != text:
+                            return res
         except Exception as e:
             logger.warning(f"Online translation failed: {e}")
 
@@ -354,7 +373,7 @@ class TechTranslator:
 
         # If no direct dictionary match and fallback enabled, fetch online translations in parallel
         if not output.direct_match and enable_online_fallback:
-            target_langs = [l for l in [Language.EN, Language.RU, Language.ZH] if l != detected_lang]
+            target_langs = [l for l in [Language.EN, Language.RU, Language.ZH, Language.BUA] if l != detected_lang]
             async def _fetch(tl: Language):
                 res = await self.online.translate_text(query, detected_lang, tl)
                 return tl, res

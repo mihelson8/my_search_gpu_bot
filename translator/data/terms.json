@@ -1423,20 +1423,24 @@
     "zh": "你好",
     "zh_trad": "你好",
     "pinyin": "nǐ hǎo",
+    "bua": "Мэндээ / Сайн байна уу",
     "definition_ru": "Самое распространенное универсальное приветствие при встрече.",
     "definition_en": "The most common and universal greeting when meeting someone.",
     "definition_zh": "最常用、最基础的日常问候语。",
+    "definition_bua": "Уулзахадаа хэлэдэг эгээн мэдээжэ амаршалгын үгэ.",
     "examples": [
       {
         "en": "Hello! Nice to meet you.",
         "ru": "Привет! Рад познакомиться с вами.",
         "zh": "你好！很高兴认识你。",
-        "pinyin": "nǐ hǎo! hěn gāo xìng rèn shi nǐ."
+        "pinyin": "nǐ hǎo! hěn gāo xìng rèn shi nǐ.",
+        "bua": "Мэндээ! Танатай танилсаһандаа баяртайб."
       }
     ],
     "synonyms_en": ["Hi", "Greetings", "Good day"],
     "synonyms_ru": ["Здравствуй", "Добрый день", "Приветствую"],
     "synonyms_zh": ["您好", "哈喽", "嗨"],
+    "synonyms_bua": ["Сайн байна", "Мэндэ амар"],
     "related_terms": ["thank_you", "goodbye"]
   },
   {
@@ -1447,20 +1451,24 @@
     "zh": "谢谢",
     "zh_trad": "謝謝",
     "pinyin": "xiè xie",
+    "bua": "Баярлаа / Баяртай",
     "definition_ru": "Выражение благодарности и признательности собеседнику.",
     "definition_en": "Polite expression of gratitude and appreciation.",
     "definition_zh": "表达感谢和感激的常用礼貌用语。",
+    "definition_bua": "Хүндэ туһалһанай түлөө талархал илэрхылхэ үгэ.",
     "examples": [
       {
         "en": "Thank you very much for your help!",
         "ru": "Большое спасибо за вашу помощь!",
         "zh": "非常感谢你的帮助！",
-        "pinyin": "fēi cháng gǎn xiè nǐ de bāng zhù!"
+        "pinyin": "fēi cháng gǎn xiè nǐ de bāng zhù!",
+        "bua": "Ехэ баярлаа танай туһада!"
       }
     ],
     "synonyms_en": ["Thanks a lot", "Many thanks", "Appreciate it"],
     "synonyms_ru": ["Большое спасибо", "Благодарствую"],
     "synonyms_zh": ["多谢", "非常感谢", "麻烦你了"],
+    "synonyms_bua": ["Ехэ баярлаа", "Таларханаб"],
     "related_terms": ["you_are_welcome", "excuse_me"]
   },
   {
@@ -1471,20 +1479,24 @@
     "zh": "不用谢 / 不客气",
     "zh_trad": "不用謝 / 不客氣",
     "pinyin": "bù yòng xiè / bù kè qi",
+    "bua": "Зүгээр / Юун баярхахаб",
     "definition_ru": "Вежливый ответ на выражение благодарности.",
     "definition_en": "A polite response to someone thanking you.",
     "definition_zh": "对他人表达感谢时的礼貌回应。",
+    "definition_bua": "Талархал хүлеэжэ абаад хэлэдэг харюу үгэ.",
     "examples": [
       {
         "en": "— Thank you! — You are welcome!",
         "ru": "— Спасибо! — Пожалуйста (не за что)!",
         "zh": "— 谢谢你！ — 不客气！",
-        "pinyin": "— xiè xie nǐ! — bù kè qi!"
+        "pinyin": "— xiè xie nǐ! — bù kè qi!",
+        "bua": "— Баярлаа! — Зүгээр даа!"
       }
     ],
     "synonyms_en": ["No problem", "Don't mention it", "My pleasure"],
     "synonyms_ru": ["Не стоит благодарности", "На здоровье"],
     "synonyms_zh": ["没事", "别客气", "不用客气"],
+    "synonyms_bua": ["Зүгээр даа", "Зүгээр"],
     "related_terms": ["thank_you"]
   },
   {

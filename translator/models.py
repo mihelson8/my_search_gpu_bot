@@ -11,6 +11,7 @@ class Language(str, Enum):
     EN = "en"
     RU = "ru"
     ZH = "zh"
+    BUA = "bua"
     AUTO = "auto"
 
     @property
@@ -19,6 +20,7 @@ class Language(str, Enum):
             Language.EN: "Английский (English)",
             Language.RU: "Русский (Russian)",
             Language.ZH: "Китайский (中文)",
+            Language.BUA: "Бурятский (Буряад хэлэн)",
             Language.AUTO: "Автоопределение",
         }
         return names.get(self, self.value)
@@ -29,6 +31,7 @@ class Language(str, Enum):
             Language.EN: "English",
             Language.RU: "Russian",
             Language.ZH: "Chinese",
+            Language.BUA: "Buryat",
             Language.AUTO: "Auto-detect",
         }
         return names.get(self, self.value)
@@ -39,6 +42,7 @@ class Language(str, Enum):
             Language.EN: "英语",
             Language.RU: "俄语",
             Language.ZH: "中文",
+            Language.BUA: "布里亚特语",
             Language.AUTO: "自动检测",
         }
         return names.get(self, self.value)
@@ -46,9 +50,10 @@ class Language(str, Enum):
     @property
     def flag(self) -> str:
         flags = {
-            Language.EN: "🇬🇧",
+            Language.EN: "🇺🇸",
             Language.RU: "🇷🇺",
             Language.ZH: "🇨🇳",
+            Language.BUA: "🔵",
             Language.AUTO: "🌐",
         }
         return flags.get(self, "🌐")
@@ -60,6 +65,7 @@ class ExampleUsage:
     ru: str
     zh: str
     pinyin: Optional[str] = None
+    bua: Optional[str] = None
 
 
 @dataclass
@@ -73,11 +79,14 @@ class TechTerm:
     definition_ru: str
     definition_en: str
     definition_zh: str
+    bua: Optional[str] = None
+    definition_bua: Optional[str] = None
     zh_trad: Optional[str] = None
     examples: List[ExampleUsage] = field(default_factory=list)
     synonyms_en: List[str] = field(default_factory=list)
     synonyms_ru: List[str] = field(default_factory=list)
     synonyms_zh: List[str] = field(default_factory=list)
+    synonyms_bua: List[str] = field(default_factory=list)
     related_terms: List[str] = field(default_factory=list)
 
     def get_term_in_lang(self, lang: Language) -> str:
@@ -87,6 +96,8 @@ class TechTerm:
             return self.ru
         elif lang == Language.ZH:
             return self.zh
+        elif lang == Language.BUA and self.bua:
+            return self.bua
         return self.en
 
     def get_definition_in_lang(self, lang: Language) -> str:
@@ -94,6 +105,8 @@ class TechTerm:
             return self.definition_ru
         elif lang == Language.ZH:
             return self.definition_zh
+        elif lang == Language.BUA and self.definition_bua:
+            return self.definition_bua
         return self.definition_en
 
     def to_dict(self) -> Dict[str, Any]:
@@ -103,18 +116,21 @@ class TechTerm:
             "en": self.en,
             "ru": self.ru,
             "zh": self.zh,
+            "bua": self.bua,
+            "definition_bua": self.definition_bua,
             "zh_trad": self.zh_trad,
             "pinyin": self.pinyin,
             "definition_ru": self.definition_ru,
             "definition_en": self.definition_en,
             "definition_zh": self.definition_zh,
             "examples": [
-                {"en": e.en, "ru": e.ru, "zh": e.zh, "pinyin": e.pinyin}
+                {"en": e.en, "ru": e.ru, "zh": e.zh, "pinyin": e.pinyin, "bua": e.bua}
                 for e in self.examples
             ],
             "synonyms_en": self.synonyms_en,
             "synonyms_ru": self.synonyms_ru,
             "synonyms_zh": self.synonyms_zh,
+            "synonyms_bua": self.synonyms_bua,
             "related_terms": self.related_terms,
         }
 
@@ -126,6 +142,7 @@ class TechTerm:
                 ru=ex.get("ru", ""),
                 zh=ex.get("zh", ""),
                 pinyin=ex.get("pinyin"),
+                bua=ex.get("bua"),
             )
             for ex in data.get("examples", [])
         ]
@@ -135,6 +152,8 @@ class TechTerm:
             en=data["en"],
             ru=data["ru"],
             zh=data["zh"],
+            bua=data.get("bua"),
+            definition_bua=data.get("definition_bua"),
             pinyin=data.get("pinyin", ""),
             definition_ru=data.get("definition_ru", ""),
             definition_en=data.get("definition_en", ""),
@@ -144,6 +163,7 @@ class TechTerm:
             synonyms_en=data.get("synonyms_en", []),
             synonyms_ru=data.get("synonyms_ru", []),
             synonyms_zh=data.get("synonyms_zh", []),
+            synonyms_bua=data.get("synonyms_bua", []),
             related_terms=data.get("related_terms", []),
         )
 

@@ -74,8 +74,8 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🇷🇺 Русский"), KeyboardButton("🇺🇸 American English")],
         [KeyboardButton("🇨🇳 Путунхуа"), KeyboardButton("🇭🇰 Кантонский / Байхуа")],
-        [KeyboardButton("🔍 Поиск фразы / термина"), KeyboardButton("📚 Категории")],
-        [KeyboardButton("🎲 Случайная фраза"), KeyboardButton("🧠 Викторина")],
+        [KeyboardButton("🔵 Буряад хэлэн (Бурятский)"), KeyboardButton("🔍 Поиск фразы")],
+        [KeyboardButton("📚 Категории"), KeyboardButton("🎲 Случайная фраза"), KeyboardButton("🧠 Викторина")],
     ],
     resize_keyboard=True,
 )
@@ -141,6 +141,7 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
     ru_clean = html.escape(term.ru)
     pinyin_clean = html.escape(term.pinyin)
     trad_clean = f" [{html.escape(term.zh_trad)}]" if term.zh_trad else ""
+    bua_clean = f"\n🔵 <b>Бурятский (Буряад):</b> <code>{html.escape(term.bua)}</code>" if term.bua else ""
 
     text = (
         f"📘 <b>{ru_clean} ↔ {zh_clean} ↔ {en_clean}</b>\n"
@@ -149,7 +150,8 @@ def format_term_html(term: TechTerm, compact: bool = False) -> str:
         f"🇨🇳 <b>Путунхуа (Mandarin):</b> <code>{zh_clean}</code>\n"
         f"   🗣 <i>Pinyin:</i> <code>{pinyin_clean}</code>\n"
         f"🇭🇰 <b>Кантонский / Байхуа:</b> <code>{zh_clean}</code>{trad_clean}\n"
-        f"🇺🇸 <b>American English:</b> <code>{en_clean}</code>\n\n"
+        f"🇺🇸 <b>American English:</b> <code>{en_clean}</code>"
+        f"{bua_clean}\n\n"
     )
 
     if not compact:
@@ -249,21 +251,19 @@ def get_online_translation_keyboard(output_translations: dict, query: str = "") 
 # === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
-        "👋 <b>Добро пожаловать в Переводчик терминов и разговорной речи!</b>\n"
-        "🇨🇳 <b>中文 (Путунхуа & Байхуа)</b> | 🇬🇧 <b>English</b> | 🇷🇺 <b>Русский</b>\n\n"
-        "Я помогу вам переводить и изучать как <b>IT/технические термины</b>, так и <b>повседневные разговорные фразы</b> на китайском, английском и русском языках.\n\n"
+        "👋 <b>Добро пожаловать в Переводчик языков и терминов!</b>\n"
+        "🇷🇺 <b>Русский</b> | 🇨🇳 <b>Путунхуа & Байхуа</b> | 🇺🇸 <b>American English</b> | 🔵 <b>Буряад хэлэн</b>\n\n"
+        "Я помогу вам переводить и изучать как <b>IT/технические термины</b>, так и <b>повседневные разговорные фразы</b> на русском, китайском, английском и бурятском языках.\n\n"
         "✨ <b>Что я умею:</b>\n"
-        "• 🔍 <b>Мгновенный поиск:</b> отправьте любое слово или фразу текстом (на русском, английском, китайском или пиньине)\n"
-        "• 🎙 <b>Голосовой перевод:</b> отправляйте голосовые сообщения на русском, английском, путунхуа или байхуа\n"
-        "• 🔊 <b>Озвучка произношения:</b> кнопки воспроизведения на Путунхуа (Mandarin), Байхуа (Кантонском), Русском и English\n"
-        "• 🔤 <b>Основное меню:</b> удобные кнопки языков [🇷🇺 Русский] [🇬🇧 English] [🇨🇳 Путунхуа] [🇭🇰 Кантонский]\n"
-        "• 📚 <b>Разделы словаря:</b>\n"
-        "   💬 <i>Повседневное общение, рестораны, покупки, отели, такси, офис</i>\n"
-        "   🤖 <i>IT, искусственный интеллект, программирование, базы данных, сети, железо</i>\n"
-        "• 🗣 <b>Пиньинь с тонами:</b> правильное произношение для каждого китайского выражения\n"
+        "• 🔍 <b>Мгновенный поиск:</b> отправьте любое слово или фразу текстом на русском, английском, китайском или бурятском\n"
+        "• 🎙 <b>Голосовой перевод:</b> отправляйте голосовые сообщения на русском, английском, китайском (путунхуа/байхуа) или бурятском\n"
+        "• 🔊 <b>Озвучка произношения:</b> кнопки воспроизведения на Путунхуа (Mandarin), Байхуа (Кантонском), Русском и American English\n"
+        "• 🔤 <b>Основное меню:</b> удобные кнопки языков [🇷🇺 Русский] [🇺🇸 American English] [🇨🇳 Путунхуа] [🇭🇰 Кантонский] [🔵 Буряад]\n"
+        "• 📚 <b>Разделы словаря:</b> повседневное общение, рестораны, покупки, отели, транспорт, офис, IT и AI\n"
+        "• 🗣 <b>Пиньинь с тонами:</b> транскрипция для каждого китайского выражения\n"
         "• 🧠 <b>Викторина:</b> проверяйте знания слов и фраз в интерактивном тесте\n"
-        "• 🌐 <b>Онлайн-перевод:</b> перевод любых длинных предложений и диалогов\n\n"
-        "👇 <i>Попробуйте прямо сейчас: напишите, например, <code>спасибо</code>, <code>多少钱</code>, <code>neural network</code> или отправьте голосовое сообщение!</i>"
+        "• 🌐 <b>Онлайн-перевод:</b> перевод любых предложений и живых диалогов\n\n"
+        "👇 <i>Попробуйте прямо сейчас: напишите, например, <code>спасибо</code>, <code>Мэндээ</code>, <code>多少钱</code>, <code>how much</code> или отправьте голосовое сообщение!</i>"
     )
     await update.message.reply_text(
         welcome_text,
@@ -400,7 +400,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=MAIN_KEYBOARD,
         )
         return
-    elif user_text in ["🔍 Поиск термина", "🔍 Поиск фразы / термина"]:
+    elif user_text in ["🔵 Буряад хэлэн (Бурятский)", "Бурятский", "Буряад"]:
+        await update.message.reply_text(
+            "🔵 <b>Буряад хэлэн (Бурятский язык):</b>\n"
+            "Напишите или наговорите фразу на бурятском или русском — бот выполнит перевод на бурятский, русский, китайский (путунхуа и байхуа) и американский английский!",
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return
+    elif user_text in ["🔍 Поиск термина", "🔍 Поиск фразы / термина", "🔍 Поиск фразы"]:
         await update.message.reply_text(
             "🔍 Введите слово или фразу на русском, американском английском, путунхуа или кантонском (иероглифы или пиньинь):",
             reply_markup=MAIN_KEYBOARD,
@@ -490,7 +498,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if output.detected_lang != Language.EN:
             en_val = output.online_translations.get("en", "")
             if en_val:
-                response_text += f"🇬🇧 <b>English:</b> <code>{html.escape(en_val)}</code>\n"
+                response_text += f"🇺🇸 <b>American English:</b> <code>{html.escape(en_val)}</code>\n"
+
+        # Бурятский перевод
+        bua_val = output.online_translations.get("bua", "")
+        if bua_val and output.detected_lang != Language.BUA:
+            response_text += f"🔵 <b>Бурятский (Буряад хэлэн):</b> <code>{html.escape(bua_val)}</code>\n"
 
         keyboard = get_online_translation_keyboard(output.online_translations, user_text)
 
@@ -601,7 +614,12 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if output.detected_lang != Language.EN:
                 en_val = output.online_translations.get("en", "")
                 if en_val:
-                    response_text += f"🇬🇧 <b>English:</b> <code>{html.escape(en_val)}</code>\n"
+                    response_text += f"🇺🇸 <b>American English:</b> <code>{html.escape(en_val)}</code>\n"
+
+            # Бурятский перевод
+            bua_val = output.online_translations.get("bua", "")
+            if bua_val and output.detected_lang != Language.BUA:
+                response_text += f"🔵 <b>Бурятский (Буряад хэлэн):</b> <code>{html.escape(bua_val)}</code>\n"
 
             keyboard = get_online_translation_keyboard(output.online_translations, text)
             await update.message.reply_text(response_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
