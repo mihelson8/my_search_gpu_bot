@@ -46,6 +46,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Токен бота (по умолчанию или из переменной окружения BOT_TOKEN)
+DEFAULT_BOT_TOKEN = "8624791018:AAGoN1NQz36MEfQV6oA2jrRLqbnNDUwcb4M"
+
 # Главное меню бота
 MAIN_KEYBOARD = [
     ["🏆 Виды спорта & Риски", "⚽ Разбор матча (АПЛ / Ла Лига)"],
@@ -442,7 +445,7 @@ def build_sports_bot_application(token: str):
 
 
 def main():
-    token = os.getenv("BOT_TOKEN")
+    token = os.getenv("BOT_TOKEN", DEFAULT_BOT_TOKEN)
     if not token:
         print("Ошибка: Переменная окружения BOT_TOKEN не установлена.")
         print("Установите токен: export BOT_TOKEN='your_token'")
