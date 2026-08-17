@@ -8,6 +8,7 @@ import urllib.parse
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import threading
 import webbrowser
+from typing import Any
 from business_suite_db import BusinessDB, DEFAULT_DB_PATH
 
 db = BusinessDB()

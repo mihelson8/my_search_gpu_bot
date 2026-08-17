@@ -1,15 +1,16 @@
 @echo off
 chcp 65001 > nul
-title CCTV ^& China Cargo Business Suite (Native Desktop)
+title CCTV and China Cargo Business Suite Desktop
 
 echo ============================================================
-echo   🚀 Запуск автономного приложения для Windows (GUI)
+echo   CCTV and China Cargo Business Suite (Desktop)
 echo ============================================================
 echo.
 
 python desktop_gui.py
 
 if %errorlevel% neq 0 (
-    echo При возникновении ошибки запускается веб-версия в браузере:
+    echo [Fallback] Starting web version...
     python app_suite.py
 )
+
