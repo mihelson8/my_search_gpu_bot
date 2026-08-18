@@ -405,9 +405,53 @@ class WeChatRequestHandler(BaseHTTPRequestHandler):
             if user_msg:
                 # Получаем перевод через движок
                 output = asyncio.run(translator.translate(user_msg))
-                reply_content = format_wechat_reply(output, user_msg)
 
-                # Запускаем фоновую отправку аудио-озвучки перевода
+                # Если пользователь отправил голосовое сообщение — сразу отвечаем голосовым переводом!
+                if msg_type == "voice":
+                    text_to_speak = ""
+                    lang_to_speak = "zh"
+
+                    if output.direct_match:
+                        t = output.direct_match
+                        if output.detected_lang == Language.ZH or is_chinese_text(user_msg):
+                            text_to_speak = t.ru
+                            lang_to_speak = "ru"
+                        else:
+                            text_to_speak = t.zh
+                            lang_to_speak = "zh"
+                    else:
+                        if (output.detected_lang == Language.ZH or is_chinese_text(user_msg)) and "ru" in output.online_translations:
+                            text_to_speak = output.online_translations["ru"]
+                            lang_to_speak = "ru"
+                        elif "zh" in output.online_translations:
+                            text_to_speak = output.online_translations["zh"]
+                            lang_to_speak = "zh"
+
+                    media_id = ""
+                    if text_to_speak:
+                        audio_io = generate_tts_audio(text_to_speak, lang=lang_to_speak)
+                        if audio_io:
+                            media_id = upload_wechat_voice_media(audio_io.getvalue(), filename=f"reply_{lang_to_speak}.mp3")
+
+                    # Если аудио успешно создано и загружено в WeChat — сразу возвращаем голосовой ответ (XML voice reply)
+                    if media_id:
+                        voice_xml = build_voice_reply_xml(from_user, to_user, media_id)
+                        self.send_response(200)
+                        self.send_header("Content-type", "application/xml; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(voice_xml.encode("utf-8"))
+
+                        # А текстовую карточку с пиньинем отправляем параллельно следом
+                        reply_content = format_wechat_reply(output, user_msg)
+                        threading.Thread(
+                            target=send_wechat_custom_message,
+                            args=(from_user, "text", reply_content, ""),
+                            daemon=True
+                        ).start()
+                        return
+
+                # Для текстового сообщения возвращаем текстовый перевод и фоном озвучку
+                reply_content = format_wechat_reply(output, user_msg)
                 threading.Thread(
                     target=async_send_voice_followup,
                     args=(from_user, output, user_msg),
