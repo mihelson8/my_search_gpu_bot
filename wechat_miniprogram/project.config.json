@@ -1,0 +1,14 @@
+{
+  "description": "WeChat Translator Mini Program (RU - ZH - EN - BUA)",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "postcss": true,
+    "minified": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "2.25.0",
+  "appid": "wx9f1912539effdbf3",
+  "projectname": "wechat_translator_miniprogram",
+  "condition": {}
+}

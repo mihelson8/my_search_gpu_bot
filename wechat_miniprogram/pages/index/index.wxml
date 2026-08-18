@@ -1,0 +1,131 @@
+<!-- pages/index/index.wxml -->
+<view class="container">
+  <!-- Header Banner -->
+  <view class="header-banner">
+    <view class="banner-title">多语言智能翻译助手</view>
+    <view class="banner-subtitle">🇷🇺 Русский · 🇨🇳 Путунхуа · 🇭🇰 Кантонский · 🇺🇸 English · 🔵 Буряад</view>
+  </view>
+
+  <!-- Input Card -->
+  <view class="input-card">
+    <textarea 
+      class="input-textarea" 
+      placeholder="Введите слово или фразу на любом языке / 输入任何文字..." 
+      value="{{queryText}}"
+      bindinput="onInput"
+      maxlength="500"
+    />
+    <view class="input-actions">
+      <button wx:if="{{queryText}}" class="btn-clear" bindtap="clearInput">✕ Очистить</button>
+      <button class="btn-translate" bindtap="doTranslate" loading="{{isLoading}}">Перевести / 翻译</button>
+    </view>
+  </view>
+
+  <!-- Quick Phrase Tags -->
+  <view class="quick-tags-section">
+    <view class="tags-title">Частые фразы / 常用短语:</view>
+    <view class="tags-container">
+      <view class="tag-chip" bindtap="selectQuickTag" data-text="Сколько это стоит?">💰 Сколько стоит?</view>
+      <view class="tag-chip" bindtap="selectQuickTag" data-text="Здравствуйте">👋 Здравствуйте</view>
+      <view class="tag-chip" bindtap="selectQuickTag" data-text="Где находится метро?">🚇 Где метро?</view>
+      <view class="tag-chip" bindtap="selectQuickTag" data-text="Спасибо">🙏 Спасибо</view>
+      <view class="tag-chip" bindtap="selectQuickTag" data-text="Счет, пожалуйста">🧾 Счет, пожалуйста</view>
+      <view class="tag-chip" bindtap="selectQuickTag" data-text="Искусственный интеллект">🤖 ИИ / AI</view>
+    </view>
+  </view>
+
+  <!-- Voice Input Button -->
+  <view class="voice-section">
+    <button 
+      class="btn-voice {{isRecording ? 'recording' : ''}}" 
+      bindtouchstart="startVoiceRecord" 
+      bindtouchend="stopVoiceRecord"
+    >
+      <text class="voice-icon">🎙️</text>
+      <text>{{isRecording ? 'Идет запись... Отпустите' : 'Удерживайте для голосового ввода / 按住说话'}}</text>
+    </button>
+  </view>
+
+  <!-- Translation Result Card -->
+  <view class="result-card" wx:if="{{result}}">
+    <view class="result-header">
+      <text class="result-title">Результаты перевода / 翻译结果</text>
+    </view>
+
+    <!-- Russian -->
+    <view class="lang-row" wx:if="{{result.ru}}">
+      <view class="lang-label">
+        <text class="flag">🇷🇺</text>
+        <text class="name">Русский:</text>
+      </view>
+      <view class="lang-content">
+        <text class="text">{{result.ru}}</text>
+        <view class="action-btns">
+          <button class="btn-audio" bindtap="playAudio" data-text="{{result.ru}}" data-lang="ru">🔊</button>
+          <button class="btn-copy" bindtap="copyText" data-text="{{result.ru}}">📋</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- Chinese Mandarin -->
+    <view class="lang-row" wx:if="{{result.zh}}">
+      <view class="lang-label">
+        <text class="flag">🇨🇳</text>
+        <text class="name">Путунхуа (Mandarin):</text>
+      </view>
+      <view class="lang-content">
+        <text class="text zh-text">{{result.zh}}</text>
+        <view class="pinyin-text" wx:if="{{result.pinyin}}">🗣 {{result.pinyin}}</view>
+        <view class="action-btns">
+          <button class="btn-audio" bindtap="playAudio" data-text="{{result.zh}}" data-lang="zh">🔊 Путунхуа</button>
+          <button class="btn-copy" bindtap="copyText" data-text="{{result.zh}}">📋</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- Cantonese / Baihua -->
+    <view class="lang-row" wx:if="{{result.zh}}">
+      <view class="lang-label">
+        <text class="flag">🇭🇰</text>
+        <text class="name">Кантонский / Байхуа:</text>
+      </view>
+      <view class="lang-content">
+        <text class="text zh-text">{{result.zh}}</text>
+        <view class="action-btns">
+          <button class="btn-audio" bindtap="playAudio" data-text="{{result.zh}}" data-lang="yue">🔊 Кантонский</button>
+          <button class="btn-copy" bindtap="copyText" data-text="{{result.zh}}">📋</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- American English -->
+    <view class="lang-row" wx:if="{{result.en}}">
+      <view class="lang-label">
+        <text class="flag">🇺🇸</text>
+        <text class="name">American English:</text>
+      </view>
+      <view class="lang-content">
+        <text class="text">{{result.en}}</text>
+        <view class="action-btns">
+          <button class="btn-audio" bindtap="playAudio" data-text="{{result.en}}" data-lang="en_us">🔊</button>
+          <button class="btn-copy" bindtap="copyText" data-text="{{result.en}}">📋</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- Buryat -->
+    <view class="lang-row" wx:if="{{result.bua}}">
+      <view class="lang-label">
+        <text class="flag">🔵</text>
+        <text class="name">Бурятский (Буряад хэлэн):</text>
+      </view>
+      <view class="lang-content">
+        <text class="text">{{result.bua}}</text>
+        <view class="action-btns">
+          <button class="btn-audio" bindtap="playAudio" data-text="{{result.bua}}" data-lang="bua">🔊</button>
+          <button class="btn-copy" bindtap="copyText" data-text="{{result.bua}}">📋</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

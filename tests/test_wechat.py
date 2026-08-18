@@ -6,6 +6,7 @@ import time
 import hashlib
 from wechat_server import check_wechat_signature, build_text_reply_xml, format_wechat_reply, WECHAT_TOKEN
 from translator.models import TranslationOutput, Language, TechTerm
+from translator.engine import TerminologyEngine, TechTranslator
 
 
 def test_wechat_signature_verification():
@@ -53,3 +54,15 @@ def test_wechat_voice_helpers():
     assert "<MediaId><![CDATA[media_id_123]]></MediaId>" in xml_str
     token = get_wechat_access_token()
     assert len(token) > 0
+
+
+def test_wechat_miniprogram_endpoint():
+    import json
+    import httpx
+    # Test translate endpoint
+    engine = TerminologyEngine()
+    translator = TechTranslator(engine)
+    import asyncio
+    output = asyncio.run(translator.translate("Сколько это стоит?"))
+    assert output is not None
+    assert output.direct_match is not None or "zh" in output.online_translations

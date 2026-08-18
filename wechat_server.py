@@ -353,16 +353,52 @@ class WeChatRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(res_data, ensure_ascii=False).encode("utf-8"))
                 return
 
-        # Иначе обычный Health Check для Render
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"WeChat Translator Server is running OK!")
+        # API озвучки TTS для WeChat Mini Program
+        if parsed.path == "/api/tts":
+            text = params.get("text", [""])[0]
+            lang = params.get("lang", ["zh"])[0]
+            if text:
+                audio_io = generate_tts_audio(text, lang=lang)
+                if audio_io:
+                    self.send_response(200)
+                    self.send_header("Content-type", "audio/mpeg")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(audio_io.getvalue())
+                    return
 
     def do_POST(self):
         """Обработка входящих текстовых и голосовых сообщений из WeChat."""
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
+
+        # API голосового перевода для Mini Program
+        if parsed.path == "/api/voice_translate":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            recognized_text = recognize_wechat_voice(post_data)
+            import json
+            if recognized_text:
+                output = asyncio.run(translator.translate(recognized_text))
+                res_data = {
+                    "query": recognized_text,
+                    "result": {
+                        "ru": output.direct_match.ru if output.direct_match else output.online_translations.get("ru", ""),
+                        "zh": output.direct_match.zh if output.direct_match else output.online_translations.get("zh", ""),
+                        "pinyin": output.direct_match.pinyin if output.direct_match else (output.pinyin or get_pinyin(output.online_translations.get("zh", ""))),
+                        "en": output.direct_match.en if output.direct_match else output.online_translations.get("en", ""),
+                        "bua": output.direct_match.bua if output.direct_match else output.online_translations.get("bua", ""),
+                    }
+                }
+            else:
+                res_data = {"error": "Could not recognize speech", "result": None}
+
+            self.send_response(200)
+            self.send_header("Content-type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(res_data, ensure_ascii=False).encode("utf-8"))
+            return
 
         signature = params.get("signature", [""])[0]
         timestamp = params.get("timestamp", [""])[0]
