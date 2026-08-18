@@ -434,9 +434,30 @@ def recognize_scene(image, min_confidence: float = 0.35):
     except Exception:
         zoom = None
 
+    car_zoom = None
+    try:
+        if unique and unique[0].bbox:
+            plate_box = unique[0].bbox
+            owner_car = None
+            for item in silhouettes:
+                car_box = item.box
+                if car_box[0] <= plate_box[0] <= car_box[2] or car_box[0] <= plate_box[2] <= car_box[2]:
+                    owner_car = car_box
+                    break
+            if owner_car:
+                car_zoom = zoom_box(image, owner_car, min_w=800, min_h=480, pad=0.15)
+            else:
+                car_zoom = zoom_box(image, plate_box, min_w=800, min_h=480, pad=0.90)
+        elif silhouettes:
+            car_zoom = zoom_box(image, silhouettes[0].box, min_w=800, min_h=480, pad=0.15)
+    except Exception:
+        car_zoom = None
+
     try:
         annotated = annotate_scene(image, silhouettes, unique)
-        if zoom_src:
+        if car_zoom is not None:
+            annotated = car_zoom
+        elif zoom_src:
             annotated = zoom_box(image, zoom_src, min_w=760, min_h=240, pad=0.55)
         elif silhouettes:
             annotated = crop_to_vehicles(annotated, silhouettes)

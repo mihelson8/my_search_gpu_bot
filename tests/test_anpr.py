@@ -184,6 +184,67 @@ def test_newest_image_path(tmp_path):
     assert newest_image_path(str(tmp_path)).endswith("new.jpg")
 
 
+def test_newest_image_path_searches_other_folders(tmp_path, monkeypatch):
+    from anpr import capture
+
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "nouser"))
+    monkeypatch.setenv("HOME", str(tmp_path / "nouser"))
+    missing = tmp_path / "missing-pi"
+    found_dir = tmp_path / "other-pi"
+    found_dir.mkdir()
+    shot = found_dir / "cam.jpg"
+    shot.write_bytes(b"x")
+    monkeypatch.setattr(capture, "DEFAULT_SEETONG_SHOT_DIRS", (str(found_dir),))
+    assert capture.newest_image_path(str(missing)).endswith("cam.jpg")
+
+
+def test_seetong_shot_candidates_include_requested_folder():
+    from anpr.capture import seetong_shot_candidates
+
+    paths = seetong_shot_candidates(r"C:\Program Files (x86)\Seetong\pi")
+    assert paths[0].lower().endswith(os.path.join("seetong", "pi").lower()) or "seetong" in paths[0].lower()
+
+
+def test_folder_source_falls_back_to_window(monkeypatch):
+    from anpr.capture import WindowInfo, grab_frame
+
+    class FakeFrame:
+        size = 12
+
+        def mean(self):
+            return 80.0
+
+    fake = FakeFrame()
+    monkeypatch.setattr(
+        "anpr.capture.grab_newest_in_folder",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("Нет папки снимков Seetong: C:\\x")),
+    )
+    monkeypatch.setattr(
+        "anpr.capture.find_seetong_window",
+        lambda *_a, **_k: WindowInfo(1, "Seetong Lite Client", 0, 0, 100, 80),
+    )
+    monkeypatch.setattr("anpr.capture.grab_window", lambda *_a, **_k: fake)
+    frame, title = grab_frame("seetong_folder", shots_dir=r"C:\Program Files (x86)\Seetong\pi")
+    assert frame is fake
+    assert "Seetong" in title
+
+
+def test_folder_and_window_failure_has_clear_hint(monkeypatch):
+    from anpr.capture import grab_frame
+
+    monkeypatch.setattr(
+        "anpr.capture.grab_newest_in_folder",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("Нет папки снимков Seetong: C:\\x")),
+    )
+    monkeypatch.setattr("anpr.capture.find_seetong_window", lambda *_a, **_k: None)
+    with pytest.raises(RuntimeError) as exc:
+        grab_frame("seetong_folder", shots_dir=r"C:\Program Files (x86)\Seetong\pi")
+    message = str(exc.value)
+    assert "Нет папки снимков Seetong:" not in message
+    assert "Main View" in message
+    assert "фотоаппарата" in message
+
+
 def test_crop_roi():
     numpy = pytest.importorskip("numpy")
     from anpr.capture import crop_roi

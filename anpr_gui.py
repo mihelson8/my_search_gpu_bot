@@ -673,7 +673,7 @@ class AnprApp:
 
     def _show_capture_error(self, message: str) -> None:
         self._set_detection("—", "unknown", message, 0.0)
-        self.preview_label.config(image="", text="Нет кадра.\n" + message)
+        self.preview_label.config(image="", text=message)
 
     def _show_preview(self, frame) -> None:
         try:
@@ -716,7 +716,7 @@ class AnprApp:
         )
         self.detail_label.config(text=detail)
         if plate and plate != "—":
-            self.manual_var.set(plate)
+            self.manual_var.set(normalize_plate(plate))
 
     def _beep(self) -> None:
         try:

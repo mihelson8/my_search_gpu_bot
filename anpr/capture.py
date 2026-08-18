@@ -359,27 +359,101 @@ def grab_http_snapshot(url: str):
     return frame
 
 
-def newest_image_path(folder: str) -> str:
+DEFAULT_SEETONG_SHOT_DIRS = (
+    r"C:\Program Files (x86)\Seetong\pi",
+    r"C:\Program Files\Seetong\pi",
+    r"D:\Program Files (x86)\Seetong\pi",
+    r"D:\Program Files\Seetong\pi",
+    r"D:\Seetong\pi",
+    r"C:\Seetong\pi",
+)
+
+NO_FRAME_HINT = (
+    "Не удалось взять кадр с камеры Seetong.\n"
+    "1. Откройте Seetong Lite Client на вкладке Main View — картинка камеры должна быть видна.\n"
+    "2. Нажмите значок фотоаппарата один раз (снимок попадёт в папку pi).\n"
+    "3. Сдвиньте окно автономеров, чтобы оно не закрывало камеру."
+)
+
+
+def seetong_shot_candidates(folder: str = "") -> List[str]:
+    extra: List[str] = []
+    home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
+    if home:
+        extra.extend(
+            [
+                os.path.join(home, "Pictures", "Seetong"),
+                os.path.join(home, "Documents", "Seetong", "pi"),
+                os.path.join(home, "Seetong", "pi"),
+            ]
+        )
+    ordered: List[str] = []
+    seen = set()
+    for cand in (folder, *DEFAULT_SEETONG_SHOT_DIRS, *extra):
+        if not cand:
+            continue
+        c_norm = os.path.normpath(str(cand).strip())
+        key = c_norm.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(c_norm)
+    return ordered
+
+
+def _list_image_files(folder: str) -> List[str]:
     import glob
 
-    if not folder or not os.path.isdir(folder):
-        raise RuntimeError(f"Нет папки снимков Seetong: {folder}")
-    files = []
-    for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.PNG"):
+    files: List[str] = []
+    for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.JPEG", "*.PNG", "*.BMP"):
         files.extend(glob.glob(os.path.join(folder, pattern)))
         files.extend(glob.glob(os.path.join(folder, "*", pattern)))
-    files = [path for path in files if os.path.isfile(path)]
-    if not files:
-        raise RuntimeError(
-            f"В папке нет снимков: {folder}\n"
-            "Откройте Main View в Seetong и нажмите кнопку снимка (фотоаппарат)."
-        )
-    return max(files, key=os.path.getmtime)
+    return [path for path in files if os.path.isfile(path)]
+
+
+def newest_image_path(folder: str) -> str:
+    files: List[str] = []
+    for cand in seetong_shot_candidates(folder):
+        if not os.path.isdir(cand):
+            continue
+        files.extend(_list_image_files(cand))
+    if files:
+        return max(files, key=os.path.getmtime)
+    if folder:
+        try:
+            os.makedirs(os.path.normpath(folder.strip()), exist_ok=True)
+        except Exception:
+            pass
+    shown = folder or r"C:\Program Files (x86)\Seetong\pi"
+    raise RuntimeError(
+        f"В папке нет снимков: {shown}\n"
+        "В Seetong Lite Client откройте Main View и нажмите значок фотоаппарата один раз."
+    )
 
 
 def grab_newest_in_folder(folder: str):
     path = newest_image_path(folder)
     return grab_file(path), os.path.basename(path)
+
+
+def _try_folder_frame(shots_dir: str):
+    try:
+        return grab_newest_in_folder(shots_dir)
+    except Exception:
+        return None
+
+
+def _try_live_window_frame(window_title: str = ""):
+    info = find_seetong_window(window_title)
+    if info is None:
+        return None
+    try:
+        frame = grab_window(info)
+    except Exception:
+        return None
+    if frame is None or getattr(frame, "size", 0) == 0 or _is_mostly_black(frame):
+        return None
+    return frame, info.title
 
 
 def grab_file(path: str):
@@ -436,7 +510,14 @@ def grab_frame(
     if source == "http":
         return grab_http_snapshot(http_url), "http"
     if source in ("seetong_folder", "shots"):
-        return grab_newest_in_folder(shots_dir or file_path)
+        folder_hit = _try_folder_frame(shots_dir or file_path)
+        if folder_hit is not None:
+            return folder_hit
+        window_hit = _try_live_window_frame(window_title)
+        if window_hit is not None:
+            return window_hit
+        shown = shots_dir or file_path or r"C:\Program Files (x86)\Seetong\pi"
+        raise RuntimeError(f"{NO_FRAME_HINT}\nПапка: {shown}")
     if source == "file":
         return grab_file(file_path), os.path.basename(file_path)
     raise RuntimeError(f"Неизвестный источник: {source}")
