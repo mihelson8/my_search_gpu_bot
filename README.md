@@ -199,12 +199,15 @@ python3 -m pytest
 
 ### Запуск на Windows (тот компьютер, где открыт Seetong)
 
-1. Откройте **Seetong Lite Client** на вкладке Main View с картинкой камеры.
-2. Двойной клик по **`START_ANPR.bat`** (при первом запуске поставит OpenCV / Pillow / mss и ярлык **Автономера Seetong** на рабочий стол). Ярлык запускает программу через `pythonw.exe`, без чёрного окна cmd. Если ярлыка нет — один раз запустите **`DESKTOP_SHORTCUT_ANPR.bat`**.
-3. В программе нажмите **Старт**. Источник по умолчанию — **папка снимков Seetong** (`C:\Program Files (x86)\Seetong\pi`). Если папки нет или она пустая, программа сама снимет **окно Seetong**.
-4. Во вкладке **База Свой / Чужой** добавьте свои машины.
+1. Закройте WinRAR. Распакуйте ZIP в любую папку.
+2. Двойной клик по **`START_ANPR.bat`** (или `FIX_AND_CLEAN.bat`). Скрипт:
+   - ставит программу в **`D:\AvtonomeraSeetong`**
+   - создаёт ярлык **Автономера Seetong** без чёрного окна cmd (`pythonw.exe`)
+   - удаляет лишние копии `my_search_gpu_bot*` с Desktop / Downloads / `D:\`
+   - открывает окно справа, чтобы Seetong остался слева
+3. Откройте **Seetong Lite Client** на Main View. Съёмка начнётся сама. Нужен номер вида `А 000 АА | 00`.
 
-Держите **одну** распакованную папку (лучше `D:\my_search_gpu_bot-...`). Лишние копии в Downloads / Desktop / WinRAR запускают старую версию. RapidOCR на Python 3.14 может не встать — это нормально: сначала ставятся opencv, Pillow, mss, numpy.
+Дальше достаточно ярлыка на рабочем столе. Папка снимков только одна: `C:\Program Files (x86)\Seetong\pi`. RapidOCR на Python 3.14 может не встать — это нормально: сначала ставятся opencv, Pillow, mss, numpy.
 
 **Другой компьютер в локальной сети с камерой:** скачайте ZIP этой ветки, поставьте Python 3 (галочка Add to PATH), в папке проекта `python -m pip install -r requirements-anpr.txt`, затем `python anpr_gui.py`. Кнопка **Камера / IP** — введите IP, логин `admin`, пароль (часто `123456`). Сначала HTTP-снимок, если не выйдет — RTSP: `rtsp://admin:ПАРОЛЬ@IP:554/mpeg4`.
 

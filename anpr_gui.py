@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from anpr.config import load_config, save_config
+from anpr.config import (
+    OFFICIAL_SEETONG_SHOTS_DIR,
+    load_config,
+    save_config,
+    sanitize_shots_dir,
+    side_window_geometry,
+)
 from anpr.database import AnprDB
 from anpr.plates import category_label, format_plate, format_plate_parts, is_osd_text, normalize_plate, parse_category, plate_is_valid
 
@@ -32,8 +40,10 @@ class AnprApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Автономера · Seetong · Свой / Чужой")
-        self.root.geometry("1180x760")
-        self.root.minsize(960, 640)
+        self.root.minsize(720, 520)
+        self.root.geometry(
+            side_window_geometry(self.root.winfo_screenwidth(), self.root.winfo_screenheight())
+        )
 
         self.bg = "#0f172a"
         self.card = "#1e293b"
@@ -44,8 +54,9 @@ class AnprApp:
 
         self.db = AnprDB()
         self.cfg = load_config()
-        if self.cfg.get("source") == "monitor":
+        if self.cfg.get("source") not in ("http", "rtsp", "file"):
             self.cfg["source"] = "seetong_folder"
+        self.cfg["shots_dir"] = sanitize_shots_dir(str(self.cfg.get("shots_dir") or OFFICIAL_SEETONG_SHOTS_DIR))
         self._running = False
         self._busy = False
         self._last_frame = None
@@ -63,7 +74,7 @@ class AnprApp:
         self._set_detection(
             "—",
             "unknown",
-            "Снимок из Seetong → Старт. Программа ищет силуэт авто, отсекает двор и надписи, читает номер вида «А 000 АА | 00».",
+            "Seetong слева, это окно справа. Съёмка начнётся сама. Нужен номер вида «А 000 АА | 00».",
             0.0,
         )
         self.root.after(200, self._warn_missing_packages)
@@ -77,6 +88,7 @@ class AnprApp:
         except Exception:
             missing = ["numpy", "Pillow", "mss"]
         if not missing:
+            self.root.after(500, self.start_capture)
             return
         names = ", ".join(missing)
         text = (
@@ -106,7 +118,8 @@ class AnprApp:
     def _build(self) -> None:
         header = ttk.Frame(self.root, padding="14 10")
         header.pack(fill="x")
-        ttk.Label(header, text="Автономера · Seetong Lite Client", style="Header.TLabel").pack(side="left")
+        ttk.Label(header, text="Автономера · Seetong", style="Header.TLabel").pack(side="left")
+        ttk.Label(header, text="окно справа, камера слева", style="Muted.TLabel").pack(side="left", padx=(12, 0))
         self.stats_label = ttk.Label(header, text="", style="Muted.TLabel")
         self.stats_label.pack(side="right")
 
@@ -119,18 +132,8 @@ class AnprApp:
         ttk.Button(top, text="Снимок сейчас", command=self.capture_once).pack(side="left", padx=(0, 8))
         ttk.Button(top, text="Камера / IP", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
 
-        ttk.Label(top, text="Источник:").pack(side="left")
         self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["seetong_folder"]))
-        self.source_combo = ttk.Combobox(
-            top,
-            textvariable=self.source_var,
-            values=list(SOURCE_LABELS.values()),
-            state="readonly",
-            width=28,
-        )
-        self.source_combo.pack(side="left", padx=6)
-
-        self.run_label = ttk.Label(top, text="остановлено", style="Muted.TLabel")
+        self.run_label = ttk.Label(top, text="запуск…", style="Muted.TLabel")
         self.run_label.pack(side="right")
 
         self.camera_ip_var = tk.StringVar(value=self.cfg.get("camera_ip", "192.168.0.123"))
@@ -146,7 +149,7 @@ class AnprApp:
         ttk.Label(preview_card, text="Силуэт авто (остальное отсечено)", style="Card.TLabel").pack(anchor="w", padx=12, pady=(10, 4))
         self.preview_label = tk.Label(
             preview_card,
-            text="Нет кадра.\nСнимок Seetong → Старт.\nИщем машину, номер вида «А 000 АА 00».",
+            text="Откройте Seetong слева. Съёмка начнётся сама.",
             bg="#020617",
             fg=self.muted,
             font=("Segoe UI", 11),
@@ -332,7 +335,10 @@ class AnprApp:
         ttk.Button(grid, text="Обновить список окон", command=self.refresh_windows).grid(
             row=1, column=2, padx=8, sticky="w"
         )
-        ttk.Button(grid, text="Папка снимков…", command=self.pick_shots_dir).grid(row=4, column=2, padx=8, sticky="w")
+        ttk.Button(grid, text="Папка снимков…", command=self.pick_shots_dir).grid(row=4, column=2, padx=8, sticky="nw")
+        ttk.Button(grid, text="Только Seetong\\pi", command=self.reset_official_shots_dir).grid(
+            row=4, column=3, padx=4, sticky="nw"
+        )
         ttk.Button(grid, text="Выбрать файл…", command=self.pick_file).grid(row=5, column=2, padx=8, sticky="w")
 
         checks = ttk.Frame(self.tab_set)
@@ -366,6 +372,11 @@ class AnprApp:
             pass
         ttk.Label(self.tab_set, text=engine_text, style="Muted.TLabel").pack(anchor="w")
         ttk.Button(self.tab_set, text="Сохранить настройки", command=self.persist_settings).pack(anchor="w", pady=12)
+        ttk.Button(
+            self.tab_set,
+            text="Удалить лишние копии программы",
+            command=self.remove_wrong_copies,
+        ).pack(anchor="w")
 
     def persist_settings(self) -> None:
         self.cfg.update(self._settings_from_form())
@@ -394,7 +405,7 @@ class AnprApp:
             "rtsp_url": self.rtsp_var.get().strip(),
             "http_url": self.http_var.get().strip(),
             "file_path": self.file_var.get().strip(),
-            "shots_dir": self.shots_dir_var.get().strip(),
+            "shots_dir": sanitize_shots_dir(self.shots_dir_var.get().strip()),
             "crop_left": min(0.45, _pct(self.crop_l, 0.20)),
             "crop_top": min(0.45, _pct(self.crop_t, 0.12)),
             "crop_right": min(0.45, _pct(self.crop_r, 0.01)),
@@ -514,8 +525,33 @@ class AnprApp:
     def pick_shots_dir(self) -> None:
         path = filedialog.askdirectory(title="Папка снимков Seetong")
         if path:
-            self.shots_dir_var.set(path)
+            self.shots_dir_var.set(sanitize_shots_dir(path))
             self.source_var.set(SOURCE_LABELS["seetong_folder"])
+
+    def reset_official_shots_dir(self) -> None:
+        self.shots_dir_var.set(OFFICIAL_SEETONG_SHOTS_DIR)
+        self.cfg["shots_dir"] = OFFICIAL_SEETONG_SHOTS_DIR
+        self.source_var.set(SOURCE_LABELS["seetong_folder"])
+        save_config(self.cfg)
+
+    def remove_wrong_copies(self) -> None:
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "FIX_AND_CLEAN.ps1")
+        if sys.platform != "win32":
+            messagebox.showinfo("Копии", "Очистка копий запускается на Windows ПК.")
+            return
+        if not os.path.isfile(script):
+            messagebox.showerror("Файл", "Не найден FIX_AND_CLEAN.ps1 рядом с программой.")
+            return
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script],
+            cwd=os.path.dirname(script),
+        )
+        messagebox.showinfo(
+            "Очистка",
+            "Старые папки my_search_gpu_bot будут удалены.\n"
+            "Программа останется в D:\\AvtonomeraSeetong.\n"
+            "Дальше открывайте ярлык Автономера Seetong на рабочем столе.",
+        )
 
     def pick_file(self) -> None:
         path = filedialog.askopenfilename(

@@ -359,15 +359,6 @@ def grab_http_snapshot(url: str):
     return frame
 
 
-DEFAULT_SEETONG_SHOT_DIRS = (
-    r"C:\Program Files (x86)\Seetong\pi",
-    r"C:\Program Files\Seetong\pi",
-    r"D:\Program Files (x86)\Seetong\pi",
-    r"D:\Program Files\Seetong\pi",
-    r"D:\Seetong\pi",
-    r"C:\Seetong\pi",
-)
-
 NO_FRAME_HINT = (
     "Не удалось взять кадр с камеры Seetong.\n"
     "1. Откройте Seetong Lite Client на вкладке Main View — картинка камеры должна быть видна.\n"
@@ -377,28 +368,10 @@ NO_FRAME_HINT = (
 
 
 def seetong_shot_candidates(folder: str = "") -> List[str]:
-    extra: List[str] = []
-    home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
-    if home:
-        extra.extend(
-            [
-                os.path.join(home, "Pictures", "Seetong"),
-                os.path.join(home, "Documents", "Seetong", "pi"),
-                os.path.join(home, "Seetong", "pi"),
-            ]
-        )
-    ordered: List[str] = []
-    seen = set()
-    for cand in (folder, *DEFAULT_SEETONG_SHOT_DIRS, *extra):
-        if not cand:
-            continue
-        c_norm = os.path.normpath(str(cand).strip())
-        key = c_norm.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        ordered.append(c_norm)
-    return ordered
+    """Only the configured Seetong screenshot folder — never leftover ZIP copies."""
+    from anpr.config import sanitize_shots_dir
+
+    return [sanitize_shots_dir(folder)]
 
 
 def _list_image_files(folder: str) -> List[str]:
@@ -407,24 +380,24 @@ def _list_image_files(folder: str) -> List[str]:
     files: List[str] = []
     for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.JPEG", "*.PNG", "*.BMP"):
         files.extend(glob.glob(os.path.join(folder, pattern)))
-        files.extend(glob.glob(os.path.join(folder, "*", pattern)))
     return [path for path in files if os.path.isfile(path)]
 
 
 def newest_image_path(folder: str) -> str:
+    from anpr.config import OFFICIAL_SEETONG_SHOTS_DIR, sanitize_shots_dir
+
+    chosen = sanitize_shots_dir(folder)
     files: List[str] = []
-    for cand in seetong_shot_candidates(folder):
-        if not os.path.isdir(cand):
-            continue
-        files.extend(_list_image_files(cand))
+    if os.path.isdir(chosen):
+        files.extend(_list_image_files(chosen))
     if files:
         return max(files, key=os.path.getmtime)
-    if folder:
+    if chosen:
         try:
-            os.makedirs(os.path.normpath(folder.strip()), exist_ok=True)
+            os.makedirs(chosen, exist_ok=True)
         except Exception:
             pass
-    shown = folder or r"C:\Program Files (x86)\Seetong\pi"
+    shown = chosen or OFFICIAL_SEETONG_SHOTS_DIR
     raise RuntimeError(
         f"В папке нет снимков: {shown}\n"
         "В Seetong Lite Client откройте Main View и нажмите значок фотоаппарата один раз."

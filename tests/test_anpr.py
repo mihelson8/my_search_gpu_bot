@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from anpr.config import DEFAULTS, load_config, save_config
+from anpr.config import DEFAULTS, load_config, save_config, side_window_geometry
 from anpr.database import AnprDB
 from anpr.plates import (
     category_label,
@@ -163,6 +163,21 @@ def test_csv_roundtrip(temp_db):
         os.remove(other_path)
 
 
+def test_side_window_geometry_keeps_seetong_visible():
+    assert side_window_geometry(1920, 1080, win_w=980, win_h=720, margin=16) == "980x720+924+64"
+    assert side_window_geometry(800, 600, win_w=980, win_h=720, margin=16) == "768x568+16+16"
+
+
+def test_sanitize_drops_leftover_extract_folders():
+    from anpr.config import OFFICIAL_SEETONG_SHOTS_DIR, is_leftover_extract_path, sanitize_shots_dir
+
+    leftover = r"D:\my_search_gpu_bot-cursor-anpr-seetong-plates-6b83\pi"
+    assert is_leftover_extract_path(leftover)
+    assert sanitize_shots_dir(leftover) == OFFICIAL_SEETONG_SHOTS_DIR
+    assert sanitize_shots_dir("") == OFFICIAL_SEETONG_SHOTS_DIR
+    assert sanitize_shots_dir(OFFICIAL_SEETONG_SHOTS_DIR) == OFFICIAL_SEETONG_SHOTS_DIR
+
+
 def test_config_roundtrip(tmp_path):
     path = str(tmp_path / "config.json")
     save_config({"interval_sec": 2.5, "source": "rtsp"}, path)
@@ -184,25 +199,28 @@ def test_newest_image_path(tmp_path):
     assert newest_image_path(str(tmp_path)).endswith("new.jpg")
 
 
-def test_newest_image_path_searches_other_folders(tmp_path, monkeypatch):
+def test_newest_image_path_ignores_other_folders(tmp_path, monkeypatch):
     from anpr import capture
+    from anpr.config import OFFICIAL_SEETONG_SHOTS_DIR
 
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "nouser"))
     monkeypatch.setenv("HOME", str(tmp_path / "nouser"))
     missing = tmp_path / "missing-pi"
-    found_dir = tmp_path / "other-pi"
-    found_dir.mkdir()
-    shot = found_dir / "cam.jpg"
-    shot.write_bytes(b"x")
-    monkeypatch.setattr(capture, "DEFAULT_SEETONG_SHOT_DIRS", (str(found_dir),))
-    assert capture.newest_image_path(str(missing)).endswith("cam.jpg")
+    other = tmp_path / "other-pi"
+    other.mkdir()
+    (other / "cam.jpg").write_bytes(b"x")
+    with pytest.raises(RuntimeError) as exc:
+        capture.newest_image_path(str(missing))
+    assert "снимков" in str(exc.value)
+    assert capture.seetong_shot_candidates(r"D:\my_search_gpu_bot-old\pi") == [OFFICIAL_SEETONG_SHOTS_DIR]
 
 
 def test_seetong_shot_candidates_include_requested_folder():
     from anpr.capture import seetong_shot_candidates
 
     paths = seetong_shot_candidates(r"C:\Program Files (x86)\Seetong\pi")
-    assert paths[0].lower().endswith(os.path.join("seetong", "pi").lower()) or "seetong" in paths[0].lower()
+    assert len(paths) == 1
+    assert "seetong" in paths[0].lower()
 
 
 def test_folder_source_falls_back_to_window(monkeypatch):
