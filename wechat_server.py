@@ -307,7 +307,7 @@ class WeChatRequestHandler(BaseHTTPRequestHandler):
     """HTTP обработчик для WeChat Webhook и Health check."""
 
     def do_GET(self):
-        """1. Верификация сервера WeChat. 2. Health Check для Render."""
+        """1. Верификация сервера WeChat. 2. API перевода. 3. Health Check для Render."""
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
 
@@ -330,6 +330,27 @@ class WeChatRequestHandler(BaseHTTPRequestHandler):
                 self.send_response(403)
                 self.end_headers()
                 self.wfile.write(b"Invalid signature")
+                return
+
+        # API для WeChat Mini Program (Мини-программы)
+        if parsed.path == "/api/translate":
+            q = params.get("q", [""])[0]
+            if q:
+                output = asyncio.run(translator.translate(q))
+                res_data = {
+                    "query": q,
+                    "ru": output.direct_match.ru if output.direct_match else output.online_translations.get("ru", ""),
+                    "zh": output.direct_match.zh if output.direct_match else output.online_translations.get("zh", ""),
+                    "pinyin": output.direct_match.pinyin if output.direct_match else (output.pinyin or get_pinyin(output.online_translations.get("zh", ""))),
+                    "en": output.direct_match.en if output.direct_match else output.online_translations.get("en", ""),
+                    "bua": output.direct_match.bua if output.direct_match else output.online_translations.get("bua", ""),
+                }
+                import json
+                self.send_response(200)
+                self.send_header("Content-type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps(res_data, ensure_ascii=False).encode("utf-8"))
                 return
 
         # Иначе обычный Health Check для Render
