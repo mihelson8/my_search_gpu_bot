@@ -14,11 +14,6 @@ if not defined LAUNCH (
 
 echo Installing: %LAUNCH% -m pip install -r requirements-anpr.txt
 %LAUNCH% -m pip install -r requirements-anpr.txt
-if errorlevel 1 (
-    echo Install failed
-    pause
-    exit /b 1
-)
-
+%LAUNCH% -m pip install rapidocr-onnxruntime 2>nul
 echo OK. Now run: python anpr_gui.py
 pause

@@ -50,10 +50,9 @@ echo Using: %LAUNCH%
 if errorlevel 1 (
     echo Installing packages, please wait...
     %LAUNCH% -m pip install -r requirements-anpr.txt
+    %LAUNCH% -m pip install rapidocr-onnxruntime 2>nul
     if errorlevel 1 (
-        echo pip install failed
-        pause
-        exit /b 1
+        %LAUNCH% -m pip install opencv-python Pillow mss numpy
     )
 )
 
