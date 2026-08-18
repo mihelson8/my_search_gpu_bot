@@ -81,20 +81,8 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
 )
 
 
-# === Simple HTTP Server for Render Health Check ===
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Technical Terms Translator Bot is running OK!")
-
-    def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
-
-    def log_message(self, format, *args):
-        pass
+# === Simple HTTP Server for Render Health Check and WeChat Webhook ===
+from wechat_server import WeChatRequestHandler, check_wechat_signature, build_text_reply_xml, format_wechat_reply, WECHAT_TOKEN
 
 
 def start_health_check_server(port: int):
@@ -103,10 +91,10 @@ def start_health_check_server(port: int):
         class ReusableHTTPServer(HTTPServer):
             allow_reuse_address = True
 
-        server = ReusableHTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        server = ReusableHTTPServer(("0.0.0.0", port), WeChatRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        logger.info(f"Health check HTTP-сервер успешно запущен на порту {port}")
+        logger.info(f"Dual Health Check & WeChat Webhook HTTP-сервер успешно запущен на порту {port}")
     except Exception as e:
         logger.warning(f"Не удалось запустить health check сервер на порту {port}: {e}")
 
