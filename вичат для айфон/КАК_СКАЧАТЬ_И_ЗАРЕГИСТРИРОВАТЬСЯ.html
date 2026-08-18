@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WeChat на iPhone для пользователя из России — установка и регистрация</title>
+  <style>
+    :root {
+      --green: #07c160;
+      --green-dark: #06ad56;
+      --ink: #1a1a1a;
+      --muted: #5a5a5a;
+      --bg: #f4f6f5;
+      --card: #ffffff;
+      --warn: #fff4e5;
+      --warn-border: #f0b429;
+      --danger: #fff1f0;
+      --danger-border: #e24c4c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 80px; }
+    header {
+      background: linear-gradient(160deg, #07c160, #05a34f);
+      color: #fff;
+      border-radius: 20px;
+      padding: 28px 24px;
+      margin-bottom: 20px;
+    }
+    header h1 { margin: 0 0 8px; font-size: 1.55rem; }
+    header p { margin: 0; opacity: .95; }
+    nav {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    nav a { color: var(--green-dark); text-decoration: none; }
+    nav ol { margin: 8px 0 0; padding-left: 22px; }
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 20px 20px 8px;
+      margin: 16px 0;
+      box-shadow: 0 1px 0 rgba(0,0,0,.04);
+    }
+    .step { overflow: hidden; }
+    .step h2 { margin: 0 0 8px; font-size: 1.2rem; }
+    .badge {
+      display: inline-block;
+      background: var(--green);
+      color: #fff;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: .78rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .photo {
+      display: block;
+      width: min(100%, 360px);
+      margin: 12px auto 16px;
+      border-radius: 18px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    }
+    .note, .warn, .danger {
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin: 12px 0 16px;
+    }
+    .note { background: #eefaf3; border: 1px solid #b7ebc9; }
+    .warn { background: var(--warn); border: 1px solid var(--warn-border); }
+    .danger { background: var(--danger); border: 1px solid var(--danger-border); }
+    ul { padding-left: 20px; }
+    footer { color: var(--muted); font-size: .9rem; margin-top: 24px; }
+    code { background: #eef1f0; padding: 1px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>WeChat (微信) на iPhone</h1>
+      <p>Пошаговая инструкция для пользователя из России: скачать из App Store и зарегистрироваться с номером +7.</p>
+    </header>
+
+    <nav>
+      <strong>Содержание</strong>
+      <ol>
+        <li><a href="#podgotovka">Подготовка</a></li>
+        <li><a href="#ustanovka">Скачать и установить</a></li>
+        <li><a href="#registraciya">Регистрация</a></li>
+        <li><a href="#ne-poluchaetsya">Если не получается</a></li>
+      </ol>
+      <p>Официальная страница в российском App Store:
+        <a href="https://apps.apple.com/ru/app/wechat/id414478124">WeChat — Tencent</a>
+      </p>
+    </nav>
+
+    <section class="card" id="podgotovka">
+      <h2>Что нужно заранее</h2>
+      <ul>
+        <li>iPhone с iOS 15 или новее и Apple ID.</li>
+        <li>Настоящая SIM-карта российского оператора с номером <strong>+7</strong> (не виртуальный номер).</li>
+        <li>Стабильный интернет: домашний Wi‑Fi или мобильный интернет.</li>
+        <li>Лучшее время регистрации: примерно <strong>5:00–14:00 по Москве</strong> (рабочие часы в Китае).</li>
+        <li>Желательно знать человека, у которого WeChat уже есть — иногда нужна проверка по QR.</li>
+      </ul>
+      <div class="danger">
+        <strong>Не используйте VPN во время регистрации.</strong>
+        WeChat часто блокирует новые аккаунты, если видит смену IP или прокси.
+      </div>
+    </section>
+
+    <article class="card step" id="vpn">
+      <span class="badge">Перед началом</span>
+      <h2>Выключите VPN</h2>
+      <p>Откройте <strong>Настройки</strong> → найдите <strong>VPN</strong> (или приложение VPN) → переведите переключатель в положение <strong>Выкл</strong>. Если VPN встроен в другое приложение — закройте его полностью.</p>
+      <img class="photo" src="фото/00-vyklyuchit-vpn.png" alt="Выключить VPN в настройках iPhone" />
+    </article>
+
+    <h2 id="ustanovka">Часть 1. Скачать WeChat</h2>
+
+    <article class="card step">
+      <span class="badge">Шаг 1</span>
+      <h2>Откройте App Store</h2>
+      <p>На главном экране iPhone нажмите синюю иконку <strong>App Store</strong> (буква A с кистью). Не скачивайте WeChat с посторонних сайтов — только из App Store.</p>
+      <img class="photo" src="фото/01-glavnyy-ekran.png" alt="Главный экран iPhone, иконка App Store" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 2</span>
+      <h2>Перейдите во вкладку «Поиск»</h2>
+      <p>Внизу экрана нажмите <strong>Поиск</strong> (лупа). Это крайняя правая вкладка.</p>
+      <img class="photo" src="фото/02-app-store-poisk.png" alt="Вкладка Поиск в App Store" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 3</span>
+      <h2>Введите WeChat</h2>
+      <p>В строке поиска напишите <code>WeChat</code> или <code>Weixin</code> и нажмите <strong>найти</strong> на клавиатуре.</p>
+      <img class="photo" src="фото/03-vvod-wechat.png" alt="Поиск WeChat в App Store" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 4</span>
+      <h2>Выберите официальное приложение</h2>
+      <p>Нужна зелёная иконка с двумя облачками. Разработчик: <strong>Tencent Technology (Shenzhen) Company Limited</strong>. Нажмите голубую кнопку <strong>Загрузить</strong> справа.</p>
+      <div class="warn">Не ставьте приложения с похожим названием от других разработчиков.</div>
+      <img class="photo" src="фото/04-rezultat-wechat.png" alt="Результат поиска WeChat, кнопка Загрузить" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 5</span>
+      <h2>Страница приложения</h2>
+      <p>Можно открыть карточку WeChat и ещё раз нажать <strong>Загрузить</strong>. Приложение бесплатное (внутри есть покупки стикеров — их покупать не обязательно).</p>
+      <p>Прямая ссылка: <a href="https://apps.apple.com/ru/app/wechat/id414478124">apps.apple.com/ru/app/wechat/id414478124</a></p>
+      <img class="photo" src="фото/05-stranica-prilozheniya.png" alt="Страница WeChat в App Store" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 6</span>
+      <h2>Подтвердите загрузку</h2>
+      <p>iPhone попросит Face ID, Touch ID или пароль Apple ID. Дважды нажмите боковую кнопку, если появится такая подсказка. Это обычное подтверждение даже для бесплатных приложений.</p>
+      <img class="photo" src="фото/06-face-id.png" alt="Подтверждение Face ID" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 7</span>
+      <h2>Дождитесь установки</h2>
+      <p>Вокруг кнопки появится круговой индикатор. Размер приложения около 800+ МБ — на медленном интернете подождите несколько минут. Когда загрузка закончится, кнопка сменится на <strong>Открыть</strong>.</p>
+      <img class="photo" src="фото/07-ustanovka.png" alt="Индикатор загрузки WeChat" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 8</span>
+      <h2>Откройте WeChat</h2>
+      <p>Вернитесь на главный экран и нажмите зелёную иконку <strong>WeChat</strong>. Её также можно открыть из App Store кнопкой «Открыть».</p>
+      <img class="photo" src="фото/08-otkryt-wechat.png" alt="Иконка WeChat на главном экране" />
+    </article>
+
+    <h2 id="registraciya">Часть 2. Регистрация</h2>
+
+    <article class="card step">
+      <span class="badge">Шаг 9</span>
+      <h2>Нажмите «Регистрация» (Sign Up)</h2>
+      <p>На стартовом экране две кнопки: вход и регистрация. Если аккаунта ещё нет — нажмите <strong>Sign Up / Регистрация</strong>, не Log In.</p>
+      <img class="photo" src="фото/09-ekran-vhoda.png" alt="Экран входа WeChat, кнопка Регистрация" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 10</span>
+      <h2>Заполните анкету</h2>
+      <ul>
+        <li><strong>Имя</strong> — латиницей, коротко: <code>Ivan</code>, не длинная фраза.</li>
+        <li><strong>Страна</strong> — обязательно <strong>Russia (+7)</strong>, не Китай +86.</li>
+        <li><strong>Номер</strong> — российский мобильный без первой 8. Пример: 9123456789.</li>
+        <li><strong>Пароль</strong> — минимум 8 символов, буквы и цифры. Запишите его.</li>
+      </ul>
+      <p>Поставьте галочку согласия с правилами и нажмите <strong>Принять и продолжить</strong>.</p>
+      <img class="photo" src="фото/10-forma-registracii.png" alt="Форма регистрации WeChat" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 11</span>
+      <h2>Проверьте код страны +7</h2>
+      <p>Если по умолчанию стоит Китай (+86) — откройте список стран и выберите <strong>Russia / Россия (+7)</strong>. Иначе код не придёт.</p>
+      <img class="photo" src="фото/11-vybor-strany.png" alt="Выбор страны Russia +7" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 12</span>
+      <h2>Введите код подтверждения</h2>
+      <p>WeChat отправит <strong>6 цифр</strong>. Часто SMS из России не доходит. Тогда:</p>
+      <ol>
+        <li>Подождите 1–2 минуты, не жмите «отправить снова» много раз.</li>
+        <li>Нажмите «Не получили код?» и выберите <strong>голосовой звонок</strong>.</li>
+        <li>Возьмите трубку: робот продиктует код. Некоторые антиспам-приложения (Защитник МТС и подобные) могут сбросить звонок — временно отключите их.</li>
+      </ol>
+      <p>Введите код в течение примерно 3 минут.</p>
+      <img class="photo" src="фото/12-sms-kod.png" alt="Ввод кода подтверждения" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 13</span>
+      <h2>Если появился QR-код проверки</h2>
+      <p>Для новых аккаунтов из России WeChat часто просит, чтобы <strong>уже зарегистрированный пользователь</strong> отсканировал ваш QR.</p>
+      <ol>
+        <li>Покажите этот экран человеку с WeChat (друг, коллега, знакомый в Китае).</li>
+        <li>У него: вкладка <strong>Discover / Открытия</strong> → <strong>Scan / Сканер</strong>.</li>
+        <li>Он сканирует код и подтверждает, что вы реальный человек.</li>
+      </ol>
+      <div class="danger">Не оплачивайте случайные «поможем зарегистрировать» в интернете и не отправляйте QR незнакомым людям с сомнительных сайтов.</div>
+      <img class="photo" src="фото/13-qr-proverka.png" alt="QR-проверка друга в WeChat" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 14</span>
+      <h2>Разрешите уведомления</h2>
+      <p>Нажмите <strong>Разрешить</strong> на запрос уведомлений, чтобы видеть новые сообщения. Доступ к контактам можно дать позже в настройках.</p>
+      <img class="photo" src="фото/14-razresheniya.png" alt="Разрешение уведомлений" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Шаг 15</span>
+      <h2>Готово</h2>
+      <p>Откроется список чатов. Внизу четыре вкладки: Чаты, Контакты, Открытия, Я. Аккаунт создан. Можно добавить друзей по QR, номеру или WeChat ID.</p>
+      <div class="note">Первые дни не рассылайте много сообщений незнакомцам и не заходите с разных VPN — новый аккаунт могут ограничить.</div>
+      <img class="photo" src="фото/15-gotovo.png" alt="Главный экран чатов WeChat" />
+    </article>
+
+    <article class="card step">
+      <span class="badge">Запасной способ</span>
+      <h2>Войти через Apple</h2>
+      <p>На экране входа можно выбрать <strong>Sign in with Apple / Войти с Apple</strong>. Код подтверждения иногда приходит в привязанный мессенджер (в том числе Telegram). Если номер +7 не принимает SMS — попробуйте этот путь после установки приложения.</p>
+      <img class="photo" src="фото/16-vhod-cherez-apple.png" alt="Вход в WeChat через Apple" />
+    </article>
+
+    <section class="card" id="ne-poluchaetsya">
+      <h2>Если что-то пошло не так</h2>
+      <p><strong>WeChat не находится в App Store.</strong> Проверьте интернет и регион Apple ID: Настройки → [Ваше имя] → Медиаматериалы и покупки → Просмотреть учётную запись → Страна/регион. В российском магазине приложение обычно есть. Если нет — временно сменить регион сложно: нужны способ оплаты и адрес другой страны, плюс отменятся подписки. Проще открыть ссылку выше на этом же iPhone.</p>
+      <p><strong>Код не приходит.</strong> Выключите VPN, переключитесь с Wi‑Fi на мобильный интернет, отключите антиспам-звонков, запросите голосовой код один раз. Не долбите «отправить снова».</p>
+      <p><strong>Пишет Account at risk / нужна проверка.</strong> Используйте физическую SIM, одно стабильное подключение, короткое имя латиницей. Попросите знакомого с «старым» WeChat отсканировать QR.</p>
+      <p><strong>Не ставьте WeChat с Android-APK и сторонних витрин на iPhone</strong> — на iOS это невозможно и небезопасно. Только App Store.</p>
+    </section>
+
+    <footer>
+      Картинки — наглядные макеты экранов, подписи на вашем iPhone могут чуть отличаться (русский / английский / китайский интерфейс). Актуально для WeChat в App Store, 2026.
+    </footer>
+  </div>
+</body>
+</html>
