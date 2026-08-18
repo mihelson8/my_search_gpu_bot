@@ -362,8 +362,14 @@ def grab_http_snapshot(url: str):
 def newest_image_path(folder: str) -> str:
     import glob
 
-    if not folder or not os.path.isdir(folder):
-        raise RuntimeError(f"Нет папки снимков Seetong: {folder}")
+    if not folder:
+        raise RuntimeError("Папка снимков Seetong не указана.")
+    folder = os.path.normpath(folder.strip())
+    if not os.path.isdir(folder):
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except Exception:
+            raise RuntimeError(f"Нет папки снимков Seetong: {folder}")
     files = []
     for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.PNG"):
         files.extend(glob.glob(os.path.join(folder, pattern)))
@@ -372,7 +378,7 @@ def newest_image_path(folder: str) -> str:
     if not files:
         raise RuntimeError(
             f"В папке нет снимков: {folder}\n"
-            "Откройте Main View в Seetong и нажмите кнопку снимка (фотоаппарат)."
+            "В Seetong перейдите в Main View и нажмите значок снимка (фотоаппарат)."
         )
     return max(files, key=os.path.getmtime)
 
