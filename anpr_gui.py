@@ -716,7 +716,7 @@ class AnprApp:
         )
         self.detail_label.config(text=detail)
         if plate and plate != "—":
-            self.manual_var.set(plate)
+            self.manual_var.set(normalize_plate(plate))
 
     def _beep(self) -> None:
         try:

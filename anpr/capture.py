@@ -362,23 +362,39 @@ def grab_http_snapshot(url: str):
 def newest_image_path(folder: str) -> str:
     import glob
 
-    if not folder:
-        raise RuntimeError("Папка снимков Seetong не указана.")
-    folder = os.path.normpath(folder.strip())
-    if not os.path.isdir(folder):
-        try:
-            os.makedirs(folder, exist_ok=True)
-        except Exception:
-            raise RuntimeError(f"Нет папки снимков Seetong: {folder}")
+    candidates = [
+        folder,
+        r"C:\Program Files (x86)\Seetong\pi",
+        r"C:\Program Files\Seetong\pi",
+        r"D:\Program Files (x86)\Seetong\pi",
+        r"D:\Program Files\Seetong\pi",
+        r"D:\Seetong\pi",
+        r"C:\Seetong\pi",
+    ]
+    seen = set()
     files = []
-    for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.PNG"):
-        files.extend(glob.glob(os.path.join(folder, pattern)))
-        files.extend(glob.glob(os.path.join(folder, "*", pattern)))
+    for cand in candidates:
+        if not cand:
+            continue
+        c_norm = os.path.normpath(cand.strip())
+        if c_norm.lower() in seen or not os.path.isdir(c_norm):
+            continue
+        seen.add(c_norm.lower())
+        for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.PNG"):
+            files.extend(glob.glob(os.path.join(c_norm, pattern)))
+            files.extend(glob.glob(os.path.join(c_norm, "*", pattern)))
+
     files = [path for path in files if os.path.isfile(path)]
     if not files:
+        # If the specific requested folder doesn't exist, create it so future snapshots land there
+        if folder:
+            try:
+                os.makedirs(os.path.normpath(folder.strip()), exist_ok=True)
+            except Exception:
+                pass
         raise RuntimeError(
-            f"В папке нет снимков: {folder}\n"
-            "В Seetong перейдите в Main View и нажмите значок снимка (фотоаппарат)."
+            f"В папке нет снимков: {folder or 'C:\\Program Files (x86)\\Seetong\\pi'}\n"
+            "В программе Seetong перейдите на вкладку Main View и нажмите значок фотоаппарата."
         )
     return max(files, key=os.path.getmtime)
 

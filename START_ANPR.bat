@@ -56,6 +56,9 @@ if errorlevel 1 (
     )
 )
 
+echo Updating desktop shortcut...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\MAKE_DESKTOP_SHORTCUT.ps1" >nul 2>&1
+
 echo Starting ANPR window...
 %LAUNCH% anpr_gui.py
 if errorlevel 1 (
