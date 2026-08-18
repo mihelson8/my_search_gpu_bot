@@ -1,39 +1,184 @@
 """
-WeChat Official Account Webhook Server for Technical Terms & Daily Translator.
-Официальный веб-сервер / Вебхук для WeChat (微信公众号).
-100% официальный API Tencent, безопасность от блокировок.
+WeChat Official Account Webhook Server with Full Voice & Text Translation Support.
+Официальный сервер WeChat с поддержкой голосовых сообщений (Voice Recognition)
+и голосовой озвучки перевода (Voice Reply / Speech Synthesis).
 """
 
 import os
+import io
 import sys
 import time
 import hashlib
 import asyncio
 import logging
+import threading
 import xml.etree.ElementTree as ET
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+import httpx
+from pydub import AudioSegment
+import speech_recognition as sr
 
 from translator.models import TechTerm, Language
 from translator.engine import TerminologyEngine, TechTranslator
-from translator.pinyin_helper import get_pinyin, is_chinese_text
+from translator.pinyin_helper import get_pinyin, is_chinese_text, detect_language
+from translator.voice_helper import generate_tts_audio, recognize_speech_from_ogg
 
 logger = logging.getLogger(__name__)
 
-# WeChat Verification Token (задается в панели WeChat и здесь)
+# WeChat Verification Token и App Credentials
 WECHAT_TOKEN = os.getenv("WECHAT_TOKEN", "my_wechat_translator_token_123")
+WECHAT_APPID = os.getenv("WECHAT_APPID", "wx9f1912539effdbf3")
+WECHAT_SECRET = os.getenv("WECHAT_SECRET", "ec507a7a06fee51bfdfca0f22ce2df8b")
 PORT = int(os.getenv("PORT", 10000))
+
+# Кэширование Access Token
+_access_token_cache = {"token": "", "expires_at": 0}
 
 # Инициализация движка словаря
 engine = TerminologyEngine()
 translator = TechTranslator(engine)
 
 
+def get_wechat_access_token() -> str:
+    """Получает и кэширует access_token от официального API WeChat."""
+    now = time.time()
+    if _access_token_cache["token"] and now < _access_token_cache["expires_at"] - 60:
+        return _access_token_cache["token"]
+
+    if not WECHAT_APPID or not WECHAT_SECRET:
+        return ""
+
+    try:
+        url = f"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={WECHAT_APPID}&secret={WECHAT_SECRET}"
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                token = data.get("access_token")
+                expires_in = data.get("expires_in", 7200)
+                if token:
+                    _access_token_cache["token"] = token
+                    _access_token_cache["expires_at"] = now + expires_in
+                    return token
+    except Exception as e:
+        logger.error(f"Failed to get WeChat access token: {e}")
+
+    return ""
+
+
+def download_wechat_voice_media(media_id: str) -> bytes:
+    """Скачивает аудиофайл голосового сообщения пользователя по media_id из WeChat."""
+    token = get_wechat_access_token()
+    if not token or not media_id:
+        return b""
+
+    try:
+        url = f"https://api.weixin.qq.com/cgi-bin/media/get?access_token={token}&media_id={media_id}"
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url)
+            if resp.status_code == 200:
+                return resp.content
+    except Exception as e:
+        logger.error(f"Failed to download voice media {media_id}: {e}")
+
+    return b""
+
+
+def upload_wechat_voice_media(audio_bytes: bytes, filename: str = "voice.mp3") -> str:
+    """Загружает аудиофайл озвучки в WeChat временные медиа и возвращает media_id для голосового ответа."""
+    token = get_wechat_access_token()
+    if not token or not audio_bytes:
+        return ""
+
+    try:
+        url = f"https://api.weixin.qq.com/cgi-bin/media/upload?access_token={token}&type=voice"
+        files = {"media": (filename, audio_bytes, "audio/mpeg")}
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(url, files=files)
+            if resp.status_code == 200:
+                data = resp.json()
+                media_id = data.get("media_id")
+                if media_id:
+                    return media_id
+                else:
+                    logger.warning(f"WeChat media upload error response: {data}")
+    except Exception as e:
+        logger.error(f"Failed to upload voice media to WeChat: {e}")
+
+    return ""
+
+
+def send_wechat_custom_message(to_user: str, msg_type: str, content: str = "", media_id: str = ""):
+    """Отправка дополнительного сообщения через WeChat Customer Service API (активный ответ)."""
+    token = get_wechat_access_token()
+    if not token:
+        return
+
+    try:
+        url = f"https://api.weixin.qq.com/cgi-bin/message/custom/send?access_token={token}"
+        if msg_type == "voice" and media_id:
+            payload = {
+                "touser": to_user,
+                "msgtype": "voice",
+                "voice": {"media_id": media_id}
+            }
+        elif msg_type == "text" and content:
+            payload = {
+                "touser": to_user,
+                "msgtype": "text",
+                "text": {"content": content}
+            }
+        else:
+            return
+
+        with httpx.Client(timeout=8.0) as client:
+            client.post(url, json=payload)
+    except Exception as e:
+        logger.error(f"Failed to send custom message to {to_user}: {e}")
+
+
+def recognize_wechat_voice(audio_bytes: bytes) -> str:
+    """Распознавание речи из голосового сообщения WeChat (AMR/Speex/MP3/WAV)."""
+    if not audio_bytes:
+        return ""
+
+    recognizer = sr.Recognizer()
+
+    try:
+        # Конвертация любого аудиоформата в WAV через pydub
+        audio_stream = io.BytesIO(audio_bytes)
+        try:
+            audio = AudioSegment.from_file(audio_stream)
+        except Exception:
+            audio_stream.seek(0)
+            audio = AudioSegment.from_raw(audio_stream, sample_width=2, frame_rate=8000, channels=1)
+
+        wav_stream = io.BytesIO()
+        audio.export(wav_stream, format="wav")
+        wav_stream.seek(0)
+
+        with sr.AudioFile(wav_stream) as source:
+            audio_data = recognizer.record(source)
+
+        for lang_code in ["ru-RU", "zh-CN", "en-US", "zh-HK"]:
+            try:
+                text = recognizer.recognize_google(audio_data, language=lang_code)
+                if text and len(text.strip()) > 0:
+                    return text.strip()
+            except sr.UnknownValueError:
+                continue
+            except Exception:
+                continue
+
+    except Exception as e:
+        logger.error(f"WeChat voice recognition error: {e}", exc_info=True)
+
+    return ""
+
+
 def check_wechat_signature(signature: str, timestamp: str, nonce: str, token: str = WECHAT_TOKEN) -> bool:
-    """
-    Проверка подписи WeChat сервера по стандарту Tencent:
-    SHA1(sort([token, timestamp, nonce])) == signature
-    """
+    """Проверка подписи сервера WeChat по стандарту Tencent: SHA1(sort([token, timestamp, nonce]))."""
     if not signature or not timestamp or not nonce:
         return False
     tmp_list = sorted([token, timestamp, nonce])
@@ -43,20 +188,33 @@ def check_wechat_signature(signature: str, timestamp: str, nonce: str, token: st
 
 
 def build_text_reply_xml(to_user: str, from_user: str, content: str) -> str:
-    """Генерация стандартного XML-ответа для WeChat."""
+    """Генерация стандартного XML-ответа для текстового сообщения в WeChat."""
     create_time = int(time.time())
-    xml_template = f"""<xml>
+    return f"""<xml>
 <ToUserName><![CDATA[{to_user}]]></ToUserName>
 <FromUserName><![CDATA[{from_user}]]></FromUserName>
 <CreateTime>{create_time}</CreateTime>
 <MsgType><![CDATA[text]]></MsgType>
 <Content><![CDATA[{content}]]></Content>
 </xml>"""
-    return xml_template
+
+
+def build_voice_reply_xml(to_user: str, from_user: str, media_id: str) -> str:
+    """Генерация XML-ответа для отправки голосового аудиосообщения в WeChat."""
+    create_time = int(time.time())
+    return f"""<xml>
+<ToUserName><![CDATA[{to_user}]]></ToUserName>
+<FromUserName><![CDATA[{from_user}]]></FromUserName>
+<CreateTime>{create_time}</CreateTime>
+<MsgType><![CDATA[voice]]></MsgType>
+<Voice>
+<MediaId><![CDATA[{media_id}]]></MediaId>
+</Voice>
+</xml>"""
 
 
 def format_wechat_reply(output, user_query: str) -> str:
-    """Форматирует перевод под ограничения и интерфейс WeChat."""
+    """Форматирует карточку перевода под ограничения и интерфейс WeChat."""
     if output.direct_match:
         t = output.direct_match
         trad_part = f" [{t.zh_trad}]" if t.zh_trad else ""
@@ -75,7 +233,8 @@ def format_wechat_reply(output, user_query: str) -> str:
             reply += f"\n📖 Определение: {t.definition_ru}\n"
         if t.examples:
             ex = t.examples[0]
-            reply += f"\n💡 Пример:\n• 🇷🇺 {ex.ru}\n• 🇨🇳 {ex.zh} ({ex.pinyin})\n• 🇺🇸 {ex.en}"
+            bua_ex = f"\n• 🔵 {ex.bua}" if ex.bua else ""
+            reply += f"\n💡 Пример:\n• 🇷🇺 {ex.ru}\n• 🇨🇳 {ex.zh} ({ex.pinyin})\n• 🇺🇸 {ex.en}{bua_ex}"
         return reply
 
     # Онлайн перевод произвольной фразы
@@ -108,14 +267,47 @@ def format_wechat_reply(output, user_query: str) -> str:
     return reply
 
 
+def async_send_voice_followup(to_user: str, output, user_query: str):
+    """
+    В фоновом потоке синтезирует озвучку перевода и отправляет аудиосообщение в WeChat.
+    """
+    try:
+        # Определяем, что озвучить
+        text_to_speak = ""
+        lang_to_speak = "zh"
+
+        if output.direct_match:
+            t = output.direct_match
+            # Если запрос был на русском/английском — озвучиваем китайский
+            if output.detected_lang == Language.ZH or is_chinese_text(user_query):
+                text_to_speak = t.ru
+                lang_to_speak = "ru"
+            else:
+                text_to_speak = t.zh
+                lang_to_speak = "zh"
+        else:
+            if (output.detected_lang == Language.ZH or is_chinese_text(user_query)) and "ru" in output.online_translations:
+                text_to_speak = output.online_translations["ru"]
+                lang_to_speak = "ru"
+            elif "zh" in output.online_translations:
+                text_to_speak = output.online_translations["zh"]
+                lang_to_speak = "zh"
+
+        if text_to_speak:
+            audio_io = generate_tts_audio(text_to_speak, lang=lang_to_speak)
+            if audio_io:
+                media_id = upload_wechat_voice_media(audio_io.getvalue(), filename=f"reply_{lang_to_speak}.mp3")
+                if media_id:
+                    send_wechat_custom_message(to_user=to_user, msg_type="voice", media_id=media_id)
+    except Exception as e:
+        logger.error(f"Error in async_send_voice_followup: {e}", exc_info=True)
+
+
 class WeChatRequestHandler(BaseHTTPRequestHandler):
     """HTTP обработчик для WeChat Webhook и Health check."""
 
     def do_GET(self):
-        """
-        1. Верификация сервера WeChat (эхо-ответ echostr при валидной подписи).
-        2. Health Check для Render.
-        """
+        """1. Верификация сервера WeChat. 2. Health Check для Render."""
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
 
@@ -147,7 +339,7 @@ class WeChatRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"WeChat Translator Server is running OK!")
 
     def do_POST(self):
-        """Обработка входящих сообщений пользователей из WeChat."""
+        """Обработка входящих текстовых и голосовых сообщений из WeChat."""
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
 
@@ -171,12 +363,26 @@ class WeChatRequestHandler(BaseHTTPRequestHandler):
             msg_type = root.find("MsgType").text
 
             reply_content = ""
+            user_msg = ""
 
+            # 1. Текстовое сообщение
             if msg_type == "text":
                 user_msg = root.find("Content").text.strip()
-                # Получаем перевод через движок
-                output = asyncio.run(translator.translate(user_msg))
-                reply_content = format_wechat_reply(output, user_msg)
+
+            # 2. Голосовое сообщение (Voice Message)
+            elif msg_type == "voice":
+                # Сначала пробуем встроенное распознавание WeChat (если включено в аккаунте)
+                recognition_elem = root.find("Recognition")
+                if recognition_elem is not None and recognition_elem.text and recognition_elem.text.strip():
+                    user_msg = recognition_elem.text.strip()
+                else:
+                    # Скачиваем аудио по MediaId и распознаем через наш движок
+                    media_id_elem = root.find("MediaId")
+                    if media_id_elem is not None and media_id_elem.text:
+                        media_id = media_id_elem.text
+                        audio_data = download_wechat_voice_media(media_id)
+                        if audio_data:
+                            user_msg = recognize_wechat_voice(audio_data)
 
             elif msg_type == "event":
                 event_type = root.find("Event").text
@@ -184,13 +390,29 @@ class WeChatRequestHandler(BaseHTTPRequestHandler):
                     reply_content = (
                         "👋 欢迎使用多语言翻译助手！\n"
                         "Добро пожаловать в Переводчик!\n\n"
+                        "✨ Возможности:\n"
+                        "• ✍️ Текстовый перевод\n"
+                        "• 🎙 Голосовой ввод (отправляйте голосовые сообщения!)\n"
+                        "• 🔊 Голосовая озвучка перевода\n\n"
                         "Поддерживаемые языки:\n"
-                        "🇨🇳 中文 (普通话 & 白话)\n"
+                        "🇨🇳 中文 (普通话 & 白话/粤语)\n"
                         "🇷🇺 Русский\n"
                         "🇺🇸 American English\n"
                         "🔵 Буряад хэлэн (Бурятский)\n\n"
-                        "✍️ Отправьте любое слово или фразу для мгновенного перевода!"
+                        "Отправьте любое слово текстом или голосом!"
                     )
+
+            if user_msg:
+                # Получаем перевод через движок
+                output = asyncio.run(translator.translate(user_msg))
+                reply_content = format_wechat_reply(output, user_msg)
+
+                # Запускаем фоновую отправку аудио-озвучки перевода
+                threading.Thread(
+                    target=async_send_voice_followup,
+                    args=(from_user, output, user_msg),
+                    daemon=True
+                ).start()
 
             if reply_content:
                 reply_xml = build_text_reply_xml(from_user, to_user, reply_content)
@@ -223,6 +445,7 @@ def run_wechat_server():
     print("=" * 60, flush=True)
     print(f"🇨🇳 Сервер WeChat переводчика успешно запущен на порту {PORT}!", flush=True)
     print(f"🔑 Токен WeChat: {WECHAT_TOKEN}", flush=True)
+    print(f"📱 AppID: {WECHAT_APPID}", flush=True)
     print("=" * 60, flush=True)
     server.serve_forever()
 

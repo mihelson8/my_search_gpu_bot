@@ -44,3 +44,12 @@ def test_wechat_format_reply():
     assert "你好" in formatted
     assert "nǐ hǎo" in formatted
     assert "Мэндээ" in formatted
+
+
+def test_wechat_voice_helpers():
+    from wechat_server import build_voice_reply_xml, get_wechat_access_token
+    xml_str = build_voice_reply_xml("user_open_id", "bot_id", "media_id_123")
+    assert "<MsgType><![CDATA[voice]]></MsgType>" in xml_str
+    assert "<MediaId><![CDATA[media_id_123]]></MediaId>" in xml_str
+    token = get_wechat_access_token()
+    assert len(token) > 0
