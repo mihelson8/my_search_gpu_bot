@@ -25,7 +25,7 @@ try:
         Update,
     )
     from telegram.constants import ParseMode
-    from telegram.error import BadRequest
+    from telegram.error import BadRequest, InvalidToken
     from telegram.ext import (
         ApplicationBuilder,
         CallbackQueryHandler,
@@ -78,6 +78,13 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
 
 ENGINE = VisualTriageEngine()
 
@@ -784,7 +791,13 @@ def main():
 
     print("Запуск ветеринарного Telegram-бота визуального триажа...")
     app = build_vet_bot_application(token)
-    app.run_polling()
+    try:
+        app.run_polling()
+    except InvalidToken:
+        print("Ошибка: Telegram отклонил токен.")
+        print("Проверьте VET_BOT_TOKEN в файле .env: токен выдаёт @BotFather")
+        print("и он выглядит так: 1234567890:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
