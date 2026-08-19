@@ -7,6 +7,8 @@ import unittest
 
 from vet_bot import (
     BOT_COMMANDS,
+    BOT_DESCRIPTION,
+    BOT_SHORT_DESCRIPTION,
     MAIN_KEYBOARD,
     MAX_SUGGESTED_BUTTONS,
     MENU_ACTIONS,
@@ -46,6 +48,12 @@ class TestMenuStructure(unittest.TestCase):
     def test_all_zones_present_in_menu(self):
         self.assertEqual(set(ZONE_ORDER), set(BodyZone))
         self.assertEqual(len(ZONE_ORDER), len(set(ZONE_ORDER)))
+
+    def test_descriptions_fit_telegram_limits(self):
+        self.assertLessEqual(len(BOT_SHORT_DESCRIPTION), 120)
+        self.assertLessEqual(len(BOT_DESCRIPTION), 512)
+        self.assertIn("не ставит диагноз", BOT_DESCRIPTION)
+        self.assertIn("врача", BOT_SHORT_DESCRIPTION)
 
     def test_bot_commands_are_unique_and_described(self):
         commands = [command for command, _ in BOT_COMMANDS]

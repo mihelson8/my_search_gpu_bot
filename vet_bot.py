@@ -25,7 +25,7 @@ try:
         Update,
     )
     from telegram.constants import ParseMode
-    from telegram.error import BadRequest, InvalidToken
+    from telegram.error import BadRequest, InvalidToken, TelegramError
     from telegram.ext import (
         ApplicationBuilder,
         CallbackQueryHandler,
@@ -106,6 +106,19 @@ MAIN_KEYBOARD = [
     [BTN_EMERGENCY, BTN_FIRST_AID],
     [BTN_CASE, BTN_HELP],
 ]
+
+BOT_SHORT_DESCRIPTION = (
+    "Оценка состояния кошки по фото и видео: срочность визита "
+    "и вероятные состояния. Не заменяет врача."
+)
+
+BOT_DESCRIPTION = (
+    "Предварительная оценка состояния кошки по фотографиям и коротким видео: "
+    "насколько срочно нужен ветеринарный врач, какие состояния вероятны и о чём "
+    "спросить на приёме. Есть справочник препаратов и список опасных для кошек веществ.\n\n"
+    "Бот не ставит диагноз и не назначает лечение: по изображению достоверно "
+    "определить заболевание нельзя. При угрожающих признаках сразу везите кошку в клинику."
+)
 
 BOT_COMMANDS: List[Tuple[str, str]] = [
     ("start", "Главное меню"),
@@ -713,9 +726,15 @@ if TELEGRAM_AVAILABLE:
             )
 
     async def post_init(application) -> None:
+        """Выставляет меню команд и описание бота, чтобы не настраивать их в BotFather."""
         await application.bot.set_my_commands(
             [BotCommand(command, description) for command, description in BOT_COMMANDS]
         )
+        try:
+            await application.bot.set_my_short_description(BOT_SHORT_DESCRIPTION)
+            await application.bot.set_my_description(BOT_DESCRIPTION)
+        except TelegramError as exc:
+            logger.warning("Не удалось обновить описание бота: %s", exc)
 
 
 def build_vet_bot_application(token: str):
