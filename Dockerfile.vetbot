@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+ENV PORT=10000
+
+WORKDIR /app
+
+# ffmpeg нужен для извлечения кадров из коротких видео
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY vetcare ./vetcare
+COPY vet_bot.py vetcare_cli.py ./
+
+EXPOSE 10000
+
+CMD ["python3", "vet_bot.py"]
