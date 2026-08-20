@@ -274,6 +274,50 @@ def cut_away_background(image, vehicles: Sequence[VehicleLike]):
     return crop_to_vehicles(masked, vehicles)
 
 
+def draw_corner_frame(vis, box: Box, color=(40, 220, 90), thickness: int = 3, corner: int = 28) -> None:
+    """Draw an L-corner bounding frame around the detected car."""
+    import cv2
+
+    x0, y0, x1, y1 = [int(v) for v in box]
+    if x1 - x0 < 12 or y1 - y0 < 12:
+        return
+    length = max(12, min(corner, (x1 - x0) // 3, (y1 - y0) // 3))
+    # top-left
+    cv2.line(vis, (x0, y0), (x0 + length, y0), color, thickness)
+    cv2.line(vis, (x0, y0), (x0, y0 + length), color, thickness)
+    # top-right
+    cv2.line(vis, (x1, y0), (x1 - length, y0), color, thickness)
+    cv2.line(vis, (x1, y0), (x1, y0 + length), color, thickness)
+    # bottom-left
+    cv2.line(vis, (x0, y1), (x0 + length, y1), color, thickness)
+    cv2.line(vis, (x0, y1), (x0, y1 - length), color, thickness)
+    # bottom-right
+    cv2.line(vis, (x1, y1), (x1 - length, y1), color, thickness)
+    cv2.line(vis, (x1, y1), (x1, y1 - length), color, thickness)
+    cv2.rectangle(vis, (x0, y0), (x1, y1), color, 1)
+
+
+def draw_vehicle_shape(vis, item: VehicleLike, label: str = "АВТО") -> None:
+    """Draw car silhouette contour + detection frame at the moment the car is found."""
+    import cv2
+
+    contour = _as_contour(item)
+    x0, y0, x1, y1 = _as_box(item)
+    color = (40, 220, 90)
+    if contour is not None and len(contour):
+        cv2.drawContours(vis, [contour], -1, color, 2)
+        # Soft fill so the shape of the car is obvious without hiding the plate.
+        overlay = vis.copy()
+        cv2.drawContours(overlay, [contour], -1, (30, 140, 60), thickness=-1)
+        cv2.addWeighted(overlay, 0.18, vis, 0.82, 0, vis)
+        cv2.drawContours(vis, [contour], -1, color, 2)
+    draw_corner_frame(vis, (x0, y0, x1, y1), color=color, thickness=3)
+    text = label or "АВТО"
+    text_y = max(22, y0 - 8)
+    cv2.rectangle(vis, (x0, text_y - 18), (x0 + 8 + 12 * len(text), text_y + 4), (16, 60, 28), -1)
+    cv2.putText(vis, text, (x0 + 4, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (220, 255, 220), 2)
+
+
 def draw_type1_plate(vis, box: Box, plate: str = "") -> None:
     """Draw the ГОСТ Type-1 layout: body | region, matching «А 000 АА | 00»."""
     import cv2
@@ -284,8 +328,8 @@ def draw_type1_plate(vis, box: Box, plate: str = "") -> None:
     if x1 - x0 < 8 or y1 - y0 < 6:
         return
     split = x0 + int((x1 - x0) * 0.78)
-    cv2.rectangle(vis, (x0, y0), (x1, y1), (10, 10, 10), 2)
-    cv2.line(vis, (split, y0 + 1), (split, y1 - 1), (10, 10, 10), 1)
+    cv2.rectangle(vis, (x0, y0), (x1, y1), (0, 210, 255), 2)
+    cv2.line(vis, (split, y0 + 1), (split, y1 - 1), (0, 210, 255), 1)
     body, region = format_plate_parts(plate) if plate else ("", "")
     label = f"{body} | {region}" if body and body != "—" else plate
     if label:
@@ -293,26 +337,52 @@ def draw_type1_plate(vis, box: Box, plate: str = "") -> None:
 
 
 def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> object:
-    """Keep the car silhouette, cut the rest, outline AUTO and the Type-1 plate."""
+    """Keep the parking view, highlight car shape + frame the moment a car is detected."""
     import cv2
+    import numpy as np
 
     vis = image.copy()
     if vehicles:
-        mask = silhouette_mask(vis.shape, vehicles)
-        vis[mask == 0] = 0
-        for item in vehicles:
-            contour = _as_contour(item)
-            x0, y0, x1, y1 = _as_box(item)
-            if contour is not None and len(contour):
-                cv2.drawContours(vis, [contour], -1, (40, 200, 80), 2)
-            else:
-                cv2.rectangle(vis, (x0, y0), (x1, y1), (40, 200, 80), 2)
-            cv2.putText(vis, "AUTO", (x0, max(18, y0 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 200, 80), 2)
-    else:
-        vis[:] = 0
+        mask = silhouette_mask(vis.shape, vehicles, dilate=15)
+        # Dim the lot so the car shape stands out, but keep context.
+        dim = (vis.astype(np.float32) * 0.35).astype(vis.dtype)
+        vis = np.where(mask[:, :, None] > 0, vis, dim)
+        for index, item in enumerate(vehicles):
+            title = "АВТО" if index == 0 else f"АВТО {index + 1}"
+            draw_vehicle_shape(vis, item, label=title)
     for hit in plates:
         box = getattr(hit, "bbox", None)
         if not box:
             continue
         draw_type1_plate(vis, box, getattr(hit, "plate", ""))
     return vis
+
+
+def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates: list = ()) -> object:
+    """Close-up of the detected car with shape and frame still drawn."""
+    crop = zoom_box(image, box, min_w=800, min_h=480, pad=0.18)
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return image
+    # Re-detect local coordinates are hard after zoom; draw a full-frame corner frame.
+    h, w = crop.shape[:2]
+    draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=(40, 220, 90), thickness=3, corner=36)
+    import cv2
+
+    cv2.putText(crop, "АВТО", (16, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (40, 220, 90), 2)
+    for hit in plates:
+        plate = getattr(hit, "plate", "") or ""
+        if plate:
+            from anpr.plates import format_plate_parts
+
+            body, region = format_plate_parts(plate)
+            cv2.putText(
+                crop,
+                f"{body} | {region}",
+                (16, h - 18),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 220, 255),
+                2,
+            )
+            break
+    return crop

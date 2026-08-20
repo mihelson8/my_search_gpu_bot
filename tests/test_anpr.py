@@ -307,6 +307,42 @@ def test_extract_from_recognizer_without_ocr():
     assert zoom is None
 
 
+def test_annotate_scene_draws_shape_and_frame():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import VehicleSilhouette, annotate_scene, draw_corner_frame, draw_vehicle_shape
+
+    frame = numpy.full((240, 320, 3), 90, dtype=numpy.uint8)
+    frame[120:200, 80:240] = (40, 42, 48)
+    silhouette = VehicleSilhouette(box=(80, 120, 240, 200), contour=None, score=1.0)
+    annotated = annotate_scene(frame, [silhouette], [])
+    assert annotated is not None
+    assert annotated.shape == frame.shape
+    # Corner frame pixels near the box should be greenish, not plain asphalt gray.
+    corner = annotated[120, 80]
+    assert int(corner[1]) > int(corner[0])  # G > B for green frame
+    draw_corner_frame(frame.copy(), (10, 10, 100, 80))
+    draw_vehicle_shape(frame.copy(), silhouette, label="АВТО")
+
+
+def test_recognize_scene_keeps_detection_frame_on_preview():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.recognizer import recognize_scene
+
+    frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
+    frame[0:40, :] = 200
+    frame[120:200, 70:250] = (35, 38, 42)
+    frame[128:155, 95:225] = (70, 72, 78)
+    frame[178:194, 110:210] = 230  # plate-like band on bumper
+    hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
+    assert vehicles, "car silhouette should be detected"
+    assert annotated is not None
+    assert annotated.shape == frame.shape, "preview must keep full scene with shape/frame, not only zoom crop"
+    assert zoom is not None
+    assert int(abs(annotated.astype("int16") - frame.astype("int16")).mean()) > 0
+
+
 def test_find_vehicle_silhouette_on_parking_lot():
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")

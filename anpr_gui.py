@@ -146,7 +146,7 @@ class AnprApp:
 
         preview_card = tk.Frame(body, bg=self.card, highlightthickness=0)
         preview_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        ttk.Label(preview_card, text="Силуэт авто (остальное отсечено)", style="Card.TLabel").pack(anchor="w", padx=12, pady=(10, 4))
+        ttk.Label(preview_card, text="Форма авто и рамка при обнаружении", style="Card.TLabel").pack(anchor="w", padx=12, pady=(10, 4))
         self.preview_label = tk.Label(
             preview_card,
             text="Откройте Seetong слева. Съёмка начнётся сама.",
@@ -186,10 +186,10 @@ class AnprApp:
         for color in ("#ffffff", "#0039a6", "#d52b1e"):
             tk.Frame(flag, bg=color, width=18, height=4).pack()
         self.plate_label = self.plate_body_label
-        ttk.Label(side, text="Увеличение номера", style="Card.TLabel").pack(anchor="w", padx=16, pady=(10, 4))
+        ttk.Label(side, text="Крупно: авто с рамкой", style="Card.TLabel").pack(anchor="w", padx=16, pady=(10, 4))
         self.zoom_label = tk.Label(
             side,
-            text="После обнаружения табличка будет крупно здесь.",
+            text="Когда найдётся машина, здесь будет её форма крупно.",
             bg="#020617",
             fg=self.muted,
             font=("Segoe UI", 9),
@@ -650,7 +650,7 @@ class AnprApp:
             preview = annotated if annotated is not None else frame
             self.root.after(0, lambda img=preview: self._show_preview(img))
             self.root.after(0, lambda z=zoom: self._show_zoom(z))
-            car_note = f"авто: {len(vehicles)}" if vehicles else "силуэт авто не найден"
+            car_note = f"найдено авто: {len(vehicles)} · форма и рамка на кадре" if vehicles else "силуэт авто не найден"
             if not hits:
                 self.root.after(
                     0,

@@ -370,10 +370,10 @@ def recognize_scene(image, min_confidence: float = 0.35):
     """Detect the car silhouette, cut away the rest, read Type-1 plates on the car."""
     from anpr.vehicles import (
         annotate_scene,
+        annotate_zoom,
         apply_silhouette_mask,
         bumper_box,
         crop_box,
-        crop_to_vehicles,
         find_vehicle_silhouettes,
         zoom_box,
     )
@@ -425,44 +425,30 @@ def recognize_scene(image, min_confidence: float = 0.35):
     elif plate_regions:
         zoom_src = plate_regions[0][0]
 
+    # Main preview always keeps the live frame with car shape + detection frame.
+    try:
+        annotated = annotate_scene(image, silhouettes, unique)
+    except Exception:
+        annotated = image
+
     zoom = None
     try:
-        if zoom_src:
-            zoom = zoom_box(image, zoom_src)
-        elif silhouettes:
-            zoom = zoom_box(image, bumper_box(silhouettes[0].box), min_w=560, min_h=200, pad=0.08)
-    except Exception:
-        zoom = None
-
-    car_zoom = None
-    try:
-        if unique and unique[0].bbox:
+        if unique and unique[0].bbox and silhouettes:
             plate_box = unique[0].bbox
-            owner_car = None
+            owner_car = silhouettes[0].box
             for item in silhouettes:
                 car_box = item.box
                 if car_box[0] <= plate_box[0] <= car_box[2] or car_box[0] <= plate_box[2] <= car_box[2]:
                     owner_car = car_box
                     break
-            if owner_car:
-                car_zoom = zoom_box(image, owner_car, min_w=800, min_h=480, pad=0.15)
-            else:
-                car_zoom = zoom_box(image, plate_box, min_w=800, min_h=480, pad=0.90)
+            zoom = annotate_zoom(image, owner_car, silhouettes, unique)
         elif silhouettes:
-            car_zoom = zoom_box(image, silhouettes[0].box, min_w=800, min_h=480, pad=0.15)
-    except Exception:
-        car_zoom = None
-
-    try:
-        annotated = annotate_scene(image, silhouettes, unique)
-        if car_zoom is not None:
-            annotated = car_zoom
+            zoom = annotate_zoom(image, silhouettes[0].box, silhouettes, unique)
         elif zoom_src:
-            annotated = zoom_box(image, zoom_src, min_w=760, min_h=240, pad=0.55)
-        elif silhouettes:
-            annotated = crop_to_vehicles(annotated, silhouettes)
+            zoom = zoom_box(image, zoom_src)
     except Exception:
-        annotated = image
+        zoom = None
+
     return unique, vehicles, annotated, zoom
 
 
