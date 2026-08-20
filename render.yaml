@@ -1,0 +1,18 @@
+# Blueprint для развёртывания ветеринарного бота (vet_bot.py) на Render.
+# Как использовать: Render Dashboard -> New -> Blueprint -> выбрать этот репозиторий.
+# Токен задаётся вручную в интерфейсе, в репозиторий он не попадает.
+services:
+  - type: web
+    name: vet-triage-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile.vetbot
+    plan: free
+    region: frankfurt
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # Токен от @BotFather: sync false означает "спросить при создании сервиса"
+      - key: VET_BOT_TOKEN
+        sync: false
+      - key: PORT
+        value: 10000
