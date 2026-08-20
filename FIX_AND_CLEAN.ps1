@@ -80,7 +80,8 @@ function Copy-Anpr([string]$src, [string]$dst) {
     $names = @(
         "anpr_gui.py", "anpr_icon.ico", "START_ANPR.bat", "INSTALL_ANPR.bat",
         "DESKTOP_SHORTCUT_ANPR.bat", "MAKE_DESKTOP_SHORTCUT.ps1",
-        "FIX_AND_CLEAN.ps1", "FIX_AND_CLEAN.bat", "requirements-anpr.txt"
+        "FIX_AND_CLEAN.ps1", "FIX_AND_CLEAN.bat", "requirements-anpr.txt",
+        "UNINSTALL_COMPLETE.ps1", "UNINSTALL_COMPLETE.bat"
     )
     foreach ($name in $names) {
         $from = Join-Path $src $name
