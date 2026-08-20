@@ -848,6 +848,17 @@ def start_keep_alive_worker(port: int = 10000, interval: int = KEEP_ALIVE_INTERV
     logger.info("Самопинг каждые %s секунд: %s", interval, ", ".join(targets))
 
 
+def ensure_fresh_event_loop() -> None:
+    """Ставит новый event loop перед перезапуском опроса.
+
+    python-telegram-bot закрывает свой loop на пути ошибки, поэтому повторный
+    запуск в том же процессе падает с «Event loop is closed» и бот больше не
+    поднимается. Проверено на живом Telegram: без замены цикла перезапуск
+    превращается в бесконечную серию мгновенных падений.
+    """
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
+
 def run_bot_forever(
     token: str,
     build: Callable = None,
@@ -867,6 +878,8 @@ def run_bot_forever(
     while max_attempts is None or attempt < max_attempts:
         attempt += 1
         try:
+            if attempt > 1:
+                ensure_fresh_event_loop()
             application = builder(token)
             application.run_polling(
                 drop_pending_updates=False,

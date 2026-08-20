@@ -3,8 +3,10 @@ Tests for the feline triage Telegram bot: menus, keyboards and input parsing.
 Тесты не обращаются к сети: проверяется только сборка меню и разбор ввода.
 """
 
+import asyncio
 import socket
 import unittest
+import warnings
 from unittest import mock
 
 from telegram.error import InvalidToken, NetworkError
@@ -219,6 +221,16 @@ class TestSessionHelpers(unittest.TestCase):
         self.assertIsInstance(get_session(context), CaseSession)
 
 
+def current_event_loop():
+    """Текущий event loop потока или None, без шумного предупреждения Python 3.12."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        try:
+            return asyncio.get_event_loop_policy().get_event_loop()
+        except RuntimeError:
+            return None
+
+
 def free_port():
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -321,6 +333,40 @@ class TestPollingSupervisor(unittest.TestCase):
         code = run_bot_forever("token", build=failing_build, sleeper=lambda _: None)
         self.assertEqual(code, 0)
         self.assertEqual(len(attempts), 3)
+
+    def test_closed_event_loop_is_replaced_before_restart(self):
+        """python-telegram-bot закрывает loop при падении, повтор должен получить новый."""
+        seen_closed = []
+
+        class LoopKillingApplication:
+            def __init__(self):
+                self.calls = 0
+
+            def run_polling(self, **kwargs):
+                self.calls += 1
+                loop = current_event_loop()
+                seen_closed.append(loop is None or loop.is_closed())
+                if self.calls == 1:
+                    loop.close()
+                    raise RuntimeError("Event loop is closed")
+
+        app = LoopKillingApplication()
+        original_loop = current_event_loop()
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        try:
+            code = run_bot_forever(
+                "token", build=lambda token: app, sleeper=lambda _: None
+            )
+        finally:
+            asyncio.set_event_loop(original_loop)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(app.calls, 2)
+        self.assertEqual(
+            seen_closed,
+            [False, False],
+            "второй запуск должен получить живой event loop, иначе бот не поднимется",
+        )
 
     def test_max_attempts_limit(self):
         app = FakeApplication(errors=[RuntimeError("сбой")] * 5)
