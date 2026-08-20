@@ -12,8 +12,11 @@ import logging
 import os
 import sys
 import threading
+import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 try:
     from telegram import (
@@ -148,6 +151,13 @@ ZONE_ORDER: List[BodyZone] = [
 ]
 
 MAX_SUGGESTED_BUTTONS = 6
+
+# Бесплатные хостинги усыпляют сервис без входящих запросов, поэтому бот пингует себя сам.
+KEEP_ALIVE_INTERVAL_SECONDS = 45
+# Длинный опрос: одно соединение держится до 30 секунд вместо частых запросов.
+POLLING_TIMEOUT_SECONDS = 30
+RESTART_DELAY_SECONDS = 5
+MAX_RESTART_DELAY_SECONDS = 60
 
 
 def main_menu_markup():
@@ -781,15 +791,108 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         pass
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
 def start_health_check_server(port: int = 10000):
     """Запускает фоновый HTTP-сервер для health-check хостинга."""
     try:
-        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        server = ReusableHTTPServer(("0.0.0.0", port), HealthCheckHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         logger.info("Health-check HTTP сервер запущен на порту %s", port)
     except OSError as exc:
         logger.warning("Не удалось запустить health-check сервер на порту %s: %s", port, exc)
+
+
+def keep_alive_targets(port: int) -> List[str]:
+    """Адреса для самопинга: свой публичный URL на хостинге и локальный порт."""
+    targets: List[str] = []
+    external = os.getenv("VET_BOT_PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL")
+    if not external:
+        hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+        if hostname:
+            external = f"https://{hostname}"
+    if external:
+        targets.append(external.rstrip("/"))
+    targets.append(f"http://127.0.0.1:{port}")
+    return targets
+
+
+def ping_once(targets: List[str], timeout: float = 8.0) -> int:
+    """Пингует адреса и возвращает число успешных ответов."""
+    successful = 0
+    for url in targets:
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                if response.status < 500:
+                    successful += 1
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            logger.debug("Пинг %s не удался: %s", url, exc)
+    return successful
+
+
+def start_keep_alive_worker(port: int = 10000, interval: int = KEEP_ALIVE_INTERVAL_SECONDS):
+    """Держит бесплатный хостинг в тонусе: без запросов он засыпает через 15 минут."""
+    targets = keep_alive_targets(port)
+
+    def worker():
+        time.sleep(10)
+        while True:
+            ping_once(targets)
+            time.sleep(interval)
+
+    thread = threading.Thread(target=worker, daemon=True, name="keep-alive")
+    thread.start()
+    logger.info("Самопинг каждые %s секунд: %s", interval, ", ".join(targets))
+
+
+def run_bot_forever(
+    token: str,
+    build: Callable = None,
+    sleeper: Callable[[float], None] = time.sleep,
+    max_attempts: Optional[int] = None,
+) -> int:
+    """Держит опрос Telegram постоянным, переподнимая его после сбоев.
+
+    python-telegram-bot переживает короткие сетевые ошибки сам, но при падении
+    процесса опрос прекращается. Здесь приложение пересобирается и запускается
+    заново с нарастающей паузой, а накопленные за простой сообщения не теряются:
+    Telegram хранит их до 24 часов, поэтому drop_pending_updates не включается.
+    """
+    builder = build or build_vet_bot_application
+    attempt = 0
+
+    while max_attempts is None or attempt < max_attempts:
+        attempt += 1
+        try:
+            application = builder(token)
+            application.run_polling(
+                drop_pending_updates=False,
+                timeout=POLLING_TIMEOUT_SECONDS,
+            )
+            logger.info("Опрос остановлен штатно, выходим.")
+            return 0
+        except InvalidToken:
+            print("Ошибка: Telegram отклонил токен.")
+            print("Проверьте VET_BOT_TOKEN в файле .env: токен выдаёт @BotFather")
+            print("и он выглядит так: 1234567890:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+            return 1
+        except KeyboardInterrupt:
+            logger.info("Остановлено пользователем.")
+            return 0
+        except Exception as exc:  # noqa: BLE001 - бот не должен умирать от любой ошибки
+            delay = min(MAX_RESTART_DELAY_SECONDS, RESTART_DELAY_SECONDS * attempt)
+            logger.error(
+                "Опрос упал (попытка %s): %s. Перезапуск через %s секунд.",
+                attempt,
+                exc,
+                delay,
+            )
+            sleeper(delay)
+
+    return 1
 
 
 def main():
@@ -807,16 +910,12 @@ def main():
         logger.warning("ffmpeg не найден: разбор видео будет недоступен, фото работают штатно")
 
     start_health_check_server(port)
+    start_keep_alive_worker(port)
 
     print("Запуск ветеринарного Telegram-бота визуального триажа...")
-    app = build_vet_bot_application(token)
-    try:
-        app.run_polling()
-    except InvalidToken:
-        print("Ошибка: Telegram отклонил токен.")
-        print("Проверьте VET_BOT_TOKEN в файле .env: токен выдаёт @BotFather")
-        print("и он выглядит так: 1234567890:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
-        sys.exit(1)
+    print("Опрос Telegram постоянный: при сбое бот сам поднимется и ответит на")
+    print("сообщения, накопившиеся за время простоя. Для остановки нажмите Ctrl+C.")
+    sys.exit(run_bot_forever(token))
 
 
 if __name__ == "__main__":

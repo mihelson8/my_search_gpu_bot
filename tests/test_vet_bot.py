@@ -3,13 +3,18 @@ Tests for the feline triage Telegram bot: menus, keyboards and input parsing.
 Тесты не обращаются к сети: проверяется только сборка меню и разбор ввода.
 """
 
+import socket
 import unittest
+from unittest import mock
+
+from telegram.error import InvalidToken, NetworkError
 
 from vet_bot import (
     BOT_COMMANDS,
     BOT_DESCRIPTION,
     BOT_SHORT_DESCRIPTION,
     MAIN_KEYBOARD,
+    MAX_RESTART_DELAY_SECONDS,
     MAX_SUGGESTED_BUTTONS,
     MENU_ACTIONS,
     ZONE_ORDER,
@@ -20,7 +25,11 @@ from vet_bot import (
     build_zones_keyboard,
     emergency_alert_html,
     get_session,
+    keep_alive_targets,
     parse_patient_args,
+    ping_once,
+    run_bot_forever,
+    start_health_check_server,
 )
 from vetcare.engine import CaseSession
 from vetcare.knowledge import MEDICATIONS, SIGNS, BodyZone, medication_groups, signs_by_zone
@@ -208,6 +217,118 @@ class TestSessionHelpers(unittest.TestCase):
         context = FakeContext()
         context.user_data["session"] = "не сессия"
         self.assertIsInstance(get_session(context), CaseSession)
+
+
+def free_port():
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+class TestKeepAlive(unittest.TestCase):
+    def test_targets_without_hosting_env(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(keep_alive_targets(10000), ["http://127.0.0.1:10000"])
+
+    def test_render_hostname_is_used(self):
+        with mock.patch.dict(
+            "os.environ", {"RENDER_EXTERNAL_HOSTNAME": "vet-bot.onrender.com"}, clear=True
+        ):
+            self.assertEqual(
+                keep_alive_targets(10000),
+                ["https://vet-bot.onrender.com", "http://127.0.0.1:10000"],
+            )
+
+    def test_explicit_url_wins_and_trailing_slash_is_trimmed(self):
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "VET_BOT_PUBLIC_URL": "https://my-vet.example.com/",
+                "RENDER_EXTERNAL_HOSTNAME": "vet-bot.onrender.com",
+            },
+            clear=True,
+        ):
+            self.assertEqual(keep_alive_targets(10000)[0], "https://my-vet.example.com")
+
+    def test_ping_reaches_health_check_server(self):
+        port = free_port()
+        start_health_check_server(port)
+        self.assertEqual(ping_once([f"http://127.0.0.1:{port}"], timeout=5), 1)
+
+    def test_ping_survives_unreachable_target(self):
+        self.assertEqual(ping_once([f"http://127.0.0.1:{free_port()}"], timeout=1), 0)
+
+
+class FakeApplication:
+    """Приложение-заглушка: имитирует поведение run_polling."""
+
+    def __init__(self, errors=None):
+        self.errors = list(errors or [])
+        self.calls = []
+
+    def run_polling(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.errors:
+            raise self.errors.pop(0)
+
+
+class TestPollingSupervisor(unittest.TestCase):
+    def test_clean_stop_does_not_restart(self):
+        app = FakeApplication()
+        delays = []
+        code = run_bot_forever("token", build=lambda token: app, sleeper=delays.append)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(len(app.calls), 1)
+        self.assertEqual(delays, [])
+
+    def test_pending_updates_are_kept_and_long_polling_used(self):
+        app = FakeApplication()
+        run_bot_forever("token", build=lambda token: app, sleeper=lambda _: None)
+
+        self.assertFalse(app.calls[0]["drop_pending_updates"])
+        self.assertGreaterEqual(app.calls[0]["timeout"], 20)
+
+    def test_crash_is_retried_with_growing_delay(self):
+        app = FakeApplication(errors=[NetworkError("нет сети"), RuntimeError("сбой")])
+        delays = []
+        code = run_bot_forever("token", build=lambda token: app, sleeper=delays.append)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(len(app.calls), 3)
+        self.assertEqual(len(delays), 2)
+        self.assertLess(delays[0], delays[1])
+        self.assertLessEqual(max(delays), MAX_RESTART_DELAY_SECONDS)
+
+    def test_invalid_token_stops_immediately(self):
+        app = FakeApplication(errors=[InvalidToken()])
+        delays = []
+        code = run_bot_forever("token", build=lambda token: app, sleeper=delays.append)
+
+        self.assertEqual(code, 1)
+        self.assertEqual(len(app.calls), 1)
+        self.assertEqual(delays, [])
+
+    def test_build_failure_is_retried(self):
+        attempts = []
+
+        def failing_build(token):
+            attempts.append(token)
+            if len(attempts) < 3:
+                raise NetworkError("DNS недоступен")
+            return FakeApplication()
+
+        code = run_bot_forever("token", build=failing_build, sleeper=lambda _: None)
+        self.assertEqual(code, 0)
+        self.assertEqual(len(attempts), 3)
+
+    def test_max_attempts_limit(self):
+        app = FakeApplication(errors=[RuntimeError("сбой")] * 5)
+        code = run_bot_forever(
+            "token", build=lambda token: app, sleeper=lambda _: None, max_attempts=2
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual(len(app.calls), 2)
 
 
 class TestEmergencyAlert(unittest.TestCase):
