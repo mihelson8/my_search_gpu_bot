@@ -1,0 +1,25 @@
+name: Keep Alive Vet Bot 24/7
+
+on:
+  schedule:
+    # Раз в 10 минут: бесплатные хостинги усыпляют сервис после 15 минут тишины
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping vet bot service
+        env:
+          VET_BOT_URL: ${{ vars.VET_BOT_URL }}
+        run: |
+          if [ -z "$VET_BOT_URL" ]; then
+            echo "Переменная VET_BOT_URL не задана."
+            echo "Добавьте её в Settings > Secrets and variables > Actions > Variables,"
+            echo "например https://vet-triage-bot.onrender.com"
+            exit 0
+          fi
+          echo "Пингуем $VET_BOT_URL"
+          curl -s -L --max-time 20 -o /dev/null -w "HTTP %{http_code}\n" "$VET_BOT_URL" \
+            || echo "Пинг не удался, повторим на следующем запуске"

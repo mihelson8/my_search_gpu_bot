@@ -65,11 +65,29 @@ if not defined VET_BOT_TOKEN (
 )
 
 echo Starting bot. Keep this window open, close it to stop the bot.
+echo Auto-restart is on: if the bot crashes, it will start again in 10 seconds.
 echo.
-%LAUNCH% vet_bot.py
 
-if errorlevel 1 (
-    echo.
-    echo [Error] Bot stopped with an error. Check the token and internet connection.
-    pause
-)
+:run
+%LAUNCH% vet_bot.py
+set "CODE=%errorlevel%"
+
+if "%CODE%"=="0" goto :done
+if "%CODE%"=="1" goto :tokenerror
+
+echo.
+echo [Warning] Bot stopped unexpectedly (code %CODE%). Restarting in 10 seconds...
+echo Press Ctrl+C now to cancel restart.
+timeout /t 10 /nobreak >nul
+goto :run
+
+:tokenerror
+echo.
+echo [Error] Token rejected. Get a new one from @BotFather and fix .env
+pause
+exit /b 1
+
+:done
+echo.
+echo Bot stopped.
+pause
