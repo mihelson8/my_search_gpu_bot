@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r13».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r14».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -192,7 +192,7 @@ class AnprApp:
         )
         self.preview_label.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        side = tk.Frame(body, bg=self.card, width=400)
+        side = tk.Frame(body, bg=self.card, width=440)
         side.pack(side="right", fill="y")
         side.pack_propagate(False)
         ttk.Label(side, text="Распознанный номер (тип 1)", style="Card.TLabel").pack(anchor="w", padx=16, pady=(14, 4))
@@ -229,25 +229,25 @@ class AnprApp:
             font=("Segoe UI", 12, "bold"),
         )
         self.time_label.pack(anchor="w", padx=16, pady=(4, 2))
-        ttk.Label(side, text="Крупно: авто с рамкой", style="Card.TLabel").pack(anchor="w", padx=16, pady=(8, 4))
+        ttk.Label(side, text="Крупно: номер с рамкой", style="Card.TLabel").pack(anchor="w", padx=16, pady=(8, 4))
         self.zoom_label = tk.Label(
             side,
-            text="Когда найдётся машина, здесь будет её форма крупно.",
+            text="Когда найдётся номер, здесь будет крупный план таблички.",
             bg="#020617",
             fg=self.muted,
             font=("Segoe UI", 9),
-            wraplength=360,
+            wraplength=400,
             justify="center",
-            width=42,
-            height=12,
+            width=48,
+            height=16,
         )
-        self.zoom_label.pack(fill="x", padx=16, pady=(0, 8))
+        self.zoom_label.pack(fill="x", padx=12, pady=(0, 8))
         self.category_label_widget = tk.Label(
             side, text="НЕИЗВЕСТНЫЙ", bg=self.card, fg=STATUS_COLORS["unknown"], font=("Segoe UI", 20, "bold")
         )
         self.category_label_widget.pack(anchor="w", padx=16, pady=(4, 8))
         self.detail_label = tk.Label(
-            side, text="", bg=self.card, fg=self.muted, font=("Segoe UI", 10), wraplength=360, justify="left"
+            side, text="", bg=self.card, fg=self.muted, font=("Segoe UI", 10), wraplength=400, justify="left"
         )
         self.detail_label.pack(anchor="w", padx=16, pady=(0, 12))
 
@@ -839,7 +839,7 @@ class AnprApp:
             return
         rgb = crop[:, :, ::-1]
         image = Image.fromarray(rgb)
-        image.thumbnail((380, 260))
+        image.thumbnail((420, 340))
         self._zoom_photo = ImageTk.PhotoImage(image)
         self.zoom_label.config(image=self._zoom_photo, text="")
 

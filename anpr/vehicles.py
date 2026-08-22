@@ -515,26 +515,36 @@ def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> obje
 
 
 def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates: list = ()) -> object:
-    """Close-up of the detected car/plate with frame and number text."""
+    """Close-up focused on the plate so the Type-1 number is readable."""
     import cv2
 
     from anpr.plates import format_plate_parts
 
-    pad = 0.45 if plates else 0.18
-    crop = zoom_box(image, box, min_w=720, min_h=400, pad=pad)
+    focus = box
+    pad = 0.22
+    min_w, min_h = 720, 360
+    for hit in plates:
+        plate_box = getattr(hit, "bbox", None)
+        if plate_box:
+            focus = plate_box
+            # Expand around the plate: bumper + number, not the whole lot.
+            pad = 2.4
+            min_w, min_h = 960, 420
+            break
+
+    crop = zoom_box(image, focus, min_w=min_w, min_h=min_h, pad=pad)
     if crop is None or getattr(crop, "size", 0) == 0:
         return None
     h, w = crop.shape[:2]
-    draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=(40, 220, 90), thickness=3, corner=36)
-    cv2.putText(crop, "АВТО", (16, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (40, 220, 90), 2)
+    draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=(40, 220, 90), thickness=4, corner=40)
+    cv2.putText(crop, "НОМЕР", (16, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (40, 220, 90), 2)
     for hit in plates:
         plate = getattr(hit, "plate", "") or ""
         if not plate:
             continue
         body, region = format_plate_parts(plate)
         label = f"{body} | {region}" if body and body != "—" else plate
-        # Dark bar so the number is always readable on the zoom panel.
-        cv2.rectangle(crop, (0, h - 52), (w, h), (10, 10, 10), -1)
-        cv2.putText(crop, label, (16, h - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 220, 255), 2)
+        cv2.rectangle(crop, (0, h - 64), (w, h), (10, 10, 10), -1)
+        cv2.putText(crop, label, (16, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 1.15, (0, 220, 255), 3)
         break
     return crop
