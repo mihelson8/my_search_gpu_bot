@@ -565,3 +565,24 @@ def test_zoom_box_enlarges_plate():
     assert zoomed.shape[1] > 160
     assert zoomed.shape[0] > 20
 
+
+def test_annotate_zoom_plate_is_bright_and_large():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.recognizer import PlateHit
+    from anpr.vehicles import annotate_zoom
+
+    frame = numpy.full((360, 640, 3), 35, dtype=numpy.uint8)
+    frame[220:250, 240:420] = (230, 230, 230)
+    hit = PlateHit(
+        plate="К900НН93",
+        confidence=0.8,
+        raw_text="К900НН93",
+        bbox=(240, 220, 420, 250),
+        engine="test",
+    )
+    zoom = annotate_zoom(frame, hit.bbox, [], [hit])
+    assert zoom is not None
+    assert zoom.shape[1] >= 900
+    assert float(zoom.mean()) > 40.0
+

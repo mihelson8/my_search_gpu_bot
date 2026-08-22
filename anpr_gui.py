@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r14».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r15».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -236,10 +236,10 @@ class AnprApp:
             bg="#020617",
             fg=self.muted,
             font=("Segoe UI", 9),
-            wraplength=400,
+            wraplength=440,
             justify="center",
-            width=48,
-            height=16,
+            width=52,
+            height=18,
         )
         self.zoom_label.pack(fill="x", padx=12, pady=(0, 8))
         self.category_label_widget = tk.Label(
@@ -708,26 +708,38 @@ class AnprApp:
             elapsed = time.perf_counter() - t0
             elapsed_txt = f"{elapsed:.1f} с" if elapsed >= 0.1 else f"{elapsed * 1000:.0f} мс"
             preview = annotated if annotated is not None else frame
-            # Guaranteed close-up: rebuild zoom from plate/car box if pipeline returned empty.
-            if zoom is None or getattr(zoom, "size", 0) == 0:
-                try:
-                    from anpr.vehicles import annotate_zoom, vehicle_box_from_plate
+            # Always rebuild zoom from undimmed work frame + plate box.
+            # Annotated preview dims the lot to ~35% and makes the side panel look black.
+            try:
+                from anpr.vehicles import annotate_zoom, downscale_for_anpr, vehicle_box_from_plate
 
-                    src = preview if preview is not None else frame
-                    if hits and hits[0].bbox:
-                        hit0 = hits[0]
-                        owner = vehicle_box_from_plate(hit0.bbox, src.shape)
-                        if vehicles:
-                            px0, py0 = hit0.bbox[0], hit0.bbox[1]
-                            for car_box in vehicles:
-                                if car_box[0] <= px0 <= car_box[2] and car_box[1] <= py0 <= car_box[3]:
-                                    owner = car_box
-                                    break
-                        zoom = annotate_zoom(src, owner, vehicles, hits[:1])
-                    elif vehicles:
-                        zoom = annotate_zoom(src, vehicles[0], vehicles, hits[:1] if hits else [])
-                except Exception:
-                    pass
+                work_src = downscale_for_anpr(frame, max_w=896)
+                if hits and hits[0].bbox:
+                    hit0 = hits[0]
+                    owner = hit0.bbox
+                    zoom = annotate_zoom(work_src, owner, vehicles, hits[:1])
+                elif vehicles:
+                    zoom = annotate_zoom(
+                        work_src, vehicles[0], vehicles, hits[:1] if hits else []
+                    )
+                elif zoom is None or getattr(zoom, "size", 0) == 0:
+                    zoom = None
+            except Exception:
+                if zoom is None or getattr(zoom, "size", 0) == 0:
+                    try:
+                        from anpr.vehicles import annotate_zoom, vehicle_box_from_plate
+
+                        src = frame
+                        if hits and hits[0].bbox:
+                            hit0 = hits[0]
+                            owner = vehicle_box_from_plate(hit0.bbox, src.shape)
+                            zoom = annotate_zoom(src, owner, vehicles, hits[:1])
+                        elif vehicles:
+                            zoom = annotate_zoom(
+                                src, vehicles[0], vehicles, hits[:1] if hits else []
+                            )
+                    except Exception:
+                        pass
             self.root.after(0, lambda img=preview: self._show_preview(img))
             self.root.after(0, lambda z=zoom: self._show_zoom(z))
             self.root.after(0, lambda t=elapsed_txt: self.time_label.config(text=f"Время определения: {t}"))
@@ -839,7 +851,7 @@ class AnprApp:
             return
         rgb = crop[:, :, ::-1]
         image = Image.fromarray(rgb)
-        image.thumbnail((420, 340))
+        image.thumbnail((520, 420))
         self._zoom_photo = ImageTk.PhotoImage(image)
         self.zoom_label.config(image=self._zoom_photo, text="")
 

@@ -79,7 +79,7 @@ def preprocess_plate_crop(crop):
     return thresh
 
 
-def _upscale_for_ocr(crop, max_side: int = 720):
+def _upscale_for_ocr(crop, max_side: int = 560):
     """Enlarge small plate crops for OCR, but never create a huge image."""
     import cv2
 
@@ -87,11 +87,11 @@ def _upscale_for_ocr(crop, max_side: int = 720):
         return crop
     h, w = crop.shape[:2]
     # High-angle plates are small and flattened; enlarge modestly.
-    scale_h = max(96 / max(h, 1), 2.2)
-    scale_w = max(280 / max(w, 1), 2.0)
+    scale_h = max(88 / max(h, 1), 2.0)
+    scale_w = max(240 / max(w, 1), 1.8)
     out = cv2.resize(
         crop,
-        (max(int(w * scale_w), 200), max(int(h * scale_h), 72)),
+        (max(int(w * scale_w), 180), max(int(h * scale_h), 64)),
         interpolation=cv2.INTER_CUBIC,
     )
     oh, ow = out.shape[:2]
@@ -247,13 +247,14 @@ def _iter_search_views(image, origin=(0, 0), inside_vehicle: bool = False):
         return
     if inside_vehicle:
         h, w = image.shape[:2]
-        yield (ox, oy), image
-        # Bumper strip — Type-1 plate sits in the lower part of the car crop.
+        # Bumper strip first — smaller crop → much faster OCR on live RTSP.
         y0 = int(h * 0.40)
         if h - y0 >= 36 and w >= 60:
             yield (ox, oy + y0), image[y0:h, :]
+            return
+        yield (ox, oy), image
         return
-    for box, view in _search_views(image, max_views=3):
+    for box, view in _search_views(image, max_views=2):
         x0, y0, _x1, _y1 = box
         yield (ox + x0, oy + y0), view
 
@@ -464,7 +465,7 @@ def _ocr_crop_direct(crop, origin_box, min_confidence: float) -> List[PlateHit]:
     if crop is None or getattr(crop, "size", 0) == 0:
         return []
     try:
-        prepared = _upscale_for_ocr(crop, max_side=640)
+        prepared = _upscale_for_ocr(crop, max_side=480)
     except Exception:
         prepared = crop
     engine, raw_hits = _run_ocr(prepared)
@@ -501,11 +502,11 @@ def recognize_scene(image, min_confidence: float = 0.35):
         return [], [], image, None
 
     try:
-        work = downscale_for_anpr(image, max_w=1024)
+        work = downscale_for_anpr(image, max_w=896)
     except Exception:
         work = image
 
-    # Live RTSP: prefer 1-2 RapidOCR calls.
+    # Live RTSP: 1 RapidOCR call on bumper; 2nd only if bumper missed.
     _OCR_BUDGET["n"] = 0
     _OCR_BUDGET["max"] = 2
     _FAST_FRAME["n"] = int(_FAST_FRAME.get("n", 0)) + 1
@@ -528,6 +529,12 @@ def recognize_scene(image, min_confidence: float = 0.35):
     def _has_good_plate(items: List[PlateHit]) -> bool:
         return any(plate_is_valid(h.plate) and not is_osd_text(h.plate) for h in items)
 
+    def _has_confident_plate(items: List[PlateHit], floor: float = 0.48) -> bool:
+        return any(
+            plate_is_valid(h.plate) and not is_osd_text(h.plate) and h.confidence >= floor
+            for h in items
+        )
+
     # 1) Bumper only (fast path).
     if silhouettes:
         item = silhouettes[0]
@@ -535,7 +542,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
         crop = crop_box(work, roi)
         if crop is not None and getattr(crop, "size", 0) > 0:
             regions = _collect_plate_regions(
-                crop, origin=(roi[0], roi[1]), inside_vehicle=True, max_regions=2
+                crop, origin=(roi[0], roi[1]), inside_vehicle=True, max_regions=1
             )
             if regions:
                 hits.extend(_ocr_regions(regions, min_confidence))
@@ -544,14 +551,14 @@ def recognize_scene(image, min_confidence: float = 0.35):
                     _ocr_crop_direct(crop, roi, min_confidence=max(0.14, min_confidence - 0.12))
                 )
 
-    # 2) Center-lower plate zone only if bumper missed.
-    if not _has_good_plate(hits):
+    # 2) Center-lower plate zone only if bumper missed or was weak.
+    if not _has_confident_plate(hits):
         try:
             (fx0, fy0, fx1, fy1), focus = plate_focus_band(work)
             regions = _collect_plate_regions(
-                focus, origin=(fx0, fy0), inside_vehicle=False, max_regions=2
+                focus, origin=(fx0, fy0), inside_vehicle=False, max_regions=1
             )
-            if regions:
+            if regions and not _has_good_plate(hits):
                 hits.extend(_ocr_regions(regions, min_confidence))
             if not _has_good_plate(hits):
                 fh, fw = focus.shape[:2]
@@ -578,7 +585,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
         seen.add(hit.plate)
         unique.append(hit)
     unique.sort(key=lambda item: item.confidence, reverse=True)
-    unique = unique[:2]
+    unique = unique[:1]
 
     if unique and not silhouettes:
         for index, hit in enumerate(unique):
@@ -600,7 +607,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
     zoom = None
     try:
         if unique and unique[0].bbox:
-            # Always zoom on the plate itself so the number is large enough to read.
+            # Always zoom on the undimmed work frame + plate box (readable digits).
             zoom = annotate_zoom(work, unique[0].bbox, silhouettes, unique[:1])
         elif silhouettes:
             zoom = annotate_zoom(work, silhouettes[0].box, silhouettes, unique[:1])

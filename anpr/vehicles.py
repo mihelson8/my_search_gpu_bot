@@ -334,6 +334,34 @@ def downscale_for_anpr(image, max_w: int = 1280):
     return cv2.resize(image, (max_w, max(int(h * scale), 1)), interpolation=cv2.INTER_AREA)
 
 
+def brighten_crop(crop, min_mean: float = 78.0):
+    """Lift dark RTSP crops so white Type-1 digits stay readable in the side panel."""
+    import cv2
+    import numpy as np
+
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return crop
+    mean = float(np.mean(crop))
+    if mean >= min_mean:
+        return crop
+    out = crop.copy()
+    if out.ndim == 2:
+        clahe = cv2.createCLAHE(clipLimit=3.2, tileGridSize=(8, 8))
+        return clahe.apply(out)
+    lab = cv2.cvtColor(out, cv2.COLOR_BGR2LAB)
+    l_ch, a_ch, b_ch = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=3.2, tileGridSize=(8, 8))
+    l_ch = clahe.apply(l_ch)
+    merged = cv2.merge([l_ch, a_ch, b_ch])
+    out = cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+    # Mild gain if still dim after CLAHE (high camera / evening).
+    mean2 = float(np.mean(out))
+    if mean2 < min_mean:
+        gain = min(min_mean / max(mean2, 1.0), 1.85)
+        out = np.clip(out.astype(np.float32) * gain, 0, 255).astype(np.uint8)
+    return out
+
+
 def zoom_box(image, box: Box, min_w: int = 520, min_h: int = 140, pad: float = 0.28):
     """Crop around a plate/car box and enlarge it so the Type-1 number is readable."""
     import cv2
@@ -352,9 +380,10 @@ def zoom_box(image, box: Box, min_w: int = 520, min_h: int = 140, pad: float = 0
     crop = image[y0:y1, x0:x1]
     if crop is None or getattr(crop, "size", 0) == 0:
         return image
+    crop = brighten_crop(crop)
     ch, cw = crop.shape[:2]
     scale = max(min_w / float(max(cw, 1)), min_h / float(max(ch, 1)), 3.2)
-    scale = min(scale, 14.0)
+    scale = min(scale, 16.0)
     return cv2.resize(
         crop,
         (max(int(cw * scale), min_w), max(int(ch * scale), min_h)),
@@ -515,36 +544,56 @@ def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> obje
 
 
 def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates: list = ()) -> object:
-    """Close-up focused on the plate so the Type-1 number is readable."""
+    """Close-up focused on the plate so the Type-1 number fills the side panel."""
     import cv2
+    import numpy as np
 
     from anpr.plates import format_plate_parts
 
+    # Never use a dimmed/annotated preview here — black lot pixels wipe the crop.
+    if image is None or getattr(image, "size", 0) == 0:
+        return None
+
     focus = box
-    pad = 0.22
+    pad = 0.35
     min_w, min_h = 720, 360
+    plate_focus = False
     for hit in plates:
         plate_box = getattr(hit, "bbox", None)
         if plate_box:
             focus = plate_box
-            # Expand around the plate: bumper + number, not the whole lot.
-            pad = 2.4
-            min_w, min_h = 960, 420
+            # Tight around the plate so digits dominate the panel (not the whole car).
+            pad = 1.15
+            min_w, min_h = 1100, 480
+            plate_focus = True
             break
+
+    if not focus:
+        return None
 
     crop = zoom_box(image, focus, min_w=min_w, min_h=min_h, pad=pad)
     if crop is None or getattr(crop, "size", 0) == 0:
         return None
+    crop = brighten_crop(crop, min_mean=88.0)
+    # Guard: if crop is still nearly black, fall back to a wider bumper slice.
+    if float(np.mean(crop)) < 28.0 and box and box != focus:
+        crop = zoom_box(image, box, min_w=900, min_h=400, pad=0.45)
+        if crop is None or getattr(crop, "size", 0) == 0:
+            return None
+        crop = brighten_crop(crop, min_mean=88.0)
+        plate_focus = False
+
     h, w = crop.shape[:2]
     draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=(40, 220, 90), thickness=4, corner=40)
-    cv2.putText(crop, "НОМЕР", (16, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (40, 220, 90), 2)
+    title = "НОМЕР КРУПНО" if plate_focus else "АВТО"
+    cv2.putText(crop, title, (16, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (40, 220, 90), 2)
     for hit in plates:
         plate = getattr(hit, "plate", "") or ""
         if not plate:
             continue
         body, region = format_plate_parts(plate)
         label = f"{body} | {region}" if body and body != "—" else plate
-        cv2.rectangle(crop, (0, h - 64), (w, h), (10, 10, 10), -1)
-        cv2.putText(crop, label, (16, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 1.15, (0, 220, 255), 3)
+        cv2.rectangle(crop, (0, h - 72), (w, h), (10, 10, 10), -1)
+        cv2.putText(crop, label, (16, h - 22), cv2.FONT_HERSHEY_SIMPLEX, 1.35, (0, 220, 255), 3)
         break
     return crop
