@@ -264,6 +264,20 @@ def _is_mostly_black(frame, threshold: float = 16.0) -> bool:
         return True
 
 
+def _is_useless_frame(frame, max_std: float = 12.0) -> bool:
+    """True for solid green/black RTSP placeholders with no real scene."""
+    try:
+        if frame is None or getattr(frame, "size", 0) == 0:
+            return True
+        if _is_mostly_black(frame):
+            return True
+        # Compare pixels, not BGR channels (solid green has channel spread).
+        flat = frame.reshape(-1, frame.shape[-1]) if frame.ndim == 3 else frame.reshape(-1, 1)
+        return float(flat.astype("float32").std(axis=0).max()) < max_std
+    except Exception:
+        return True
+
+
 def grab_window(info: WindowInfo):
     """Prefer a real screen screenshot: Seetong video is often black via PrintWindow."""
     mss_frame = None

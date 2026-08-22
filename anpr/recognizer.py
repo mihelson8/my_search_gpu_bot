@@ -114,51 +114,26 @@ def _upscale_for_ocr(crop, max_side: int = 720):
 def plate_focus_band(image):
     """Center-lower strip where a high camera usually sees the Type-1 plate."""
     h, w = image.shape[:2]
-    y0 = int(h * 0.38)
+    y0 = int(h * 0.42)
     y1 = int(h * 0.92)
-    x0 = int(w * 0.12)
-    x1 = int(w * 0.88)
+    x0 = int(w * 0.18)
+    x1 = int(w * 0.82)
     if y1 - y0 < 40 or x1 - x0 < 60:
         return (0, 0, w, h), image
     return (x0, y0, x1, y1), image[y0:y1, x0:x1]
 
 
 def mask_osd(image):
-    """Black out timestamp and HDIPCAM / 2560x1440 overlays before OCR."""
-    import cv2
-
+    """Black out corner camera overlays (HDIPCAM / resolution), keep plates intact."""
     if image is None or getattr(image, "size", 0) == 0:
         return image
     out = image.copy()
     h, w = out.shape[:2]
-    # Corner timestamps / resolution badges (usual camera OSD).
-    out[0 : max(int(h * 0.12), 14), 0 : max(int(w * 0.55), 40)] = 0
-    out[int(h * 0.78) : h, int(w * 0.30) : w] = 0
-    out[int(h * 0.88) : h, :] = 0
-
-    # Erase large bright white text bars (HDIPCAM / 2560X1440), keep the lot.
-    try:
-        gray = out[:, :, 1] if out.ndim == 3 else out
-        _, bright = cv2.threshold(gray, 215, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for contour in contours:
-            x, y, cw, ch = cv2.boundingRect(contour)
-            if ch < 16 or cw < 50:
-                continue
-            aspect = cw / float(max(ch, 1))
-            area = cw * ch
-            if area < 0.003 * h * w or area > 0.25 * h * w:
-                continue
-            # Wide bright text lines — camera brand / resolution overlay.
-            if aspect >= 2.4:
-                pad = 4
-                y0 = max(0, y - pad)
-                y1 = min(h, y + ch + pad)
-                x0 = max(0, x - pad)
-                x1 = min(w, x + cw + pad)
-                out[y0:y1, x0:x1] = 0
-    except Exception:
-        pass
+    # Top-left timestamp / brand.
+    out[0 : max(int(h * 0.10), 12), 0 : max(int(w * 0.45), 40)] = 0
+    # Bottom-right resolution badge only — do NOT wipe the bumper/plate zone.
+    out[int(h * 0.90) : h, int(w * 0.55) : w] = 0
+    out[int(h * 0.94) : h, :] = 0
     return out
 
 
@@ -526,13 +501,13 @@ def recognize_scene(image, min_confidence: float = 0.35):
         return [], [], image, None
 
     try:
-        work = downscale_for_anpr(image, max_w=1100)
+        work = downscale_for_anpr(image, max_w=1280)
     except Exception:
         work = image
 
-    # Hard cap: live RTSP must not run many OCR passes (was 10-15s).
+    # Live RTSP: a few RapidOCR calls is enough; more made it 10-15s.
     _OCR_BUDGET["n"] = 0
-    _OCR_BUDGET["max"] = 2
+    _OCR_BUDGET["max"] = 3
     _FAST_FRAME["n"] = int(_FAST_FRAME.get("n", 0)) + 1
 
     silhouettes = []
@@ -542,6 +517,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
     except Exception:
         silhouettes = []
 
+    # Light corner OSD wipe only — never erase white plates in the lot.
     try:
         ocr_work = mask_osd(work)
     except Exception:
@@ -552,43 +528,62 @@ def recognize_scene(image, min_confidence: float = 0.35):
     def _has_good_plate(items: List[PlateHit]) -> bool:
         return any(plate_is_valid(h.plate) and not is_osd_text(h.plate) for h in items)
 
-    # 1) Bumper of the best car (if any).
+    # 1) Bumper / front of the car (high camera: plate is flattened but readable).
     if silhouettes:
         item = silhouettes[0]
-        roi = bumper_box(item.box)
-        crop = crop_box(ocr_work, roi)
-        if crop is not None and getattr(crop, "size", 0) > 0:
+        for roi in (bumper_box(item.box), item.box):
+            # Prefer unmasked pixels for the plate; OSD wipe is only corners.
+            crop = crop_box(work, roi)
+            if crop is None or getattr(crop, "size", 0) == 0:
+                continue
             regions = _collect_plate_regions(
                 crop, origin=(roi[0], roi[1]), inside_vehicle=True, max_regions=2
             )
             hits.extend(_ocr_regions(regions, min_confidence))
-            if not _has_good_plate(hits):
-                hits.extend(
-                    _ocr_crop_direct(crop, roi, min_confidence=max(0.16, min_confidence - 0.1))
-                )
+            if _has_good_plate(hits):
+                break
+            hits.extend(
+                _ocr_crop_direct(crop, roi, min_confidence=max(0.14, min_confidence - 0.12))
+            )
+            if _has_good_plate(hits):
+                break
 
-    # 2) Center-lower plate zone (high camera) — one more OCR budget slot.
+    # 2) Center-lower plate zone even if silhouette missed the white SUV.
     if not _has_good_plate(hits):
         try:
-            (fx0, fy0, fx1, fy1), focus = plate_focus_band(ocr_work)
+            (fx0, fy0, fx1, fy1), focus = plate_focus_band(work)
             regions = _collect_plate_regions(
-                focus, origin=(fx0, fy0), inside_vehicle=False, max_regions=2
+                focus, origin=(fx0, fy0), inside_vehicle=False, max_regions=3
             )
             if regions:
                 hits.extend(_ocr_regions(regions, min_confidence))
             if not _has_good_plate(hits):
-                # Smaller middle strip — faster and closer to the plate.
                 fh, fw = focus.shape[:2]
-                mid = focus[int(fh * 0.35) : fh, int(fw * 0.15) : int(fw * 0.85)]
-                my0 = fy0 + int(fh * 0.35)
-                mx0 = fx0 + int(fw * 0.15)
+                # Narrower bumper strip in the lower half of the focus band.
+                mid = focus[int(fh * 0.40) : int(fh * 0.95), int(fw * 0.20) : int(fw * 0.80)]
+                my0 = fy0 + int(fh * 0.40)
+                mx0 = fx0 + int(fw * 0.20)
                 hits.extend(
                     _ocr_crop_direct(
                         mid,
                         (mx0, my0, mx0 + mid.shape[1], my0 + mid.shape[0]),
-                        min_confidence=max(0.14, min_confidence - 0.12),
+                        min_confidence=max(0.12, min_confidence - 0.14),
                     )
                 )
+        except Exception:
+            pass
+
+    # 3) Last try on lightly OSD-masked focus (if raw path failed).
+    if not _has_good_plate(hits) and ocr_work is not work:
+        try:
+            (fx0, fy0, fx1, fy1), focus = plate_focus_band(ocr_work)
+            hits.extend(
+                _ocr_crop_direct(
+                    focus,
+                    (fx0, fy0, fx1, fy1),
+                    min_confidence=max(0.12, min_confidence - 0.14),
+                )
+            )
         except Exception:
             pass
 

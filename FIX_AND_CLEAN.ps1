@@ -277,7 +277,7 @@ if (Test-Path $verFile) {
     if ($m) { $shownVer = $m.Matches.Groups[1].Value }
 }
 Write-Host ("  READY. File version: " + $shownVer)
-Write-Host "  In the app look for YELLOW badge: BUILD 2026.08.22-r12"
+Write-Host "  In the app look for YELLOW badge: BUILD 2026.08.22-r13"
 Write-Host ("  Folder: " + $stable)
 Write-Host "  If badge is missing - old program is still open."
 Write-Host "========================================"

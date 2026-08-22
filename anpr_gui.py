@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r12».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r13».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -653,7 +653,7 @@ class AnprApp:
             return
         self._busy = True
         try:
-            from anpr.capture import crop_roi, grab_frame, save_screenshot
+            from anpr.capture import _is_useless_frame, crop_roi, grab_frame, save_screenshot
             from anpr.recognizer import recognize_scene
 
             frame, source_name = grab_frame(
@@ -685,6 +685,19 @@ class AnprApp:
                 )
             self._last_frame = frame
             self.root.after(0, lambda: self._show_preview(frame))
+            if _is_useless_frame(frame):
+                self.root.after(
+                    0,
+                    lambda: self._set_detection(
+                        self._last_plate or "—",
+                        "unknown" if not self._last_plate else self._last_category,
+                        "Нет картинки с камеры (пустой/зелёный кадр). Проверьте RTSP и Seetong, затем Старт.",
+                        0.0,
+                    ),
+                )
+                self.root.after(0, lambda: self._show_zoom(None))
+                self.root.after(0, lambda: self.time_label.config(text="Время определения: —"))
+                return
             shot = ""
             if force_save or self.cfg.get("save_all_shots"):
                 shot = save_screenshot(frame, prefix="live")

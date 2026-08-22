@@ -294,12 +294,32 @@ def test_crop_skips_distant_road():
 
 def test_mostly_black_frame():
     numpy = pytest.importorskip("numpy")
-    from anpr.capture import _is_mostly_black
+    from anpr.capture import _is_mostly_black, _is_useless_frame
 
     black = numpy.zeros((40, 40, 3), dtype=numpy.uint8)
     white = numpy.full((40, 40, 3), 200, dtype=numpy.uint8)
+    green = numpy.zeros((40, 40, 3), dtype=numpy.uint8)
+    green[:, :] = (40, 180, 40)
+    noisy = numpy.random.randint(0, 255, (40, 40, 3), dtype=numpy.uint8)
     assert _is_mostly_black(black)
     assert not _is_mostly_black(white)
+    assert _is_useless_frame(black)
+    assert _is_useless_frame(green)
+    assert not _is_useless_frame(noisy)
+
+
+def test_mask_osd_keeps_center_plate():
+    numpy = pytest.importorskip("numpy")
+    from anpr.recognizer import mask_osd
+
+    frame = numpy.full((240, 320, 3), 90, dtype=numpy.uint8)
+    # White Type-1 plate in the lower-center bumper zone.
+    frame[170:188, 110:210] = 230
+    # Corner OSD badge.
+    frame[220:238, 240:318] = 250
+    masked = mask_osd(frame)
+    assert int(masked[179, 160].mean()) > 200, "plate pixels must survive OSD wipe"
+    assert int(masked[230, 280].mean()) == 0, "corner resolution badge must be wiped"
 
 
 def test_extract_from_recognizer_without_ocr():
