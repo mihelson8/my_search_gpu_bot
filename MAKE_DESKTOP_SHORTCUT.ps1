@@ -37,15 +37,10 @@ if (Test-Path $ico) {
 }
 $s.Save()
 
+# Keep only one desktop shortcut. Remove the old Latin duplicate.
 $latin = Join-Path $d "Avtonomera Seetong.lnk"
-if ($latin -ne $p) {
-    $s2 = $w.CreateShortcut($latin)
-    $s2.TargetPath = $pywExe
-    $s2.Arguments = "`"$pyw`""
-    $s2.WorkingDirectory = $dir
-    $s2.WindowStyle = 1
-    if (Test-Path $ico) { $s2.IconLocation = $ico + ",0" }
-    $s2.Save()
+if ((Test-Path $latin) -and ($latin -ne $p)) {
+    Remove-Item -Force $latin -ErrorAction SilentlyContinue
 }
 
 try { Start-Process -FilePath "ie4uinit.exe" -ArgumentList "-show" -WindowStyle Hidden } catch {}
