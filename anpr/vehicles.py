@@ -52,7 +52,93 @@ def _nms(items: List[VehicleSilhouette], iou_thresh: float = 0.45) -> List[Vehic
     return kept
 
 
-def _silhouettes_from_mask(mask, image_shape, min_ratio: float, max_ratio: float) -> List[VehicleSilhouette]:
+def _box_color_stats(image, box: Box):
+    import cv2
+    import numpy as np
+
+    x0, y0, x1, y1 = box
+    crop = image[y0:y1, x0:x1]
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return 0.0, 0.0, 0.0, 0.0
+    if crop.ndim == 2:
+        crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR)
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
+    hue = hsv[:, :, 0]
+    mean_sat = float(np.mean(sat))
+    mean_val = float(np.mean(val))
+    vivid = (sat > 70) & (val > 60)
+    vivid_ratio = float(np.mean(vivid)) if vivid.size else 0.0
+    blue = vivid & (hue >= 90) & (hue <= 140)
+    yellow = vivid & (hue >= 10) & (hue <= 45)
+    bin_color_ratio = float(np.mean(blue | yellow)) if vivid.size else 0.0
+    return mean_sat, mean_val, vivid_ratio, bin_color_ratio
+
+
+def _looks_like_dumpster(image, box: Box) -> bool:
+    """True for colored garbage bins that must not be framed as cars."""
+    x0, y0, x1, y1 = box
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    aspect = bw / float(bh)
+    mean_sat, _mean_val, vivid_ratio, bin_color_ratio = _box_color_stats(image, box)
+    if bin_color_ratio >= 0.12 and aspect < 2.2:
+        return True
+    if vivid_ratio >= 0.22 and mean_sat >= 55 and aspect < 2.4:
+        return True
+    h, w = image.shape[:2]
+    cx = (x0 + x1) / 2.0
+    near_side = cx < w * 0.18 or cx > w * 0.82
+    if near_side and vivid_ratio >= 0.10 and 0.55 <= aspect <= 1.55:
+        return True
+    return False
+
+
+def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
+    """Higher = more like a car from a high parking camera."""
+    import cv2
+    import numpy as np
+
+    x0, y0, x1, y1 = box
+    h, w = image.shape[:2]
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    aspect = bw / float(bh)
+    area_ratio = (bw * bh) / float(max(h * w, 1))
+    cx = (x0 + x1) / 2.0
+    cy = (y0 + y1) / 2.0
+    mean_sat, _mean_val, vivid_ratio, bin_color_ratio = _box_color_stats(image, box)
+
+    score = base
+    if 1.25 <= aspect <= 3.6:
+        score += 0.18
+    elif 0.9 <= aspect < 1.25:
+        score += 0.02
+    else:
+        score -= 0.08
+    score += min(area_ratio, 0.35) * 0.5
+    score += (cy / max(h, 1)) * 0.12
+    if w * 0.22 <= cx <= w * 0.78:
+        score += 0.08
+    score -= vivid_ratio * 0.45
+    score -= bin_color_ratio * 0.70
+    if mean_sat < 45:
+        score += 0.06
+    crop = image[y0:y1, x0:x1]
+    if crop is not None and getattr(crop, "size", 0) > 0:
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
+        ch = gray.shape[0]
+        upper = gray[0 : max(int(ch * 0.45), 1), :]
+        lower = gray[int(ch * 0.55) : ch, :]
+        if upper.size and lower.size and float(np.mean(upper)) + 8 < float(np.mean(lower)):
+            score += 0.10
+        if float(np.std(gray)) > 18:
+            score += 0.04
+    return score
+
+
+def _silhouettes_from_mask(
+    mask, image_shape, min_ratio: float, max_ratio: float, image=None
+) -> List[VehicleSilhouette]:
     import cv2
 
     h, w = image_shape[:2]
@@ -61,21 +147,22 @@ def _silhouettes_from_mask(mask, image_shape, min_ratio: float, max_ratio: float
     found: List[VehicleSilhouette] = []
     for contour in contours:
         x, y, cw, ch = cv2.boundingRect(contour)
-        if cw < 28 or ch < 18:
+        if cw < 36 or ch < 22:
             continue
         area = cw * ch
         ratio = area / frame_area
         if ratio < min_ratio or ratio > max_ratio:
             continue
         aspect = cw / float(ch)
-        if not (0.45 <= aspect <= 4.8):
+        # Dumpsters are often near-square; cars from high cam are wider.
+        if not (0.70 <= aspect <= 4.2):
             continue
         hull = cv2.contourArea(cv2.convexHull(contour)) or 1.0
         solidity = (cv2.contourArea(contour) or 0.0) / hull
         if solidity < 0.22:
             continue
         cy = y + ch / 2.0
-        if cy < h * 0.12:
+        if cy < h * 0.18:
             continue
         pad_x, pad_y = int(cw * 0.08), int(ch * 0.10)
         box = (
@@ -84,7 +171,13 @@ def _silhouettes_from_mask(mask, image_shape, min_ratio: float, max_ratio: float
             min(w, x + cw + pad_x),
             min(h, y + ch + pad_y),
         )
+        if image is not None and _looks_like_dumpster(image, box):
+            continue
         score = ratio + (cy / h) * 0.08 + min(solidity, 1.0) * 0.04
+        if image is not None:
+            score = _car_likeness_score(image, box, base=score)
+        if score < 0.02:
+            continue
         found.append(VehicleSilhouette(box=box, contour=contour, score=score))
     return found
 
@@ -112,8 +205,8 @@ def _foreground_mask(image):
     diff_cut = 14 if bg >= 110 else 22
     _, mask_diff = cv2.threshold(diff, diff_cut, 255, cv2.THRESH_BINARY)
 
-    sat, val = hsv[:, :, 1], hsv[:, :, 2]
-    _, mask_sat = cv2.threshold(sat, 28, 255, cv2.THRESH_BINARY)
+    _sat, val = hsv[:, :, 1], hsv[:, :, 2]
+    # Do NOT treat vivid plastic dumpsters as car foreground.
     white_cut = max(int(bg + 6), 105)
     dark_cut = min(int(bg - 14), 95)
     _, mask_white = cv2.threshold(val, white_cut, 255, cv2.THRESH_BINARY)
@@ -122,20 +215,35 @@ def _foreground_mask(image):
     # Local contrast helps white body on pale asphalt.
     local = cv2.GaussianBlur(gray, (31, 31), 0)
     local_diff = cv2.absdiff(gray, local)
-    _, mask_local = cv2.threshold(local_diff, 8, 255, cv2.THRESH_BINARY)
+    _, mask_local = cv2.threshold(local_diff, 8 if bg < 110 else 12, 255, cv2.THRESH_BINARY)
 
     # Pale SUV on light lot: low saturation + high value blob.
     pale = cv2.inRange(hsv, (0, 0, max(white_cut - 10, 100)), (180, 55, 255))
+    mild_color = cv2.inRange(hsv, (0, 20, 25), (180, 90, 220))
 
-    mask = cv2.bitwise_or(mask_diff, mask_sat)
-    mask = cv2.bitwise_or(mask, mask_white)
-    mask = cv2.bitwise_or(mask, mask_dark)
-    mask = cv2.bitwise_or(mask, mask_local)
-    mask = cv2.bitwise_or(mask, pale)
+    if bg >= 110:
+        # Bright courtyard: global absdiff floods the whole lot — prefer local shape.
+        _, strong_diff = cv2.threshold(diff, max(diff_cut + 10, 24), 255, cv2.THRESH_BINARY)
+        mask = cv2.bitwise_or(mask_local, mask_dark)
+        mask = cv2.bitwise_or(mask, strong_diff)
+        mask = cv2.bitwise_or(mask, cv2.bitwise_and(pale, mask_local))
+        mask = cv2.bitwise_or(mask, mild_color)
+    else:
+        mask = cv2.bitwise_or(mask_diff, mask_white)
+        mask = cv2.bitwise_or(mask, mask_dark)
+        mask = cv2.bitwise_or(mask, mask_local)
+        mask = cv2.bitwise_or(mask, pale)
+        mask = cv2.bitwise_or(mask, mild_color)
+    # Cut vivid blue/yellow dumpster plastic out of the mask.
+    vivid_bins = cv2.inRange(hsv, (10, 80, 70), (45, 255, 255))
+    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (90, 80, 70), (140, 255, 255)))
+    # Greenish bins too.
+    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (40, 70, 60), (95, 255, 255)))
+    mask[vivid_bins > 0] = 0
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
     return cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
 
@@ -158,18 +266,27 @@ def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette
     found: List[VehicleSilhouette] = []
     try:
         fg = _foreground_mask(image)
-        found.extend(_silhouettes_from_mask(fg, image.shape, min_ratio=0.004, max_ratio=0.55))
+        found.extend(
+            _silhouettes_from_mask(fg, image.shape, min_ratio=0.006, max_ratio=0.50, image=image)
+        )
     except Exception:
         pass
     try:
         edges = _edge_mask(image)
-        found.extend(_silhouettes_from_mask(edges, image.shape, min_ratio=0.005, max_ratio=0.50))
+        found.extend(
+            _silhouettes_from_mask(edges, image.shape, min_ratio=0.008, max_ratio=0.45, image=image)
+        )
     except Exception:
         pass
+    # Final dumpster pass (edge masks can still pick bins).
+    found = [item for item in found if not _looks_like_dumpster(image, item.box)]
     if not found:
         return []
     kept = _nms(found, iou_thresh=0.42)
-    kept.sort(key=lambda item: (item.box[2] - item.box[0]) * (item.box[3] - item.box[1]), reverse=True)
+    kept.sort(key=lambda item: item.score, reverse=True)
+    # Prefer one clear car over many weak boxes (bins, plate strips).
+    if len(kept) >= 2 and kept[0].score >= kept[1].score * 1.35:
+        kept = kept[:1]
     return kept[:max_cars]
 
 

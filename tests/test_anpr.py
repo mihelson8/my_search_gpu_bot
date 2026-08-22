@@ -416,6 +416,26 @@ def test_find_vehicle_silhouette_on_parking_lot():
     assert cut.shape[0] < frame.shape[0] or cut.shape[1] < frame.shape[1]
 
 
+def test_dumpsters_are_not_marked_as_cars():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    frame = numpy.full((240, 320, 3), 110, dtype=numpy.uint8)
+    # Blue and yellow garbage bins on the right — must not become АВТО.
+    frame[100:185, 250:305] = (210, 90, 35)
+    frame[100:185, 190:240] = (35, 210, 230)
+    assert find_vehicle_silhouettes(frame, max_cars=5) == []
+
+    # Same bins plus a dark car in the center — only the car should remain.
+    frame[115:195, 40:170] = (40, 42, 48)
+    frame[125:150, 60:150] = (70, 72, 78)
+    cars = find_vehicle_silhouettes(frame, max_cars=5)
+    assert cars, "real car must still be found"
+    cx = (cars[0].box[0] + cars[0].box[2]) / 2
+    assert cx < 200, "top detection should be the car, not the bins"
+
+
 def test_type1_plate_region_aspect():
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
