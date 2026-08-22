@@ -422,18 +422,19 @@ def test_dumpsters_are_not_marked_as_cars():
     from anpr.vehicles import find_vehicle_silhouettes
 
     frame = numpy.full((240, 320, 3), 110, dtype=numpy.uint8)
-    # Blue and yellow garbage bins on the right — must not become АВТО.
+    # Blue / yellow / green garbage bins — must not become АВТО.
     frame[100:185, 250:305] = (210, 90, 35)
     frame[100:185, 190:240] = (35, 210, 230)
+    frame[95:175, 130:175] = (40, 180, 60)
     assert find_vehicle_silhouettes(frame, max_cars=5) == []
 
-    # Same bins plus a dark car in the center — only the car should remain.
-    frame[115:195, 40:170] = (40, 42, 48)
-    frame[125:150, 60:150] = (70, 72, 78)
+    # Same bins plus a dark car on the left — only the car should remain.
+    frame[115:195, 20:115] = (40, 42, 48)
+    frame[125:150, 35:100] = (70, 72, 78)
     cars = find_vehicle_silhouettes(frame, max_cars=5)
     assert cars, "real car must still be found"
     cx = (cars[0].box[0] + cars[0].box[2]) / 2
-    assert cx < 200, "top detection should be the car, not the bins"
+    assert cx < 160, "top detection should be the car, not the bins"
 
 
 def test_type1_plate_region_aspect():

@@ -318,24 +318,41 @@ def _ocr_tesseract(image) -> List[Tuple[str, float]]:
     return [(text, 0.55 if text.strip() else 0.0)]
 
 
-def _run_ocr(image) -> Tuple[str, List[Tuple[str, float]]]:
-    """Run the fastest available OCR engine only — do not cascade into EasyOCR."""
-    # RapidOCR first. EasyOCR is intentionally skipped here: first load + CPU
-    # inference often takes many seconds and makes live RTSP feel frozen.
-    for name, fn in (
-        ("rapidocr", _ocr_rapidocr),
-        ("tesseract", _ocr_tesseract),
-    ):
-        try:
-            hits = fn(image)
-        except Exception:
-            continue
+def _rapidocr_installed() -> bool:
+    try:
+        import rapidocr_onnxruntime  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _run_ocr(image, allow_tesseract: bool = False) -> Tuple[str, List[Tuple[str, float]]]:
+    """Run the fastest OCR engine. Live path uses RapidOCR only (budget-limited)."""
+    if int(_OCR_BUDGET.get("n", 0)) >= int(_OCR_BUDGET.get("max", 2)):
+        return "", []
+    _OCR_BUDGET["n"] = int(_OCR_BUDGET.get("n", 0)) + 1
+
+    try:
+        hits = _ocr_rapidocr(image)
         if hits:
-            return name, hits
+            return "rapidocr", hits
+    except Exception:
+        pass
+
+    # Tesseract is slow on CPU — use only when RapidOCR is not installed.
+    if allow_tesseract or not _rapidocr_installed():
+        try:
+            hits = _ocr_tesseract(image)
+            if hits:
+                return "tesseract", hits
+        except Exception:
+            pass
     return "", []
 
 
 _FAST_FRAME = {"n": 0}
+_OCR_BUDGET = {"n": 0, "max": 2}
 
 
 def _collect_plate_regions(image, origin=(0, 0), inside_vehicle: bool = False, max_regions: int = 3):
@@ -475,25 +492,26 @@ def recognize_scene(image, min_confidence: float = 0.35):
         downscale_for_anpr,
         find_vehicle_silhouettes,
         vehicle_box_from_plate,
+        _looks_like_dumpster,
     )
 
     if image is None or getattr(image, "size", 0) == 0:
         return [], [], image, None
 
-    # Keep enough resolution for high-angle plates (2K RTSP).
     try:
-        work = downscale_for_anpr(image, max_w=1200)
+        work = downscale_for_anpr(image, max_w=1100)
     except Exception:
         work = image
 
+    # Hard cap: live RTSP must not run many OCR passes (was 10-15s).
+    _OCR_BUDGET["n"] = 0
+    _OCR_BUDGET["max"] = 2
     _FAST_FRAME["n"] = int(_FAST_FRAME.get("n", 0)) + 1
-    deep_scan = (_FAST_FRAME["n"] % 2) == 1  # every other frame does the wider search
 
-    # Find cars on the clean frame first. OSD black-out merges with asphalt and
-    # turns dumpsters/lot into one giant false "car".
     silhouettes = []
     try:
-        silhouettes = find_vehicle_silhouettes(work, max_cars=2)
+        silhouettes = find_vehicle_silhouettes(work, max_cars=1)
+        silhouettes = [item for item in silhouettes if not _looks_like_dumpster(work, item.box)]
     except Exception:
         silhouettes = []
 
@@ -507,63 +525,43 @@ def recognize_scene(image, min_confidence: float = 0.35):
     def _has_good_plate(items: List[PlateHit]) -> bool:
         return any(plate_is_valid(h.plate) and not is_osd_text(h.plate) for h in items)
 
-    # OCR on the real pixels (do NOT black-mask the car — white SUVs lose the plate).
+    # 1) Bumper of the best car (if any).
     if silhouettes:
-        for item in silhouettes:
-            rois = [bumper_box(item.box), item.box]
-            for roi in rois:
-                crop = crop_box(ocr_work, roi)
-                if crop is None or getattr(crop, "size", 0) == 0:
-                    continue
-                regions = _collect_plate_regions(
-                    crop, origin=(roi[0], roi[1]), inside_vehicle=True, max_regions=3
-                )
-                hits.extend(_ocr_regions(regions, min_confidence))
-                if _has_good_plate(hits):
-                    break
-                hits.extend(_ocr_crop_direct(crop, roi, min_confidence=max(0.18, min_confidence - 0.1)))
-                if _has_good_plate(hits):
-                    break
-            if _has_good_plate(hits):
-                break
-
-    # Always try the center-lower plate zone (high camera / white car).
-    if not _has_good_plate(hits):
-        try:
-            (fx0, fy0, fx1, fy1), focus = plate_focus_band(ocr_work)
+        item = silhouettes[0]
+        roi = bumper_box(item.box)
+        crop = crop_box(ocr_work, roi)
+        if crop is not None and getattr(crop, "size", 0) > 0:
             regions = _collect_plate_regions(
-                focus, origin=(fx0, fy0), inside_vehicle=False, max_regions=4
+                crop, origin=(roi[0], roi[1]), inside_vehicle=True, max_regions=2
             )
             hits.extend(_ocr_regions(regions, min_confidence))
             if not _has_good_plate(hits):
                 hits.extend(
-                    _ocr_crop_direct(
-                        focus,
-                        (fx0, fy0, fx1, fy1),
-                        min_confidence=max(0.15, min_confidence - 0.12),
-                    )
+                    _ocr_crop_direct(crop, roi, min_confidence=max(0.16, min_confidence - 0.1))
                 )
-        except Exception:
-            pass
 
-    # Wider parking-band search on deep frames or if still empty.
-    if (not _has_good_plate(hits)) or deep_scan:
-        try:
-            extra = _collect_plate_regions(ocr_work, origin=(0, 0), inside_vehicle=False, max_regions=3)
-            hits.extend(_ocr_regions(extra, min_confidence))
-        except Exception:
-            pass
-
+    # 2) Center-lower plate zone (high camera) — one more OCR budget slot.
     if not _has_good_plate(hits):
         try:
-            (bx0, by0, bx1, by1), band = parking_band(ocr_work)
-            hits.extend(
-                _ocr_crop_direct(
-                    band,
-                    (bx0, by0, bx1, by1),
-                    min_confidence=max(0.15, min_confidence - 0.12),
-                )
+            (fx0, fy0, fx1, fy1), focus = plate_focus_band(ocr_work)
+            regions = _collect_plate_regions(
+                focus, origin=(fx0, fy0), inside_vehicle=False, max_regions=2
             )
+            if regions:
+                hits.extend(_ocr_regions(regions, min_confidence))
+            if not _has_good_plate(hits):
+                # Smaller middle strip — faster and closer to the plate.
+                fh, fw = focus.shape[:2]
+                mid = focus[int(fh * 0.35) : fh, int(fw * 0.15) : int(fw * 0.85)]
+                my0 = fy0 + int(fh * 0.35)
+                mx0 = fx0 + int(fw * 0.15)
+                hits.extend(
+                    _ocr_crop_direct(
+                        mid,
+                        (mx0, my0, mx0 + mid.shape[1], my0 + mid.shape[0]),
+                        min_confidence=max(0.14, min_confidence - 0.12),
+                    )
+                )
         except Exception:
             pass
 
@@ -577,45 +575,21 @@ def recognize_scene(image, min_confidence: float = 0.35):
         seen.add(hit.plate)
         unique.append(hit)
     unique.sort(key=lambda item: item.confidence, reverse=True)
-    unique = unique[:4]
+    unique = unique[:2]
 
-    # If OCR found plates but silhouette failed — still draw a car frame from the plate.
     if unique and not silhouettes:
         for index, hit in enumerate(unique):
             if not hit.bbox:
                 continue
             box = vehicle_box_from_plate(hit.bbox, work.shape)
-            silhouettes.append(VehicleSilhouette(box=box, contour=None, score=1.0 - index * 0.05))
-    elif unique:
-        known = [item.box for item in silhouettes]
-        for hit in unique:
-            if not hit.bbox:
+            if _looks_like_dumpster(work, box):
                 continue
-            px0, py0, px1, py1 = hit.bbox
-            owned = False
-            for box in known:
-                if box[0] <= px0 <= box[2] and box[1] <= py0 <= box[3]:
-                    owned = True
-                    break
-            if not owned:
-                box = vehicle_box_from_plate(hit.bbox, work.shape)
-                silhouettes.append(VehicleSilhouette(box=box, contour=None, score=0.4))
-                known.append(box)
-
-    # Drop leftover dumpster frames if any slipped through.
-    from anpr.vehicles import _looks_like_dumpster
+            silhouettes.append(VehicleSilhouette(box=box, contour=None, score=1.0 - index * 0.05))
+    elif unique and silhouettes:
+        # Keep plate-based frame only when it is not a dumpster.
+        pass
 
     silhouettes = [item for item in silhouettes if not _looks_like_dumpster(work, item.box)]
-
-    # If still no car outline, keep a focus box only for the zoom panel.
-    zoom_fallback = None
-    if not silhouettes:
-        try:
-            (fx0, fy0, fx1, fy1), _focus = plate_focus_band(work)
-            zoom_fallback = (fx0, fy0, fx1, fy1)
-        except Exception:
-            pass
-
     vehicles = [item.box for item in silhouettes]
 
     try:
@@ -633,13 +607,12 @@ def recognize_scene(image, min_confidence: float = 0.35):
                 if car_box[0] <= plate_box[0] <= car_box[2] and car_box[1] <= plate_box[1] <= car_box[3]:
                     owner = car_box
                     break
-            zoom = annotate_zoom(work, owner, silhouettes, unique[:1])
+            if not _looks_like_dumpster(work, owner):
+                zoom = annotate_zoom(work, owner, silhouettes, unique[:1])
             if zoom is None:
                 zoom = annotate_zoom(work, plate_box, silhouettes, unique[:1])
         elif silhouettes:
             zoom = annotate_zoom(work, silhouettes[0].box, silhouettes, unique[:1])
-        elif zoom_fallback:
-            zoom = annotate_zoom(work, zoom_fallback, [], unique[:1])
     except Exception:
         zoom = None
 

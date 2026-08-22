@@ -59,7 +59,7 @@ def _box_color_stats(image, box: Box):
     x0, y0, x1, y1 = box
     crop = image[y0:y1, x0:x1]
     if crop is None or getattr(crop, "size", 0) == 0:
-        return 0.0, 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0
     if crop.ndim == 2:
         crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR)
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
@@ -68,28 +68,37 @@ def _box_color_stats(image, box: Box):
     hue = hsv[:, :, 0]
     mean_sat = float(np.mean(sat))
     mean_val = float(np.mean(val))
-    vivid = (sat > 70) & (val > 60)
+    vivid = (sat > 55) & (val > 45)
     vivid_ratio = float(np.mean(vivid)) if vivid.size else 0.0
-    blue = vivid & (hue >= 90) & (hue <= 140)
-    yellow = vivid & (hue >= 10) & (hue <= 45)
-    bin_color_ratio = float(np.mean(blue | yellow)) if vivid.size else 0.0
-    return mean_sat, mean_val, vivid_ratio, bin_color_ratio
+    blue = vivid & (hue >= 85) & (hue <= 145)
+    yellow = vivid & (hue >= 8) & (hue <= 45)
+    green = ((sat > 35) & (val > 35) & (hue >= 35) & (hue <= 95))
+    bin_color_ratio = float(np.mean(blue | yellow | green)) if vivid.size else 0.0
+    green_ratio = float(np.mean(green)) if green.size else 0.0
+    return mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio
 
 
 def _looks_like_dumpster(image, box: Box) -> bool:
-    """True for colored garbage bins that must not be framed as cars."""
+    """True for garbage bins / grass clumps that must not be framed as cars."""
     x0, y0, x1, y1 = box
     bw, bh = max(1, x1 - x0), max(1, y1 - y0)
     aspect = bw / float(bh)
-    mean_sat, _mean_val, vivid_ratio, bin_color_ratio = _box_color_stats(image, box)
-    if bin_color_ratio >= 0.12 and aspect < 2.2:
+    mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
+    # Colored plastic bins (blue / yellow / green lids).
+    if bin_color_ratio >= 0.08 and aspect < 2.6:
         return True
-    if vivid_ratio >= 0.22 and mean_sat >= 55 and aspect < 2.4:
+    if green_ratio >= 0.18:
+        return True
+    if vivid_ratio >= 0.16 and mean_sat >= 40 and aspect < 2.8:
         return True
     h, w = image.shape[:2]
     cx = (x0 + x1) / 2.0
-    near_side = cx < w * 0.18 or cx > w * 0.82
-    if near_side and vivid_ratio >= 0.10 and 0.55 <= aspect <= 1.55:
+    near_side = cx < w * 0.16 or cx > w * 0.84
+    if near_side and vivid_ratio >= 0.08 and 0.55 <= aspect <= 1.7:
+        return True
+    # Compact colorful object — typical dumpster from above.
+    area_ratio = (bw * bh) / float(max(h * w, 1))
+    if area_ratio < 0.12 and mean_sat >= 35 and vivid_ratio >= 0.10:
         return True
     return False
 
@@ -106,23 +115,27 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
     area_ratio = (bw * bh) / float(max(h * w, 1))
     cx = (x0 + x1) / 2.0
     cy = (y0 + y1) / 2.0
-    mean_sat, _mean_val, vivid_ratio, bin_color_ratio = _box_color_stats(image, box)
+    mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
 
     score = base
-    if 1.25 <= aspect <= 3.6:
-        score += 0.18
-    elif 0.9 <= aspect < 1.25:
-        score += 0.02
+    if 1.35 <= aspect <= 3.8:
+        score += 0.22
+    elif 1.05 <= aspect < 1.35:
+        score += 0.04
     else:
-        score -= 0.08
-    score += min(area_ratio, 0.35) * 0.5
-    score += (cy / max(h, 1)) * 0.12
-    if w * 0.22 <= cx <= w * 0.78:
-        score += 0.08
-    score -= vivid_ratio * 0.45
-    score -= bin_color_ratio * 0.70
-    if mean_sat < 45:
+        score -= 0.12
+    score += min(area_ratio, 0.35) * 0.55
+    score += (cy / max(h, 1)) * 0.10
+    if w * 0.18 <= cx <= w * 0.82:
         score += 0.06
+    score -= vivid_ratio * 0.55
+    score -= bin_color_ratio * 0.90
+    score -= green_ratio * 0.80
+    # White / silver cars are common here.
+    if mean_sat < 40 and mean_val >= 110:
+        score += 0.14
+    elif mean_sat < 50:
+        score += 0.05
     crop = image[y0:y1, x0:x1]
     if crop is not None and getattr(crop, "size", 0) > 0:
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
@@ -147,22 +160,21 @@ def _silhouettes_from_mask(
     found: List[VehicleSilhouette] = []
     for contour in contours:
         x, y, cw, ch = cv2.boundingRect(contour)
-        if cw < 36 or ch < 22:
+        if cw < 40 or ch < 24:
             continue
         area = cw * ch
         ratio = area / frame_area
         if ratio < min_ratio or ratio > max_ratio:
             continue
         aspect = cw / float(ch)
-        # Dumpsters are often near-square; cars from high cam are wider.
-        if not (0.70 <= aspect <= 4.2):
+        if not (0.85 <= aspect <= 4.0):
             continue
         hull = cv2.contourArea(cv2.convexHull(contour)) or 1.0
         solidity = (cv2.contourArea(contour) or 0.0) / hull
-        if solidity < 0.22:
+        if solidity < 0.25:
             continue
         cy = y + ch / 2.0
-        if cy < h * 0.18:
+        if cy < h * 0.20:
             continue
         pad_x, pad_y = int(cw * 0.08), int(ch * 0.10)
         box = (
@@ -176,7 +188,7 @@ def _silhouettes_from_mask(
         score = ratio + (cy / h) * 0.08 + min(solidity, 1.0) * 0.04
         if image is not None:
             score = _car_likeness_score(image, box, base=score)
-        if score < 0.02:
+        if score < 0.08:
             continue
         found.append(VehicleSilhouette(box=box, contour=contour, score=score))
     return found
@@ -200,45 +212,39 @@ def _foreground_mask(image):
     gray = cv2.GaussianBlur(gray, (7, 7), 0)
 
     bg = float(np.median(gray))
-    # Light lots + white cars: lower difference threshold so pale SUVs still stand out.
     diff = cv2.absdiff(gray, np.full_like(gray, int(np.clip(bg, 0, 255))))
     diff_cut = 14 if bg >= 110 else 22
     _, mask_diff = cv2.threshold(diff, diff_cut, 255, cv2.THRESH_BINARY)
 
-    _sat, val = hsv[:, :, 1], hsv[:, :, 2]
-    # Do NOT treat vivid plastic dumpsters as car foreground.
-    white_cut = max(int(bg + 6), 105)
+    val = hsv[:, :, 2]
+    white_cut = max(int(bg + 18), 125)
     dark_cut = min(int(bg - 14), 95)
     _, mask_white = cv2.threshold(val, white_cut, 255, cv2.THRESH_BINARY)
     _, mask_dark = cv2.threshold(val, max(dark_cut, 1), 255, cv2.THRESH_BINARY_INV)
 
-    # Local contrast helps white body on pale asphalt.
     local = cv2.GaussianBlur(gray, (31, 31), 0)
     local_diff = cv2.absdiff(gray, local)
     _, mask_local = cv2.threshold(local_diff, 8 if bg < 110 else 12, 255, cv2.THRESH_BINARY)
 
-    # Pale SUV on light lot: low saturation + high value blob.
-    pale = cv2.inRange(hsv, (0, 0, max(white_cut - 10, 100)), (180, 55, 255))
-    mild_color = cv2.inRange(hsv, (0, 20, 25), (180, 90, 220))
+    # White/silver cars: brighter than lot asphalt, low saturation.
+    pale_lo = max(int(bg + 25), 135)
+    pale = cv2.inRange(hsv, (0, 0, pale_lo), (180, 55, 255))
 
-    if bg >= 110:
-        # Bright courtyard: global absdiff floods the whole lot — prefer local shape.
+    if bg >= 100:
         _, strong_diff = cv2.threshold(diff, max(diff_cut + 10, 24), 255, cv2.THRESH_BINARY)
         mask = cv2.bitwise_or(mask_local, mask_dark)
         mask = cv2.bitwise_or(mask, strong_diff)
-        mask = cv2.bitwise_or(mask, cv2.bitwise_and(pale, mask_local))
-        mask = cv2.bitwise_or(mask, mild_color)
+        mask = cv2.bitwise_or(mask, pale)
     else:
         mask = cv2.bitwise_or(mask_diff, mask_white)
         mask = cv2.bitwise_or(mask, mask_dark)
         mask = cv2.bitwise_or(mask, mask_local)
         mask = cv2.bitwise_or(mask, pale)
-        mask = cv2.bitwise_or(mask, mild_color)
-    # Cut vivid blue/yellow dumpster plastic out of the mask.
-    vivid_bins = cv2.inRange(hsv, (10, 80, 70), (45, 255, 255))
-    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (90, 80, 70), (140, 255, 255)))
-    # Greenish bins too.
-    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (40, 70, 60), (95, 255, 255)))
+
+    # Cut dumpsters + grass out of the vehicle mask.
+    vivid_bins = cv2.inRange(hsv, (8, 60, 55), (50, 255, 255))  # yellow/orange
+    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (85, 60, 55), (145, 255, 255)))  # blue
+    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (35, 50, 40), (95, 255, 255)))  # green lids/grass
     mask[vivid_bins > 0] = 0
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
@@ -267,27 +273,20 @@ def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette
     try:
         fg = _foreground_mask(image)
         found.extend(
-            _silhouettes_from_mask(fg, image.shape, min_ratio=0.006, max_ratio=0.50, image=image)
+            _silhouettes_from_mask(fg, image.shape, min_ratio=0.008, max_ratio=0.45, image=image)
         )
     except Exception:
         pass
-    try:
-        edges = _edge_mask(image)
-        found.extend(
-            _silhouettes_from_mask(edges, image.shape, min_ratio=0.008, max_ratio=0.45, image=image)
-        )
-    except Exception:
-        pass
-    # Final dumpster pass (edge masks can still pick bins).
+    # Edge mask is intentionally skipped: grass and dumpster lids create false cars.
     found = [item for item in found if not _looks_like_dumpster(image, item.box)]
     if not found:
         return []
     kept = _nms(found, iou_thresh=0.42)
     kept.sort(key=lambda item: item.score, reverse=True)
-    # Prefer one clear car over many weak boxes (bins, plate strips).
-    if len(kept) >= 2 and kept[0].score >= kept[1].score * 1.35:
-        kept = kept[:1]
-    return kept[:max_cars]
+    # One clear car is enough for this gate camera.
+    if kept:
+        return kept[:1]
+    return []
 
 
 def find_vehicle_rois(image, max_cars: int = 6) -> List[Box]:
