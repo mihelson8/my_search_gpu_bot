@@ -1462,7 +1462,8 @@ def start_server(port: int = 8765, open_browser: bool = True):
     print("============================================================")
 
     if open_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
+        # Open as soon as the listener is up (no 1s wait, no Google Fonts delay).
+        threading.Timer(0.15, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
 
     try:
         server.serve_forever()
