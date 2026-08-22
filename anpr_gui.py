@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from anpr.config import load_config, save_config
+from anpr.config import (
+    OFFICIAL_SEETONG_SHOTS_DIR,
+    load_config,
+    save_config,
+    sanitize_shots_dir,
+    side_window_geometry,
+)
 from anpr.database import AnprDB
 from anpr.plates import category_label, format_plate, format_plate_parts, is_osd_text, normalize_plate, parse_category, plate_is_valid
+from anpr.version import APP_TITLE, APP_VERSION
 
 STATUS_COLORS = {
     "own": "#16a34a",
@@ -31,9 +40,11 @@ SOURCE_VALUES = {label: key for key, label in SOURCE_LABELS.items()}
 class AnprApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Автономера · Seetong · Свой / Чужой")
-        self.root.geometry("1180x760")
-        self.root.minsize(960, 640)
+        self.root.title(APP_TITLE)
+        self.root.minsize(720, 520)
+        self.root.geometry(
+            side_window_geometry(self.root.winfo_screenwidth(), self.root.winfo_screenheight())
+        )
 
         self.bg = "#0f172a"
         self.card = "#1e293b"
@@ -44,8 +55,9 @@ class AnprApp:
 
         self.db = AnprDB()
         self.cfg = load_config()
-        if self.cfg.get("source") == "monitor":
+        if self.cfg.get("source") not in ("http", "rtsp", "file"):
             self.cfg["source"] = "seetong_folder"
+        self.cfg["shots_dir"] = sanitize_shots_dir(str(self.cfg.get("shots_dir") or OFFICIAL_SEETONG_SHOTS_DIR))
         self._running = False
         self._busy = False
         self._last_frame = None
@@ -63,11 +75,35 @@ class AnprApp:
         self._set_detection(
             "—",
             "unknown",
-            "Снимок из Seetong → Старт. Программа ищет силуэт авто, отсекает двор и надписи, читает номер вида «А 000 АА | 00».",
+            "Seetong слева, это окно справа. Съёмка начнётся сама. Нужен номер вида «А 000 АА | 00».",
             0.0,
         )
+        self.root.after(300, self._confirm_build)
         self.root.after(200, self._warn_missing_packages)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def _confirm_build(self) -> None:
+        """Once per build: confirm which copy is running so old installs are obvious."""
+        here = os.path.abspath(os.path.dirname(__file__) or ".")
+        marker = os.path.join(here, f".seen_build_{APP_VERSION}")
+        if os.path.exists(marker):
+            self.run_label.config(text=f"сборка {APP_VERSION}")
+            return
+        try:
+            with open(marker, "w", encoding="utf-8") as handle:
+                handle.write(here)
+        except Exception:
+            pass
+        messagebox.showinfo(
+            f"Сборка {APP_VERSION}",
+            f"Открыта сборка:\n{APP_VERSION}\n\n"
+            f"Папка:\n{here}\n\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r16».\n"
+            "Если значка нет — запущена старая копия.\n\n"
+            "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
+            "Проверка: VERIFY_INSTALL.bat",
+        )
+        self.run_label.config(text=f"сборка {APP_VERSION}")
 
     def _warn_missing_packages(self) -> None:
         try:
@@ -77,6 +113,7 @@ class AnprApp:
         except Exception:
             missing = ["numpy", "Pillow", "mss"]
         if not missing:
+            self.root.after(500, self.start_capture)
             return
         names = ", ".join(missing)
         text = (
@@ -106,7 +143,18 @@ class AnprApp:
     def _build(self) -> None:
         header = ttk.Frame(self.root, padding="14 10")
         header.pack(fill="x")
-        ttk.Label(header, text="Автономера · Seetong Lite Client", style="Header.TLabel").pack(side="left")
+        ttk.Label(header, text="Автономера · Seetong", style="Header.TLabel").pack(side="left")
+        self.build_badge = tk.Label(
+            header,
+            text=f"  СБОРКА {APP_VERSION}  ",
+            bg="#facc15",
+            fg="#111827",
+            font=("Segoe UI", 12, "bold"),
+            padx=8,
+            pady=2,
+        )
+        self.build_badge.pack(side="left", padx=(14, 0))
+        ttk.Label(header, text="окно справа, камера слева", style="Muted.TLabel").pack(side="left", padx=(12, 0))
         self.stats_label = ttk.Label(header, text="", style="Muted.TLabel")
         self.stats_label.pack(side="right")
 
@@ -119,18 +167,8 @@ class AnprApp:
         ttk.Button(top, text="Снимок сейчас", command=self.capture_once).pack(side="left", padx=(0, 8))
         ttk.Button(top, text="Камера / IP", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
 
-        ttk.Label(top, text="Источник:").pack(side="left")
         self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["seetong_folder"]))
-        self.source_combo = ttk.Combobox(
-            top,
-            textvariable=self.source_var,
-            values=list(SOURCE_LABELS.values()),
-            state="readonly",
-            width=28,
-        )
-        self.source_combo.pack(side="left", padx=6)
-
-        self.run_label = ttk.Label(top, text="остановлено", style="Muted.TLabel")
+        self.run_label = ttk.Label(top, text="запуск…", style="Muted.TLabel")
         self.run_label.pack(side="right")
 
         self.camera_ip_var = tk.StringVar(value=self.cfg.get("camera_ip", "192.168.0.123"))
@@ -143,10 +181,10 @@ class AnprApp:
 
         preview_card = tk.Frame(body, bg=self.card, highlightthickness=0)
         preview_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        ttk.Label(preview_card, text="Силуэт авто (остальное отсечено)", style="Card.TLabel").pack(anchor="w", padx=12, pady=(10, 4))
+        ttk.Label(preview_card, text="Форма авто и рамка при обнаружении", style="Card.TLabel").pack(anchor="w", padx=12, pady=(10, 4))
         self.preview_label = tk.Label(
             preview_card,
-            text="Нет кадра.\nСнимок Seetong → Старт.\nИщем машину, номер вида «А 000 АА 00».",
+            text="Откройте Seetong слева. Съёмка начнётся сама.",
             bg="#020617",
             fg=self.muted,
             font=("Segoe UI", 11),
@@ -154,7 +192,7 @@ class AnprApp:
         )
         self.preview_label.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        side = tk.Frame(body, bg=self.card, width=360)
+        side = tk.Frame(body, bg=self.card, width=440)
         side.pack(side="right", fill="y")
         side.pack_propagate(False)
         ttk.Label(side, text="Распознанный номер (тип 1)", style="Card.TLabel").pack(anchor="w", padx=16, pady=(14, 4))
@@ -183,24 +221,33 @@ class AnprApp:
         for color in ("#ffffff", "#0039a6", "#d52b1e"):
             tk.Frame(flag, bg=color, width=18, height=4).pack()
         self.plate_label = self.plate_body_label
-        ttk.Label(side, text="Увеличение номера", style="Card.TLabel").pack(anchor="w", padx=16, pady=(10, 4))
+        self.time_label = tk.Label(
+            side,
+            text="Время определения: —",
+            bg=self.card,
+            fg="#86efac",
+            font=("Segoe UI", 12, "bold"),
+        )
+        self.time_label.pack(anchor="w", padx=16, pady=(4, 2))
+        ttk.Label(side, text="Крупно: номер с рамкой", style="Card.TLabel").pack(anchor="w", padx=16, pady=(8, 4))
         self.zoom_label = tk.Label(
             side,
-            text="После обнаружения табличка будет крупно здесь.",
+            text="Когда найдётся номер, здесь будет крупный план таблички.",
             bg="#020617",
             fg=self.muted,
             font=("Segoe UI", 9),
-            wraplength=320,
+            wraplength=440,
             justify="center",
-            height=8,
+            width=52,
+            height=18,
         )
-        self.zoom_label.pack(fill="x", padx=16, pady=(0, 8))
+        self.zoom_label.pack(fill="x", padx=12, pady=(0, 8))
         self.category_label_widget = tk.Label(
             side, text="НЕИЗВЕСТНЫЙ", bg=self.card, fg=STATUS_COLORS["unknown"], font=("Segoe UI", 20, "bold")
         )
         self.category_label_widget.pack(anchor="w", padx=16, pady=(4, 8))
         self.detail_label = tk.Label(
-            side, text="", bg=self.card, fg=self.muted, font=("Segoe UI", 10), wraplength=320, justify="left"
+            side, text="", bg=self.card, fg=self.muted, font=("Segoe UI", 10), wraplength=400, justify="left"
         )
         self.detail_label.pack(anchor="w", padx=16, pady=(0, 12))
 
@@ -287,7 +334,7 @@ class AnprApp:
         grid.pack(fill="both", expand=True)
         grid.columnconfigure(1, weight=1)
 
-        self.interval_var = tk.StringVar(value=str(self.cfg.get("interval_sec", 1.5)))
+        self.interval_var = tk.StringVar(value=str(self.cfg.get("interval_sec", 0.25)))
         self.window_var = tk.StringVar(value=self.cfg.get("window_title", ""))
         self.rtsp_var = tk.StringVar(value=self.cfg.get("rtsp_url", ""))
         self.http_var = tk.StringVar(value=self.cfg.get("http_url", ""))
@@ -301,13 +348,13 @@ class AnprApp:
         self.crop_b = tk.StringVar(value=str(int(float(self.cfg.get("crop_bottom", 0.12)) * 100)))
         self.skip_top_var = tk.StringVar(value=str(int(float(self.cfg.get("skip_top", 0.28)) * 100)))
         self.dup_var = tk.StringVar(value=str(self.cfg.get("duplicate_sec", 30)))
-        self.conf_var = tk.StringVar(value=str(self.cfg.get("min_confidence", 0.35)))
+        self.conf_var = tk.StringVar(value=str(self.cfg.get("min_confidence", 0.22)))
         self.save_all_var = tk.BooleanVar(value=bool(self.cfg.get("save_all_shots")))
         self.unknown_foreign_var = tk.BooleanVar(value=bool(self.cfg.get("unknown_as_foreign")))
         self.beep_var = tk.BooleanVar(value=bool(self.cfg.get("beep_on_foreign", True)))
 
         rows = [
-            ("Интервал скриншотов, сек", self.interval_var),
+            ("Интервал кадров, сек (0.2 = быстро)", self.interval_var),
             ("Окно Seetong (часть заголовка)", self.window_var),
             ("RTSP URL", self.rtsp_var),
             ("HTTP snapshot URL", self.http_var),
@@ -332,7 +379,10 @@ class AnprApp:
         ttk.Button(grid, text="Обновить список окон", command=self.refresh_windows).grid(
             row=1, column=2, padx=8, sticky="w"
         )
-        ttk.Button(grid, text="Папка снимков…", command=self.pick_shots_dir).grid(row=4, column=2, padx=8, sticky="w")
+        ttk.Button(grid, text="Папка снимков…", command=self.pick_shots_dir).grid(row=4, column=2, padx=8, sticky="nw")
+        ttk.Button(grid, text="Только Seetong\\pi", command=self.reset_official_shots_dir).grid(
+            row=4, column=3, padx=4, sticky="nw"
+        )
         ttk.Button(grid, text="Выбрать файл…", command=self.pick_file).grid(row=5, column=2, padx=8, sticky="w")
 
         checks = ttk.Frame(self.tab_set)
@@ -366,6 +416,11 @@ class AnprApp:
             pass
         ttk.Label(self.tab_set, text=engine_text, style="Muted.TLabel").pack(anchor="w")
         ttk.Button(self.tab_set, text="Сохранить настройки", command=self.persist_settings).pack(anchor="w", pady=12)
+        ttk.Button(
+            self.tab_set,
+            text="Удалить лишние копии программы",
+            command=self.remove_wrong_copies,
+        ).pack(anchor="w")
 
     def persist_settings(self) -> None:
         self.cfg.update(self._settings_from_form())
@@ -385,7 +440,7 @@ class AnprApp:
         source_key = SOURCE_VALUES.get(self.source_var.get(), "seetong_folder")
         return {
             "source": source_key,
-            "interval_sec": max(0.4, _float(self.interval_var, 1.5)),
+            "interval_sec": max(0.15, _float(self.interval_var, 0.25)),
             "window_title": self.window_var.get().strip() or "Seetong Lite Client",
             "camera_ip": self.camera_ip_var.get().strip(),
             "camera_user": self.camera_user_var.get().strip() or "admin",
@@ -394,7 +449,7 @@ class AnprApp:
             "rtsp_url": self.rtsp_var.get().strip(),
             "http_url": self.http_var.get().strip(),
             "file_path": self.file_var.get().strip(),
-            "shots_dir": self.shots_dir_var.get().strip(),
+            "shots_dir": sanitize_shots_dir(self.shots_dir_var.get().strip()),
             "crop_left": min(0.45, _pct(self.crop_l, 0.20)),
             "crop_top": min(0.45, _pct(self.crop_t, 0.12)),
             "crop_right": min(0.45, _pct(self.crop_r, 0.01)),
@@ -514,8 +569,33 @@ class AnprApp:
     def pick_shots_dir(self) -> None:
         path = filedialog.askdirectory(title="Папка снимков Seetong")
         if path:
-            self.shots_dir_var.set(path)
+            self.shots_dir_var.set(sanitize_shots_dir(path))
             self.source_var.set(SOURCE_LABELS["seetong_folder"])
+
+    def reset_official_shots_dir(self) -> None:
+        self.shots_dir_var.set(OFFICIAL_SEETONG_SHOTS_DIR)
+        self.cfg["shots_dir"] = OFFICIAL_SEETONG_SHOTS_DIR
+        self.source_var.set(SOURCE_LABELS["seetong_folder"])
+        save_config(self.cfg)
+
+    def remove_wrong_copies(self) -> None:
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "FIX_AND_CLEAN.ps1")
+        if sys.platform != "win32":
+            messagebox.showinfo("Копии", "Очистка копий запускается на Windows ПК.")
+            return
+        if not os.path.isfile(script):
+            messagebox.showerror("Файл", "Не найден FIX_AND_CLEAN.ps1 рядом с программой.")
+            return
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script],
+            cwd=os.path.dirname(script),
+        )
+        messagebox.showinfo(
+            "Очистка",
+            "Старые папки my_search_gpu_bot будут удалены.\n"
+            "Программа останется в D:\\AvtonomeraSeetong.\n"
+            "Дальше открывайте ярлык Автономера Seetong на рабочем столе.",
+        )
 
     def pick_file(self) -> None:
         path = filedialog.askopenfilename(
@@ -551,13 +631,31 @@ class AnprApp:
         self.btn_start.config(state="disabled")
         self.btn_stop.config(state="normal")
         self.run_label.config(text="идёт съёмка…")
+        # Warm RapidOCR once so the first live plate is not a multi-second cold start.
+        threading.Thread(target=self._warm_ocr, daemon=True).start()
         threading.Thread(target=self._loop, daemon=True).start()
+
+    def _warm_ocr(self) -> None:
+        try:
+            import numpy as np
+            from anpr.recognizer import _ocr_rapidocr
+
+            blank = np.zeros((48, 160, 3), dtype=np.uint8)
+            _ocr_rapidocr(blank)
+        except Exception:
+            pass
 
     def stop_capture(self) -> None:
         self._running = False
         self.btn_start.config(state="normal")
         self.btn_stop.config(state="disabled")
         self.run_label.config(text="остановлено")
+        try:
+            from anpr.capture import release_rtsp
+
+            release_rtsp()
+        except Exception:
+            pass
 
     def capture_once(self) -> None:
         self.cfg.update(self._settings_from_form())
@@ -565,17 +663,25 @@ class AnprApp:
 
     def _loop(self) -> None:
         while self._running:
+            t0 = time.perf_counter()
             self._tick()
-            time.sleep(float(self.cfg.get("interval_sec", 1.5)))
+            interval = float(self.cfg.get("interval_sec", 0.25))
+            # Do not stack sleep on top of a slow tick — keep cadence tight for moving cars.
+            leftover = interval - (time.perf_counter() - t0)
+            if leftover > 0.05:
+                time.sleep(leftover)
+            elif leftover > 0:
+                time.sleep(leftover)
 
     def _tick(self, force_save: bool = False) -> None:
         if self._busy:
             return
         self._busy = True
         try:
-            from anpr.capture import crop_roi, grab_frame, save_screenshot
+            from anpr.capture import _is_useless_frame, crop_roi, grab_frame, save_screenshot
             from anpr.recognizer import recognize_scene
 
+            t_all = time.perf_counter()
             frame, source_name = grab_frame(
                 source=self.cfg.get("source", "seetong_folder"),
                 window_title=self.cfg.get("window_title", ""),
@@ -604,66 +710,110 @@ class AnprApp:
                     skip_top=self.cfg.get("skip_top", 0),
                 )
             self._last_frame = frame
-            self.root.after(0, lambda: self._show_preview(frame))
+            if _is_useless_frame(frame):
+                self.root.after(0, lambda: self._show_preview(frame))
+                self.root.after(
+                    0,
+                    lambda: self._set_detection(
+                        self._last_plate or "—",
+                        "unknown" if not self._last_plate else self._last_category,
+                        "Нет картинки с камеры (пустой/зелёный кадр). Проверьте RTSP и Seetong, затем Старт.",
+                        0.0,
+                    ),
+                )
+                self.root.after(0, lambda: self._show_zoom(None))
+                self.root.after(0, lambda: self.time_label.config(text="Время определения: —"))
+                return
             shot = ""
             if force_save or self.cfg.get("save_all_shots"):
                 shot = save_screenshot(frame, prefix="live")
+            t_ocr = time.perf_counter()
             hits, vehicles, annotated, zoom = recognize_scene(
-                frame, min_confidence=float(self.cfg.get("min_confidence", 0.4))
+                frame, min_confidence=float(self.cfg.get("min_confidence", 0.22))
             )
+            ocr_elapsed = time.perf_counter() - t_ocr
+            # Rebuild zoom only if empty — avoid a second expensive annotate_zoom every tick.
+            if zoom is None or getattr(zoom, "size", 0) == 0:
+                try:
+                    from anpr.vehicles import annotate_zoom, downscale_for_anpr
+
+                    work_src = downscale_for_anpr(frame, max_w=640)
+                    if hits and hits[0].bbox:
+                        zoom = annotate_zoom(work_src, hits[0].bbox, vehicles, hits[:1])
+                    elif vehicles:
+                        zoom = annotate_zoom(
+                            work_src, vehicles[0], vehicles, hits[:1] if hits else []
+                        )
+                except Exception:
+                    pass
+            total_elapsed = time.perf_counter() - t_all
+            # Wall-clock (grab+OCR). Older builds showed OCR only → «1с» while real wait was ~10с.
+            if total_elapsed >= 0.1:
+                elapsed_txt = f"{total_elapsed:.1f} с"
+            else:
+                elapsed_txt = f"{total_elapsed * 1000:.0f} мс"
+            if ocr_elapsed + 0.15 < total_elapsed:
+                elapsed_txt = f"{elapsed_txt} (OCR {ocr_elapsed:.1f} с)"
             preview = annotated if annotated is not None else frame
             self.root.after(0, lambda img=preview: self._show_preview(img))
             self.root.after(0, lambda z=zoom: self._show_zoom(z))
-            car_note = f"авто: {len(vehicles)}" if vehicles else "силуэт авто не найден"
+            self.root.after(0, lambda t=elapsed_txt: self.time_label.config(text=f"Время определения: {t}"))
+            car_note = (
+                f"найдено авто: {len(vehicles)} · рамка на кадре"
+                if vehicles
+                else "рамка от номера"
+            )
             if not hits:
                 self.root.after(
                     0,
                     lambda: self._set_detection(
                         self._last_plate or "—",
                         "unknown" if not self._last_plate else self._last_category,
-                        f"Номер не прочитан ({source_name}, {car_note}). Нужен вид «А 000 АА 00». Можно ввести вручную.",
+                        f"Номер не прочитан ({source_name}, {car_note}). "
+                        f"Нужен вид «А 000 АА 00». Можно ввести вручную.",
                         0.0,
                     ),
                 )
                 return
-            hit = hits[0]
-            if not plate_is_valid(hit.plate) or is_osd_text(hit.plate) or is_osd_text(hit.raw_text):
-                self.root.after(
-                    0,
-                    lambda: self._set_detection(
-                        "—",
-                        "unknown",
-                        f"Номер не прочитан ({source_name}, {car_note}). Можно ввести вручную.",
-                        0.0,
-                    ),
-                )
-                return
-            info = self.db.classify(hit.plate, unknown_as_foreign=bool(self.cfg.get("unknown_as_foreign")))
-            if not shot and info["category"] != "own":
-                shot = save_screenshot(preview, prefix=info["category"])
-            duplicate = self.db.event_is_duplicate(hit.plate, int(self.cfg.get("duplicate_sec", 30)))
-            if not duplicate:
-                self.db.log_event(
-                    plate=hit.plate,
-                    category=info["category"],
-                    confidence=hit.confidence,
-                    source=f"{source_name}/{hit.engine}",
-                    screenshot_path=shot,
-                )
+
+            logged = 0
+            for hit in hits:
+                if not plate_is_valid(hit.plate) or is_osd_text(hit.plate) or is_osd_text(hit.raw_text):
+                    continue
+                info = self.db.classify(hit.plate, unknown_as_foreign=bool(self.cfg.get("unknown_as_foreign")))
+                shot_path = shot
+                if not shot_path and info["category"] != "own" and logged == 0:
+                    shot_path = save_screenshot(preview, prefix=info["category"])
+                duplicate = self.db.event_is_duplicate(hit.plate, int(self.cfg.get("duplicate_sec", 30)))
+                if not duplicate:
+                    self.db.log_event(
+                        plate=hit.plate,
+                        category=info["category"],
+                        confidence=hit.confidence,
+                        source=f"{source_name}/{hit.engine}",
+                        screenshot_path=shot_path or "",
+                    )
+                    logged += 1
+            if logged:
                 self.root.after(0, self.refresh_events)
                 self.root.after(0, self._refresh_stats)
+
+            hit = hits[0]
+            info = self.db.classify(hit.plate, unknown_as_foreign=bool(self.cfg.get("unknown_as_foreign")))
             owner = info["vehicle"]["owner_name"] if info["vehicle"] else "нет в базе"
             self._last_plate = hit.plate
             self._last_category = info["category"]
+            extras = [format_plate(h.plate) for h in hits[1:3] if plate_is_valid(h.plate)]
+            extra_txt = f"  ·  ещё: {', '.join(extras)}" if extras else ""
             detail = (
                 f"{owner}  ·  {car_note}  ·  уверенность {hit.confidence:.0%}  "
-                f"·  {hit.engine or 'ocr'}  ·  {source_name}"
+                f"·  {hit.engine or 'ocr'}  ·  {source_name}{extra_txt}"
             )
             self.root.after(
                 0,
                 lambda p=hit.plate, c=info["category"], d=detail, s=hit.confidence: self._set_detection(p, c, d, s),
             )
-            if info["category"] == "foreign" and self.cfg.get("beep_on_foreign") and not duplicate:
+            if info["category"] == "foreign" and self.cfg.get("beep_on_foreign"):
                 self.root.after(0, self._beep)
         except Exception as exc:
             message = str(exc)
@@ -673,7 +823,8 @@ class AnprApp:
 
     def _show_capture_error(self, message: str) -> None:
         self._set_detection("—", "unknown", message, 0.0)
-        self.preview_label.config(image="", text="Нет кадра.\n" + message)
+        self.time_label.config(text="Время определения: —")
+        self.preview_label.config(image="", text=message)
 
     def _show_preview(self, frame) -> None:
         try:
@@ -681,7 +832,23 @@ class AnprApp:
         except ImportError:
             self.preview_label.config(text="Установите Pillow для предпросмотра: pip install Pillow")
             return
-        rgb = frame[:, :, ::-1]
+        try:
+            import cv2
+
+            stamped = frame.copy()
+            cv2.rectangle(stamped, (8, 8), (8 + 12 * len(APP_VERSION) + 90, 36), (250, 204, 21), -1)
+            cv2.putText(
+                stamped,
+                f"СБОРКА {APP_VERSION}",
+                (14, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (17, 24, 39),
+                2,
+            )
+        except Exception:
+            stamped = frame
+        rgb = stamped[:, :, ::-1]
         image = Image.fromarray(rgb)
         image.thumbnail((880, 520))
         self._preview_photo = ImageTk.PhotoImage(image)
@@ -699,7 +866,7 @@ class AnprApp:
             return
         rgb = crop[:, :, ::-1]
         image = Image.fromarray(rgb)
-        image.thumbnail((340, 170))
+        image.thumbnail((520, 420))
         self._zoom_photo = ImageTk.PhotoImage(image)
         self.zoom_label.config(image=self._zoom_photo, text="")
 
@@ -716,7 +883,7 @@ class AnprApp:
         )
         self.detail_label.config(text=detail)
         if plate and plate != "—":
-            self.manual_var.set(plate)
+            self.manual_var.set(normalize_plate(plate))
 
     def _beep(self) -> None:
         try:

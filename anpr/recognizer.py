@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from anpr.plates import combine_type1_parts, is_osd_text, plate_is_valid
+from anpr.plates import combine_type1_parts, extract_plates, is_osd_text, plate_is_valid
 
 
 @dataclass
@@ -79,20 +79,31 @@ def preprocess_plate_crop(crop):
     return thresh
 
 
-def _upscale_for_ocr(crop):
+def _upscale_for_ocr(crop, max_side: int = 560):
+    """Enlarge small plate crops for OCR, but never create a huge image."""
     import cv2
 
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return crop
     h, w = crop.shape[:2]
-    # High-angle plates are small and flattened; always enlarge for OCR.
-    scale_h = max(96 / max(h, 1), 3.5)
-    scale_w = max(280 / max(w, 1), 3.0)
+    # High-angle plates are small and flattened; enlarge modestly.
+    scale_h = max(88 / max(h, 1), 2.0)
+    scale_w = max(240 / max(w, 1), 1.8)
     out = cv2.resize(
         crop,
-        (max(int(w * scale_w), 240), max(int(h * scale_h), 96)),
+        (max(int(w * scale_w), 180), max(int(h * scale_h), 64)),
         interpolation=cv2.INTER_CUBIC,
     )
+    oh, ow = out.shape[:2]
+    if max(oh, ow) > max_side:
+        scale = max_side / float(max(oh, ow))
+        out = cv2.resize(
+            out,
+            (max(int(ow * scale), 120), max(int(oh * scale), 48)),
+            interpolation=cv2.INTER_AREA,
+        )
     gray = _to_gray(out)
-    clahe = cv2.createCLAHE(clipLimit=2.4, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=2.8, tileGridSize=(8, 8))
     gray = clahe.apply(gray)
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
     if out.ndim == 2:
@@ -100,15 +111,29 @@ def _upscale_for_ocr(crop):
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
+def plate_focus_band(image):
+    """Center-lower strip where a high camera usually sees the Type-1 plate."""
+    h, w = image.shape[:2]
+    y0 = int(h * 0.42)
+    y1 = int(h * 0.92)
+    x0 = int(w * 0.18)
+    x1 = int(w * 0.82)
+    if y1 - y0 < 40 or x1 - x0 < 60:
+        return (0, 0, w, h), image
+    return (x0, y0, x1, y1), image[y0:y1, x0:x1]
+
+
 def mask_osd(image):
-    """Black out timestamp and HD IPCAM 2880x1620 overlay before OCR."""
+    """Black out corner camera overlays (HDIPCAM / resolution), keep plates intact."""
     if image is None or getattr(image, "size", 0) == 0:
         return image
     out = image.copy()
     h, w = out.shape[:2]
-    out[0 : max(int(h * 0.10), 12), 0 : max(int(w * 0.50), 40)] = 0
-    out[int(h * 0.86) : h, int(w * 0.45) : w] = 0
-    out[int(h * 0.90) : h, :] = 0
+    # Top-left timestamp / brand.
+    out[0 : max(int(h * 0.10), 12), 0 : max(int(w * 0.45), 40)] = 0
+    # Bottom-right resolution badge only — do NOT wipe the bumper/plate zone.
+    out[int(h * 0.90) : h, int(w * 0.55) : w] = 0
+    out[int(h * 0.94) : h, :] = 0
     return out
 
 
@@ -193,8 +218,8 @@ def find_plate_regions(image, max_candidates: int = 8) -> List[Tuple[Tuple[int, 
     return out
 
 
-def _search_views(image):
-    """Parking band plus tiles — skip the distant road and OSD corners."""
+def _search_views(image, max_views: int = 3):
+    """Parking band plus a few tiles — skip distant road and OSD corners."""
     h, w = image.shape[:2]
     (x0, y0, x1, y1), band = parking_band(image)
     views = [((x0, y0, x1, y1), band)]
@@ -210,9 +235,28 @@ def _search_views(image):
             if yy - y < 60 or xx - x < 90:
                 continue
             views.append(((x0 + x, y0 + y, x0 + xx, y0 + yy), band[y:yy, x:xx]))
-            if len(views) >= 7:
+            if len(views) >= max_views:
                 return views
     return views
+
+
+def _iter_search_views(image, origin=(0, 0), inside_vehicle: bool = False):
+    """Yield ((vx, vy), view) windows. Origin is the crop offset in the full frame."""
+    ox, oy = origin
+    if image is None or getattr(image, "size", 0) == 0:
+        return
+    if inside_vehicle:
+        h, w = image.shape[:2]
+        # Bumper strip first — smaller crop → much faster OCR on live RTSP.
+        y0 = int(h * 0.40)
+        if h - y0 >= 36 and w >= 60:
+            yield (ox, oy + y0), image[y0:h, :]
+            return
+        yield (ox, oy), image
+        return
+    for box, view in _search_views(image, max_views=2):
+        x0, y0, _x1, _y1 = box
+        yield (ox + x0, oy + y0), view
 
 
 class _OcrCache:
@@ -277,61 +321,75 @@ def _ocr_tesseract(image) -> List[Tuple[str, float]]:
     return [(text, 0.55 if text.strip() else 0.0)]
 
 
-def _run_ocr(image) -> Tuple[str, List[Tuple[str, float]]]:
-    for name, fn in (
-        ("rapidocr", _ocr_rapidocr),
-        ("easyocr", _ocr_easyocr),
-        ("tesseract", _ocr_tesseract),
-    ):
-        try:
-            hits = fn(image)
-        except Exception:
-            continue
+def _rapidocr_installed() -> bool:
+    try:
+        import rapidocr_onnxruntime  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _run_ocr(image, allow_tesseract: bool = False) -> Tuple[str, List[Tuple[str, float]]]:
+    """Run the fastest OCR engine. Live path uses RapidOCR only (budget-limited)."""
+    if int(_OCR_BUDGET.get("n", 0)) >= int(_OCR_BUDGET.get("max", 2)):
+        return "", []
+    _OCR_BUDGET["n"] = int(_OCR_BUDGET.get("n", 0)) + 1
+
+    try:
+        hits = _ocr_rapidocr(image)
         if hits:
-            return name, hits
+            return "rapidocr", hits
+    except Exception:
+        pass
+
+    # Tesseract is slow on CPU — use only when RapidOCR is not installed.
+    if allow_tesseract or not _rapidocr_installed():
+        try:
+            hits = _ocr_tesseract(image)
+            if hits:
+                return "tesseract", hits
+        except Exception:
+            pass
     return "", []
 
 
-def _iter_search_views(image, origin=(0, 0), inside_vehicle: bool = False):
-    ox, oy = origin
-    if inside_vehicle:
-        h, w = image.shape[:2]
-        yield (ox, oy), image
-        y0 = int(h * 0.30)
-        if h - y0 >= 16:
-            yield (ox, oy + y0), image[y0:h, :]
-        return
-    for (x0, y0, _x1, _y1), view in _search_views(image):
-        yield (ox + x0, oy + y0), view
+_FAST_FRAME = {"n": 0}
+_OCR_BUDGET = {"n": 0, "max": 2}
 
 
-def _collect_plate_regions(image, origin=(0, 0), inside_vehicle: bool = False):
+def _collect_plate_regions(image, origin=(0, 0), inside_vehicle: bool = False, max_regions: int = 3):
     ox, oy = origin
     region_map = []
     seen_boxes = set()
     try:
         for (vx, vy), view in _iter_search_views(image, origin, inside_vehicle):
-            for (x0, y0, x1, y1), crop in find_plate_regions(view):
+            for (x0, y0, x1, y1), crop in find_plate_regions(view, max_candidates=max_regions):
                 box = (x0 + vx, y0 + vy, x1 + vx, y1 + vy)
                 key = (box[0] // 20, box[1] // 20, box[2] // 20, box[3] // 20)
                 if key in seen_boxes:
                     continue
                 seen_boxes.add(key)
                 region_map.append((box, crop))
-                if len(region_map) >= 6:
+                if len(region_map) >= max_regions:
                     return region_map
     except Exception:
-        return region_map
+        pass
     if not region_map and inside_vehicle:
         h, w = image.shape[:2]
-        region_map = [((ox, oy, ox + w, oy + h), image)]
+        # Prefer bumper strip over the whole car — OCR is much faster.
+        y0 = int(h * 0.40)
+        if h - y0 >= 36:
+            region_map = [((ox, oy + y0, ox + w, oy + h), image[y0:h, :])]
+        else:
+            region_map = [((ox, oy, ox + w, oy + h), image)]
     return region_map
 
 
 def _ocr_regions(region_map, min_confidence: float) -> List[PlateHit]:
     hits: List[PlateHit] = []
     seen = set()
-    for bbox, crop in region_map:
+    for bbox, crop in region_map[:3]:
         try:
             crop = _upscale_for_ocr(crop)
         except Exception:
@@ -362,86 +420,178 @@ def _ocr_regions(region_map, min_confidence: float) -> List[PlateHit]:
                     engine=engine,
                 )
             )
+            # One good plate from this crop is enough — stop early.
+            break
+        if hits:
+            break
     hits.sort(key=lambda item: item.confidence, reverse=True)
     return hits
 
 
+def _hits_from_ocr_texts(
+    texts_scores,
+    engine: str,
+    bbox,
+    min_confidence: float,
+) -> List[PlateHit]:
+    texts = []
+    best = 0.0
+    for text, score in texts_scores:
+        if score < min_confidence or is_osd_text(text):
+            continue
+        texts.append(text)
+        best = max(best, float(score))
+    if not texts:
+        return []
+    raw_joined = " ".join(texts)
+    out: List[PlateHit] = []
+    for plate in combine_type1_parts(texts) or extract_plates(raw_joined):
+        if not plate_is_valid(plate) or is_osd_text(plate):
+            continue
+        out.append(
+            PlateHit(
+                plate=plate,
+                confidence=best,
+                raw_text=raw_joined,
+                bbox=bbox,
+                engine=engine or "ocr",
+            )
+        )
+    return out
+
+
+def _ocr_crop_direct(crop, origin_box, min_confidence: float) -> List[PlateHit]:
+    """OCR a crop without plate-region detection (high-camera fallback)."""
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return []
+    try:
+        prepared = _upscale_for_ocr(crop, max_side=420)
+    except Exception:
+        prepared = crop
+    engine, raw_hits = _run_ocr(prepared)
+    if not raw_hits:
+        return []
+    x0, y0, x1, y1 = origin_box
+    # Prefer a plate-sized box in the lower half of the crop.
+    ch = max(1, y1 - y0)
+    cw = max(1, x1 - x0)
+    bbox = (
+        x0 + int(cw * 0.22),
+        y0 + int(ch * 0.55),
+        x0 + int(cw * 0.78),
+        y0 + int(ch * 0.88),
+    )
+    return _hits_from_ocr_texts(raw_hits, engine, bbox, min_confidence)
+
+
 def recognize_scene(image, min_confidence: float = 0.35):
-    """Detect the car silhouette, cut away the rest, read Type-1 plates on the car."""
+    """Detect cars, read Type-1 plates, draw frames; works even if silhouette is weak."""
     from anpr.vehicles import (
+        VehicleSilhouette,
         annotate_scene,
-        apply_silhouette_mask,
+        annotate_zoom,
         bumper_box,
         crop_box,
-        crop_to_vehicles,
+        downscale_for_anpr,
         find_vehicle_silhouettes,
-        zoom_box,
+        vehicle_box_from_plate,
+        _looks_like_dumpster,
     )
 
     if image is None or getattr(image, "size", 0) == 0:
         return [], [], image, None
 
-    work = image
     try:
-        work = mask_osd(image)
+        # Smaller work frame = much faster silhouette + RapidOCR on CPU.
+        work = downscale_for_anpr(image, max_w=640)
     except Exception:
         work = image
 
+    # One RapidOCR call per tick — second pass only if the first returned nothing.
+    _OCR_BUDGET["n"] = 0
+    _OCR_BUDGET["max"] = 1
+    _FAST_FRAME["n"] = int(_FAST_FRAME.get("n", 0)) + 1
+
     silhouettes = []
     try:
-        silhouettes = find_vehicle_silhouettes(work)
+        silhouettes = find_vehicle_silhouettes(work, max_cars=1)
+        silhouettes = [item for item in silhouettes if not _looks_like_dumpster(work, item.box)]
     except Exception:
         silhouettes = []
-    vehicles = [item.box for item in silhouettes]
 
     hits: List[PlateHit] = []
-    plate_regions = []
-    if silhouettes:
-        masked = apply_silhouette_mask(work, silhouettes)
-        for item in silhouettes:
-            for roi in (bumper_box(item.box), item.box):
-                crop = crop_box(masked, roi)
-                if crop is None or getattr(crop, "size", 0) == 0:
-                    continue
-                regions = _collect_plate_regions(crop, origin=(roi[0], roi[1]), inside_vehicle=True)
-                plate_regions.extend(regions)
-                hits.extend(_ocr_regions(regions, min_confidence))
-    else:
-        plate_regions = _collect_plate_regions(work, origin=(0, 0), inside_vehicle=False)
-        hits = _ocr_regions(plate_regions, min_confidence)
 
-    unique = []
+    def _has_good_plate(items: List[PlateHit]) -> bool:
+        return any(plate_is_valid(h.plate) and not is_osd_text(h.plate) for h in items)
+
+    # Fast path: skip morphology plate-finder; OCR bumper / focus strip directly.
+    if silhouettes:
+        item = silhouettes[0]
+        roi = bumper_box(item.box)
+        crop = crop_box(work, roi)
+        if crop is not None and getattr(crop, "size", 0) > 0:
+            hits.extend(
+                _ocr_crop_direct(crop, roi, min_confidence=max(0.12, min_confidence - 0.10))
+            )
+
+    if not _has_good_plate(hits):
+        # Allow one more OCR attempt on the plate focus band.
+        _OCR_BUDGET["max"] = 2
+        try:
+            (fx0, fy0, fx1, fy1), focus = plate_focus_band(work)
+            fh, fw = focus.shape[:2]
+            mid = focus[int(fh * 0.45) : int(fh * 0.92), int(fw * 0.18) : int(fw * 0.82)]
+            if mid is not None and getattr(mid, "size", 0) > 0:
+                my0 = fy0 + int(fh * 0.45)
+                mx0 = fx0 + int(fw * 0.18)
+                hits.extend(
+                    _ocr_crop_direct(
+                        mid,
+                        (mx0, my0, mx0 + mid.shape[1], my0 + mid.shape[0]),
+                        min_confidence=max(0.10, min_confidence - 0.12),
+                    )
+                )
+        except Exception:
+            pass
+
+    unique: List[PlateHit] = []
     seen = set()
     for hit in hits:
         if hit.plate in seen:
             continue
+        if not plate_is_valid(hit.plate) or is_osd_text(hit.plate) or is_osd_text(hit.raw_text):
+            continue
         seen.add(hit.plate)
         unique.append(hit)
     unique.sort(key=lambda item: item.confidence, reverse=True)
+    unique = unique[:1]
 
-    zoom_src = None
-    if unique and unique[0].bbox:
-        zoom_src = unique[0].bbox
-    elif plate_regions:
-        zoom_src = plate_regions[0][0]
+    if unique and not silhouettes:
+        for index, hit in enumerate(unique):
+            if not hit.bbox:
+                continue
+            box = vehicle_box_from_plate(hit.bbox, work.shape)
+            if _looks_like_dumpster(work, box):
+                continue
+            silhouettes.append(VehicleSilhouette(box=box, contour=None, score=1.0 - index * 0.05))
+
+    silhouettes = [item for item in silhouettes if not _looks_like_dumpster(work, item.box)]
+    vehicles = [item.box for item in silhouettes]
+
+    try:
+        annotated = annotate_scene(work, silhouettes, unique)
+    except Exception:
+        annotated = work
 
     zoom = None
     try:
-        if zoom_src:
-            zoom = zoom_box(image, zoom_src)
+        if unique and unique[0].bbox:
+            zoom = annotate_zoom(work, unique[0].bbox, silhouettes, unique[:1])
         elif silhouettes:
-            zoom = zoom_box(image, bumper_box(silhouettes[0].box), min_w=560, min_h=200, pad=0.08)
+            zoom = annotate_zoom(work, silhouettes[0].box, silhouettes, unique[:1])
     except Exception:
         zoom = None
 
-    try:
-        annotated = annotate_scene(image, silhouettes, unique)
-        if zoom_src:
-            annotated = zoom_box(image, zoom_src, min_w=760, min_h=240, pad=0.55)
-        elif silhouettes:
-            annotated = crop_to_vehicles(annotated, silhouettes)
-    except Exception:
-        annotated = image
     return unique, vehicles, annotated, zoom
 
 

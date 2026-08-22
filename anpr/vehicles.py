@@ -52,7 +52,106 @@ def _nms(items: List[VehicleSilhouette], iou_thresh: float = 0.45) -> List[Vehic
     return kept
 
 
-def _silhouettes_from_mask(mask, image_shape, min_ratio: float, max_ratio: float) -> List[VehicleSilhouette]:
+def _box_color_stats(image, box: Box):
+    import cv2
+    import numpy as np
+
+    x0, y0, x1, y1 = box
+    crop = image[y0:y1, x0:x1]
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return 0.0, 0.0, 0.0, 0.0, 0.0
+    if crop.ndim == 2:
+        crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR)
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
+    hue = hsv[:, :, 0]
+    mean_sat = float(np.mean(sat))
+    mean_val = float(np.mean(val))
+    vivid = (sat > 55) & (val > 45)
+    vivid_ratio = float(np.mean(vivid)) if vivid.size else 0.0
+    blue = vivid & (hue >= 85) & (hue <= 145)
+    yellow = vivid & (hue >= 8) & (hue <= 45)
+    green = ((sat > 35) & (val > 35) & (hue >= 35) & (hue <= 95))
+    bin_color_ratio = float(np.mean(blue | yellow | green)) if vivid.size else 0.0
+    green_ratio = float(np.mean(green)) if green.size else 0.0
+    return mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio
+
+
+def _looks_like_dumpster(image, box: Box) -> bool:
+    """True for garbage bins / grass clumps that must not be framed as cars."""
+    x0, y0, x1, y1 = box
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    aspect = bw / float(bh)
+    mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
+    # Colored plastic bins (blue / yellow / green lids).
+    if bin_color_ratio >= 0.08 and aspect < 2.6:
+        return True
+    if green_ratio >= 0.18:
+        return True
+    if vivid_ratio >= 0.16 and mean_sat >= 40 and aspect < 2.8:
+        return True
+    h, w = image.shape[:2]
+    cx = (x0 + x1) / 2.0
+    near_side = cx < w * 0.16 or cx > w * 0.84
+    if near_side and vivid_ratio >= 0.08 and 0.55 <= aspect <= 1.7:
+        return True
+    # Compact colorful object — typical dumpster from above.
+    area_ratio = (bw * bh) / float(max(h * w, 1))
+    if area_ratio < 0.12 and mean_sat >= 35 and vivid_ratio >= 0.10:
+        return True
+    return False
+
+
+def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
+    """Higher = more like a car from a high parking camera."""
+    import cv2
+    import numpy as np
+
+    x0, y0, x1, y1 = box
+    h, w = image.shape[:2]
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    aspect = bw / float(bh)
+    area_ratio = (bw * bh) / float(max(h * w, 1))
+    cx = (x0 + x1) / 2.0
+    cy = (y0 + y1) / 2.0
+    mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
+
+    score = base
+    if 1.35 <= aspect <= 3.8:
+        score += 0.22
+    elif 1.05 <= aspect < 1.35:
+        score += 0.04
+    else:
+        score -= 0.12
+    score += min(area_ratio, 0.35) * 0.55
+    score += (cy / max(h, 1)) * 0.10
+    if w * 0.18 <= cx <= w * 0.82:
+        score += 0.06
+    score -= vivid_ratio * 0.55
+    score -= bin_color_ratio * 0.90
+    score -= green_ratio * 0.80
+    # White / silver cars are common here.
+    if mean_sat < 40 and mean_val >= 110:
+        score += 0.14
+    elif mean_sat < 50:
+        score += 0.05
+    crop = image[y0:y1, x0:x1]
+    if crop is not None and getattr(crop, "size", 0) > 0:
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
+        ch = gray.shape[0]
+        upper = gray[0 : max(int(ch * 0.45), 1), :]
+        lower = gray[int(ch * 0.55) : ch, :]
+        if upper.size and lower.size and float(np.mean(upper)) + 8 < float(np.mean(lower)):
+            score += 0.10
+        if float(np.std(gray)) > 18:
+            score += 0.04
+    return score
+
+
+def _silhouettes_from_mask(
+    mask, image_shape, min_ratio: float, max_ratio: float, image=None
+) -> List[VehicleSilhouette]:
     import cv2
 
     h, w = image_shape[:2]
@@ -61,21 +160,21 @@ def _silhouettes_from_mask(mask, image_shape, min_ratio: float, max_ratio: float
     found: List[VehicleSilhouette] = []
     for contour in contours:
         x, y, cw, ch = cv2.boundingRect(contour)
-        if cw < 36 or ch < 24:
+        if cw < 40 or ch < 24:
             continue
         area = cw * ch
         ratio = area / frame_area
         if ratio < min_ratio or ratio > max_ratio:
             continue
         aspect = cw / float(ch)
-        if not (0.55 <= aspect <= 4.2):
+        if not (0.85 <= aspect <= 4.0):
             continue
         hull = cv2.contourArea(cv2.convexHull(contour)) or 1.0
         solidity = (cv2.contourArea(contour) or 0.0) / hull
-        if solidity < 0.28:
+        if solidity < 0.25:
             continue
         cy = y + ch / 2.0
-        if cy < h * 0.18:
+        if cy < h * 0.20:
             continue
         pad_x, pad_y = int(cw * 0.08), int(ch * 0.10)
         box = (
@@ -84,7 +183,13 @@ def _silhouettes_from_mask(mask, image_shape, min_ratio: float, max_ratio: float
             min(w, x + cw + pad_x),
             min(h, y + ch + pad_y),
         )
+        if image is not None and _looks_like_dumpster(image, box):
+            continue
         score = ratio + (cy / h) * 0.08 + min(solidity, 1.0) * 0.04
+        if image is not None:
+            score = _car_likeness_score(image, box, base=score)
+        if score < 0.08:
+            continue
         found.append(VehicleSilhouette(box=box, contour=contour, score=score))
     return found
 
@@ -108,22 +213,43 @@ def _foreground_mask(image):
 
     bg = float(np.median(gray))
     diff = cv2.absdiff(gray, np.full_like(gray, int(np.clip(bg, 0, 255))))
-    _, mask_diff = cv2.threshold(diff, 26, 255, cv2.THRESH_BINARY)
+    diff_cut = 14 if bg >= 110 else 22
+    _, mask_diff = cv2.threshold(diff, diff_cut, 255, cv2.THRESH_BINARY)
 
-    sat, val = hsv[:, :, 1], hsv[:, :, 2]
-    _, mask_sat = cv2.threshold(sat, 42, 255, cv2.THRESH_BINARY)
-    white_cut = max(int(bg + 32), 145)
-    dark_cut = min(int(bg - 28), 78)
+    val = hsv[:, :, 2]
+    white_cut = max(int(bg + 18), 125)
+    dark_cut = min(int(bg - 14), 95)
     _, mask_white = cv2.threshold(val, white_cut, 255, cv2.THRESH_BINARY)
     _, mask_dark = cv2.threshold(val, max(dark_cut, 1), 255, cv2.THRESH_BINARY_INV)
 
-    mask = cv2.bitwise_or(mask_diff, mask_sat)
-    mask = cv2.bitwise_or(mask, mask_white)
-    mask = cv2.bitwise_or(mask, mask_dark)
+    local = cv2.GaussianBlur(gray, (31, 31), 0)
+    local_diff = cv2.absdiff(gray, local)
+    _, mask_local = cv2.threshold(local_diff, 8 if bg < 110 else 12, 255, cv2.THRESH_BINARY)
+
+    # White/silver cars: brighter than lot asphalt, low saturation.
+    pale_lo = max(int(bg + 25), 135)
+    pale = cv2.inRange(hsv, (0, 0, pale_lo), (180, 55, 255))
+
+    if bg >= 100:
+        _, strong_diff = cv2.threshold(diff, max(diff_cut + 10, 24), 255, cv2.THRESH_BINARY)
+        mask = cv2.bitwise_or(mask_local, mask_dark)
+        mask = cv2.bitwise_or(mask, strong_diff)
+        mask = cv2.bitwise_or(mask, pale)
+    else:
+        mask = cv2.bitwise_or(mask_diff, mask_white)
+        mask = cv2.bitwise_or(mask, mask_dark)
+        mask = cv2.bitwise_or(mask, mask_local)
+        mask = cv2.bitwise_or(mask, pale)
+
+    # Cut dumpsters + grass out of the vehicle mask.
+    vivid_bins = cv2.inRange(hsv, (8, 60, 55), (50, 255, 255))  # yellow/orange
+    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (85, 60, 55), (145, 255, 255)))  # blue
+    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (35, 50, 40), (95, 255, 255)))  # green lids/grass
+    mask[vivid_bins > 0] = 0
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
     return cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
 
@@ -146,19 +272,21 @@ def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette
     found: List[VehicleSilhouette] = []
     try:
         fg = _foreground_mask(image)
-        found.extend(_silhouettes_from_mask(fg, image.shape, min_ratio=0.008, max_ratio=0.50))
+        found.extend(
+            _silhouettes_from_mask(fg, image.shape, min_ratio=0.008, max_ratio=0.45, image=image)
+        )
     except Exception:
         pass
-    try:
-        edges = _edge_mask(image)
-        found.extend(_silhouettes_from_mask(edges, image.shape, min_ratio=0.010, max_ratio=0.45))
-    except Exception:
-        pass
+    # Edge mask is intentionally skipped: grass and dumpster lids create false cars.
+    found = [item for item in found if not _looks_like_dumpster(image, item.box)]
     if not found:
         return []
     kept = _nms(found, iou_thresh=0.42)
-    kept.sort(key=lambda item: (item.box[2] - item.box[0]) * (item.box[3] - item.box[1]), reverse=True)
-    return kept[:max_cars]
+    kept.sort(key=lambda item: item.score, reverse=True)
+    # One clear car is enough for this gate camera.
+    if kept:
+        return kept[:1]
+    return []
 
 
 def find_vehicle_rois(image, max_cars: int = 6) -> List[Box]:
@@ -176,6 +304,62 @@ def bumper_box(box: Box) -> Box:
     x0, y0, x1, y1 = box
     h = max(1, y1 - y0)
     return (x0, y0 + int(h * 0.32), x1, y1)
+
+
+def vehicle_box_from_plate(plate_box: Box, image_shape, expand: float = 3.2) -> Box:
+    """Guess a car frame around a found plate when silhouette detection failed."""
+    h, w = image_shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in plate_box]
+    pw = max(8, x1 - x0)
+    ph = max(6, y1 - y0)
+    bx0 = max(0, int(x0 - pw * expand))
+    by0 = max(0, int(y0 - ph * (expand + 0.8)))
+    bx1 = min(w, int(x1 + pw * expand))
+    by1 = min(h, int(y1 + ph * 1.4))
+    if bx1 - bx0 < 40 or by1 - by0 < 30:
+        return (max(0, x0 - 40), max(0, y0 - 80), min(w, x1 + 40), min(h, y1 + 40))
+    return (bx0, by0, bx1, by1)
+
+
+def downscale_for_anpr(image, max_w: int = 1280):
+    """Shrink huge RTSP frames so silhouette + OCR finish much faster."""
+    import cv2
+
+    if image is None or getattr(image, "size", 0) == 0:
+        return image
+    h, w = image.shape[:2]
+    if w <= max_w:
+        return image
+    scale = max_w / float(w)
+    return cv2.resize(image, (max_w, max(int(h * scale), 1)), interpolation=cv2.INTER_AREA)
+
+
+def brighten_crop(crop, min_mean: float = 78.0):
+    """Lift dark RTSP crops so white Type-1 digits stay readable in the side panel."""
+    import cv2
+    import numpy as np
+
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return crop
+    mean = float(np.mean(crop))
+    if mean >= min_mean:
+        return crop
+    out = crop.copy()
+    if out.ndim == 2:
+        clahe = cv2.createCLAHE(clipLimit=3.2, tileGridSize=(8, 8))
+        return clahe.apply(out)
+    lab = cv2.cvtColor(out, cv2.COLOR_BGR2LAB)
+    l_ch, a_ch, b_ch = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=3.2, tileGridSize=(8, 8))
+    l_ch = clahe.apply(l_ch)
+    merged = cv2.merge([l_ch, a_ch, b_ch])
+    out = cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+    # Mild gain if still dim after CLAHE (high camera / evening).
+    mean2 = float(np.mean(out))
+    if mean2 < min_mean:
+        gain = min(min_mean / max(mean2, 1.0), 1.85)
+        out = np.clip(out.astype(np.float32) * gain, 0, 255).astype(np.uint8)
+    return out
 
 
 def zoom_box(image, box: Box, min_w: int = 520, min_h: int = 140, pad: float = 0.28):
@@ -196,9 +380,10 @@ def zoom_box(image, box: Box, min_w: int = 520, min_h: int = 140, pad: float = 0
     crop = image[y0:y1, x0:x1]
     if crop is None or getattr(crop, "size", 0) == 0:
         return image
+    crop = brighten_crop(crop)
     ch, cw = crop.shape[:2]
     scale = max(min_w / float(max(cw, 1)), min_h / float(max(ch, 1)), 3.2)
-    scale = min(scale, 14.0)
+    scale = min(scale, 16.0)
     return cv2.resize(
         crop,
         (max(int(cw * scale), min_w), max(int(ch * scale), min_h)),
@@ -274,6 +459,50 @@ def cut_away_background(image, vehicles: Sequence[VehicleLike]):
     return crop_to_vehicles(masked, vehicles)
 
 
+def draw_corner_frame(vis, box: Box, color=(40, 220, 90), thickness: int = 3, corner: int = 28) -> None:
+    """Draw an L-corner bounding frame around the detected car."""
+    import cv2
+
+    x0, y0, x1, y1 = [int(v) for v in box]
+    if x1 - x0 < 12 or y1 - y0 < 12:
+        return
+    length = max(12, min(corner, (x1 - x0) // 3, (y1 - y0) // 3))
+    # top-left
+    cv2.line(vis, (x0, y0), (x0 + length, y0), color, thickness)
+    cv2.line(vis, (x0, y0), (x0, y0 + length), color, thickness)
+    # top-right
+    cv2.line(vis, (x1, y0), (x1 - length, y0), color, thickness)
+    cv2.line(vis, (x1, y0), (x1, y0 + length), color, thickness)
+    # bottom-left
+    cv2.line(vis, (x0, y1), (x0 + length, y1), color, thickness)
+    cv2.line(vis, (x0, y1), (x0, y1 - length), color, thickness)
+    # bottom-right
+    cv2.line(vis, (x1, y1), (x1 - length, y1), color, thickness)
+    cv2.line(vis, (x1, y1), (x1, y1 - length), color, thickness)
+    cv2.rectangle(vis, (x0, y0), (x1, y1), color, 1)
+
+
+def draw_vehicle_shape(vis, item: VehicleLike, label: str = "АВТО") -> None:
+    """Draw car silhouette contour + detection frame at the moment the car is found."""
+    import cv2
+
+    contour = _as_contour(item)
+    x0, y0, x1, y1 = _as_box(item)
+    color = (40, 220, 90)
+    if contour is not None and len(contour):
+        cv2.drawContours(vis, [contour], -1, color, 2)
+        # Soft fill so the shape of the car is obvious without hiding the plate.
+        overlay = vis.copy()
+        cv2.drawContours(overlay, [contour], -1, (30, 140, 60), thickness=-1)
+        cv2.addWeighted(overlay, 0.18, vis, 0.82, 0, vis)
+        cv2.drawContours(vis, [contour], -1, color, 2)
+    draw_corner_frame(vis, (x0, y0, x1, y1), color=color, thickness=3)
+    text = label or "АВТО"
+    text_y = max(22, y0 - 8)
+    cv2.rectangle(vis, (x0, text_y - 18), (x0 + 8 + 12 * len(text), text_y + 4), (16, 60, 28), -1)
+    cv2.putText(vis, text, (x0 + 4, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (220, 255, 220), 2)
+
+
 def draw_type1_plate(vis, box: Box, plate: str = "") -> None:
     """Draw the ГОСТ Type-1 layout: body | region, matching «А 000 АА | 00»."""
     import cv2
@@ -284,8 +513,8 @@ def draw_type1_plate(vis, box: Box, plate: str = "") -> None:
     if x1 - x0 < 8 or y1 - y0 < 6:
         return
     split = x0 + int((x1 - x0) * 0.78)
-    cv2.rectangle(vis, (x0, y0), (x1, y1), (10, 10, 10), 2)
-    cv2.line(vis, (split, y0 + 1), (split, y1 - 1), (10, 10, 10), 1)
+    cv2.rectangle(vis, (x0, y0), (x1, y1), (0, 210, 255), 2)
+    cv2.line(vis, (split, y0 + 1), (split, y1 - 1), (0, 210, 255), 1)
     body, region = format_plate_parts(plate) if plate else ("", "")
     label = f"{body} | {region}" if body and body != "—" else plate
     if label:
@@ -293,26 +522,78 @@ def draw_type1_plate(vis, box: Box, plate: str = "") -> None:
 
 
 def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> object:
-    """Keep the car silhouette, cut the rest, outline AUTO and the Type-1 plate."""
+    """Keep the parking view, highlight car shape + frame the moment a car is detected."""
     import cv2
+    import numpy as np
 
     vis = image.copy()
     if vehicles:
-        mask = silhouette_mask(vis.shape, vehicles)
-        vis[mask == 0] = 0
-        for item in vehicles:
-            contour = _as_contour(item)
-            x0, y0, x1, y1 = _as_box(item)
-            if contour is not None and len(contour):
-                cv2.drawContours(vis, [contour], -1, (40, 200, 80), 2)
-            else:
-                cv2.rectangle(vis, (x0, y0), (x1, y1), (40, 200, 80), 2)
-            cv2.putText(vis, "AUTO", (x0, max(18, y0 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 200, 80), 2)
-    else:
-        vis[:] = 0
+        mask = silhouette_mask(vis.shape, vehicles, dilate=15)
+        # Dim the lot so the car shape stands out, but keep context.
+        dim = (vis.astype(np.float32) * 0.35).astype(vis.dtype)
+        vis = np.where(mask[:, :, None] > 0, vis, dim)
+        for index, item in enumerate(vehicles):
+            title = "АВТО" if index == 0 else f"АВТО {index + 1}"
+            draw_vehicle_shape(vis, item, label=title)
     for hit in plates:
         box = getattr(hit, "bbox", None)
         if not box:
             continue
         draw_type1_plate(vis, box, getattr(hit, "plate", ""))
     return vis
+
+
+def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates: list = ()) -> object:
+    """Close-up focused on the plate so the Type-1 number fills the side panel."""
+    import cv2
+    import numpy as np
+
+    from anpr.plates import format_plate_parts
+
+    # Never use a dimmed/annotated preview here — black lot pixels wipe the crop.
+    if image is None or getattr(image, "size", 0) == 0:
+        return None
+
+    focus = box
+    pad = 0.35
+    min_w, min_h = 720, 360
+    plate_focus = False
+    for hit in plates:
+        plate_box = getattr(hit, "bbox", None)
+        if plate_box:
+            focus = plate_box
+            # Tight around the plate so digits dominate the panel (not the whole car).
+            pad = 1.15
+            min_w, min_h = 1100, 480
+            plate_focus = True
+            break
+
+    if not focus:
+        return None
+
+    crop = zoom_box(image, focus, min_w=min_w, min_h=min_h, pad=pad)
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return None
+    crop = brighten_crop(crop, min_mean=88.0)
+    # Guard: if crop is still nearly black, fall back to a wider bumper slice.
+    if float(np.mean(crop)) < 28.0 and box and box != focus:
+        crop = zoom_box(image, box, min_w=900, min_h=400, pad=0.45)
+        if crop is None or getattr(crop, "size", 0) == 0:
+            return None
+        crop = brighten_crop(crop, min_mean=88.0)
+        plate_focus = False
+
+    h, w = crop.shape[:2]
+    draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=(40, 220, 90), thickness=4, corner=40)
+    title = "НОМЕР КРУПНО" if plate_focus else "АВТО"
+    cv2.putText(crop, title, (16, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (40, 220, 90), 2)
+    for hit in plates:
+        plate = getattr(hit, "plate", "") or ""
+        if not plate:
+            continue
+        body, region = format_plate_parts(plate)
+        label = f"{body} | {region}" if body and body != "—" else plate
+        cv2.rectangle(crop, (0, h - 72), (w, h), (10, 10, 10), -1)
+        cv2.putText(crop, label, (16, h - 22), cv2.FONT_HERSHEY_SIMPLEX, 1.35, (0, 220, 255), 3)
+        break
+    return crop

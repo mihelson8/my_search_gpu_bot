@@ -264,6 +264,20 @@ def _is_mostly_black(frame, threshold: float = 16.0) -> bool:
         return True
 
 
+def _is_useless_frame(frame, max_std: float = 12.0) -> bool:
+    """True for solid green/black RTSP placeholders with no real scene."""
+    try:
+        if frame is None or getattr(frame, "size", 0) == 0:
+            return True
+        if _is_mostly_black(frame):
+            return True
+        # Compare pixels, not BGR channels (solid green has channel spread).
+        flat = frame.reshape(-1, frame.shape[-1]) if frame.ndim == 3 else frame.reshape(-1, 1)
+        return float(flat.astype("float32").std(axis=0).max()) < max_std
+    except Exception:
+        return True
+
+
 def grab_window(info: WindowInfo):
     """Prefer a real screen screenshot: Seetong video is often black via PrintWindow."""
     mss_frame = None
@@ -307,23 +321,94 @@ def grab_monitor(monitor_index: int = 1):
     return frame[:, :, ::-1].copy()
 
 
+class _RtspSession:
+    """Keep one open RTSP handle. Reconnecting every tick costs ~5–10s on Seetong cams."""
+
+    def __init__(self) -> None:
+        self._cap = None
+        self._url = ""
+        self._lock = None
+
+    def _get_lock(self):
+        if self._lock is None:
+            import threading
+
+            self._lock = threading.Lock()
+        return self._lock
+
+    def release(self) -> None:
+        with self._get_lock():
+            self._release_unlocked()
+
+    def _release_unlocked(self) -> None:
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+        self._cap = None
+        self._url = ""
+
+    def _open_unlocked(self, url: str) -> None:
+        import cv2  # type: ignore
+
+        self._release_unlocked()
+        # Prefer TCP + low delay so moving cars are not several seconds behind.
+        os.environ.setdefault(
+            "OPENCV_FFMPEG_CAPTURE_OPTIONS",
+            "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay|max_delay;500000",
+        )
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(url)
+        if not cap.isOpened():
+            raise RuntimeError(f"Не удалось открыть RTSP: {url}")
+        try:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
+        self._cap = cap
+        self._url = url
+
+    def read(self, url: str):
+        url = (url or "").strip()
+        if not url:
+            raise RuntimeError("Пустой RTSP URL")
+        with self._get_lock():
+            if self._cap is None or self._url != url:
+                self._open_unlocked(url)
+            assert self._cap is not None
+            # Drop stale buffered frames — otherwise plate is from seconds ago.
+            for _ in range(4):
+                if not self._cap.grab():
+                    break
+            ok, frame = self._cap.retrieve()
+            if not ok or frame is None:
+                self._open_unlocked(url)
+                assert self._cap is not None
+                ok, frame = self._cap.read()
+            if not ok or frame is None:
+                self._release_unlocked()
+                raise RuntimeError("RTSP открыт, но кадр не получен")
+            return frame
+
+
+_RTSP_SESSION = _RtspSession()
+
+
 def grab_rtsp(url: str):
     try:
-        import cv2  # type: ignore
+        import cv2  # type: ignore  # noqa: F401
     except ImportError as exc:
         raise RuntimeError(
             "Для RTSP нужен opencv-python. Установите: pip install -r requirements-anpr.txt"
         ) from exc
-    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
-    if not cap.isOpened():
-        cap = cv2.VideoCapture(url)
-    if not cap.isOpened():
-        raise RuntimeError(f"Не удалось открыть RTSP: {url}")
-    ok, frame = cap.read()
-    cap.release()
-    if not ok or frame is None:
-        raise RuntimeError("RTSP открыт, но кадр не получен")
-    return frame
+    return _RTSP_SESSION.read(url)
+
+
+def release_rtsp() -> None:
+    """Close the persistent RTSP session (call on Stop)."""
+    _RTSP_SESSION.release()
 
 
 def grab_http_snapshot(url: str):
@@ -359,27 +444,74 @@ def grab_http_snapshot(url: str):
     return frame
 
 
-def newest_image_path(folder: str) -> str:
+NO_FRAME_HINT = (
+    "Не удалось взять кадр с камеры Seetong.\n"
+    "1. Откройте Seetong Lite Client на вкладке Main View — картинка камеры должна быть видна.\n"
+    "2. Нажмите значок фотоаппарата один раз (снимок попадёт в папку pi).\n"
+    "3. Сдвиньте окно автономеров, чтобы оно не закрывало камеру."
+)
+
+
+def seetong_shot_candidates(folder: str = "") -> List[str]:
+    """Only the configured Seetong screenshot folder — never leftover ZIP copies."""
+    from anpr.config import sanitize_shots_dir
+
+    return [sanitize_shots_dir(folder)]
+
+
+def _list_image_files(folder: str) -> List[str]:
     import glob
 
-    if not folder or not os.path.isdir(folder):
-        raise RuntimeError(f"Нет папки снимков Seetong: {folder}")
-    files = []
-    for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.PNG"):
+    files: List[str] = []
+    for pattern in ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.JPG", "*.JPEG", "*.PNG", "*.BMP"):
         files.extend(glob.glob(os.path.join(folder, pattern)))
-        files.extend(glob.glob(os.path.join(folder, "*", pattern)))
-    files = [path for path in files if os.path.isfile(path)]
-    if not files:
-        raise RuntimeError(
-            f"В папке нет снимков: {folder}\n"
-            "Откройте Main View в Seetong и нажмите кнопку снимка (фотоаппарат)."
-        )
-    return max(files, key=os.path.getmtime)
+    return [path for path in files if os.path.isfile(path)]
+
+
+def newest_image_path(folder: str) -> str:
+    from anpr.config import OFFICIAL_SEETONG_SHOTS_DIR, sanitize_shots_dir
+
+    chosen = sanitize_shots_dir(folder)
+    files: List[str] = []
+    if os.path.isdir(chosen):
+        files.extend(_list_image_files(chosen))
+    if files:
+        return max(files, key=os.path.getmtime)
+    if chosen:
+        try:
+            os.makedirs(chosen, exist_ok=True)
+        except Exception:
+            pass
+    shown = chosen or OFFICIAL_SEETONG_SHOTS_DIR
+    raise RuntimeError(
+        f"В папке нет снимков: {shown}\n"
+        "В Seetong Lite Client откройте Main View и нажмите значок фотоаппарата один раз."
+    )
 
 
 def grab_newest_in_folder(folder: str):
     path = newest_image_path(folder)
     return grab_file(path), os.path.basename(path)
+
+
+def _try_folder_frame(shots_dir: str):
+    try:
+        return grab_newest_in_folder(shots_dir)
+    except Exception:
+        return None
+
+
+def _try_live_window_frame(window_title: str = ""):
+    info = find_seetong_window(window_title)
+    if info is None:
+        return None
+    try:
+        frame = grab_window(info)
+    except Exception:
+        return None
+    if frame is None or getattr(frame, "size", 0) == 0 or _is_mostly_black(frame):
+        return None
+    return frame, info.title
 
 
 def grab_file(path: str):
@@ -436,7 +568,14 @@ def grab_frame(
     if source == "http":
         return grab_http_snapshot(http_url), "http"
     if source in ("seetong_folder", "shots"):
-        return grab_newest_in_folder(shots_dir or file_path)
+        folder_hit = _try_folder_frame(shots_dir or file_path)
+        if folder_hit is not None:
+            return folder_hit
+        window_hit = _try_live_window_frame(window_title)
+        if window_hit is not None:
+            return window_hit
+        shown = shots_dir or file_path or r"C:\Program Files (x86)\Seetong\pi"
+        raise RuntimeError(f"{NO_FRAME_HINT}\nПапка: {shown}")
     if source == "file":
         return grab_file(file_path), os.path.basename(file_path)
     raise RuntimeError(f"Неизвестный источник: {source}")
