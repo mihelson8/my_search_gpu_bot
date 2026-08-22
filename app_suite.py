@@ -11,10 +11,21 @@ import webbrowser
 from typing import Any
 from business_suite_db import BusinessDB, DEFAULT_DB_PATH
 
-db = BusinessDB()
-# If DB is completely empty of clients, seed demo data for an immediate great experience
-if len(db.get_clients()) == 0:
-    db.seed_demo_clients()
+try:
+    db = BusinessDB()
+    # If DB is completely empty of clients, seed demo data for an immediate great experience
+    if len(db.get_clients()) == 0:
+        db.seed_demo_clients()
+except Exception as exc:
+    print("============================================================")
+    print("ОШИБКА при открытии базы данных")
+    print(exc)
+    print()
+    print("Скопируйте папку программы на диск C: (например C:\\бизнес)")
+    print("и запустите START_APP_WINDOWS.bat оттуда.")
+    print("Диск G: часто бывает только для чтения (флешка Windows).")
+    print("============================================================")
+    raise SystemExit(1) from exc
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="ru">
@@ -23,7 +34,6 @@ HTML_PAGE = """<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CCTV & China Cargo Suite - Пульт управления бизнесом</title>
     <link rel="icon" type="image/png" href="/app_icon.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #2563eb;
@@ -44,7 +54,7 @@ HTML_PAGE = """<!DOCTYPE html>
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
         }
 
         body {
@@ -1431,14 +1441,29 @@ class SuiteRequestHandler(SimpleHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
 def start_server(port: int = 8765, open_browser: bool = True):
-    server = HTTPServer(("0.0.0.0", port), SuiteRequestHandler)
-    print(f"============================================================")
-    print(f"🚀 Программа управления бизнесом запущена!")
-    print(f"📍 Откройте в браузере: http://localhost:{port}")
-    print(f"============================================================")
+    try:
+        server = HTTPServer(("127.0.0.1", port), SuiteRequestHandler)
+    except OSError as exc:
+        print("============================================================")
+        print("ОШИБКА: не удалось запустить сервер на порту", port)
+        print("Причина:", exc)
+        print()
+        print("Что попробовать:")
+        print("  1. Закройте другое окно этой же программы")
+        print("  2. Подождите минуту и запустите снова")
+        print("  3. Перезагрузите компьютер")
+        print("============================================================")
+        raise SystemExit(1) from exc
+
+    print("============================================================")
+    print("Программа управления бизнесом запущена!")
+    print(f"Откройте в браузере: http://localhost:{port}")
+    print("Чтобы остановить — закройте это окно.")
+    print("============================================================")
 
     if open_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
+        # Open as soon as the listener is up (no 1s wait, no Google Fonts delay).
+        threading.Timer(0.15, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
 
     try:
         server.serve_forever()
