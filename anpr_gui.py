@@ -19,6 +19,7 @@ from anpr.config import (
 )
 from anpr.database import AnprDB
 from anpr.plates import category_label, format_plate, format_plate_parts, is_osd_text, normalize_plate, parse_category, plate_is_valid
+from anpr.version import APP_TITLE, APP_VERSION
 
 STATUS_COLORS = {
     "own": "#16a34a",
@@ -39,7 +40,7 @@ SOURCE_VALUES = {label: key for key, label in SOURCE_LABELS.items()}
 class AnprApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Автономера · Seetong · Свой / Чужой")
+        self.root.title(APP_TITLE)
         self.root.minsize(720, 520)
         self.root.geometry(
             side_window_geometry(self.root.winfo_screenwidth(), self.root.winfo_screenheight())
@@ -119,7 +120,9 @@ class AnprApp:
         header = ttk.Frame(self.root, padding="14 10")
         header.pack(fill="x")
         ttk.Label(header, text="Автономера · Seetong", style="Header.TLabel").pack(side="left")
-        ttk.Label(header, text="окно справа, камера слева", style="Muted.TLabel").pack(side="left", padx=(12, 0))
+        ttk.Label(header, text=f"v{APP_VERSION} · окно справа, камера слева", style="Muted.TLabel").pack(
+            side="left", padx=(12, 0)
+        )
         self.stats_label = ttk.Label(header, text="", style="Muted.TLabel")
         self.stats_label.pack(side="right")
 
@@ -645,7 +648,7 @@ class AnprApp:
             if force_save or self.cfg.get("save_all_shots"):
                 shot = save_screenshot(frame, prefix="live")
             hits, vehicles, annotated, zoom = recognize_scene(
-                frame, min_confidence=float(self.cfg.get("min_confidence", 0.35))
+                frame, min_confidence=float(self.cfg.get("min_confidence", 0.28))
             )
             preview = annotated if annotated is not None else frame
             self.root.after(0, lambda img=preview: self._show_preview(img))

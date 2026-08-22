@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from anpr.plates import combine_type1_parts, is_osd_text, plate_is_valid
+from anpr.plates import combine_type1_parts, extract_plates, is_osd_text, plate_is_valid
 
 
 @dataclass
@@ -419,6 +419,35 @@ def recognize_scene(image, min_confidence: float = 0.35):
         extra = _collect_plate_regions(work, origin=(0, 0), inside_vehicle=False)
         plate_regions.extend(extra)
         hits.extend(_ocr_regions(extra, min_confidence))
+
+    # Last resort for high cameras / white cars: OCR the parking band as one image.
+    if not any(plate_is_valid(h.plate) for h in hits):
+        try:
+            (bx0, by0, _bx1, _by1), band = parking_band(work)
+            engine, raw_hits = _run_ocr(_upscale_for_ocr(band))
+            texts = [text for text, score in raw_hits if score >= min_confidence and not is_osd_text(text)]
+            if texts:
+                for plate in combine_type1_parts(texts) or extract_plates(" ".join(texts)):
+                    if not plate_is_valid(plate):
+                        continue
+                    # Approximate plate box in the lower third of the band.
+                    bh, bw = band.shape[:2]
+                    hits.append(
+                        PlateHit(
+                            plate=plate,
+                            confidence=max(score for _t, score in raw_hits),
+                            raw_text=" ".join(texts),
+                            bbox=(
+                                bx0 + int(bw * 0.30),
+                                by0 + int(bh * 0.55),
+                                bx0 + int(bw * 0.70),
+                                by0 + int(bh * 0.78),
+                            ),
+                            engine=engine or "band",
+                        )
+                    )
+        except Exception:
+            pass
 
     unique: List[PlateHit] = []
     seen = set()

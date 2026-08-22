@@ -39,32 +39,37 @@ function Get-SearchRoots {
 }
 
 function Find-AnprSource([string]$start) {
+    $hits = New-Object System.Collections.Generic.List[object]
     if ($start -and (Test-Path (Join-Path $start "anpr_gui.py"))) {
-        return (Get-FullPath $start)
+        $gui = Get-Item (Join-Path $start "anpr_gui.py")
+        $hits.Add([pscustomobject]@{ Path = (Get-FullPath $start); Time = $gui.LastWriteTimeUtc }) | Out-Null
     }
-    $hits = New-Object System.Collections.Generic.List[string]
     foreach ($root in Get-SearchRoots) {
         if (Test-Path (Join-Path $root "anpr_gui.py")) {
-            $hits.Add((Get-FullPath $root)) | Out-Null
+            $gui = Get-Item (Join-Path $root "anpr_gui.py")
+            $hits.Add([pscustomobject]@{ Path = (Get-FullPath $root); Time = $gui.LastWriteTimeUtc }) | Out-Null
         }
         Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Where-Object {
             $_.Name -like "my_search_gpu_bot*" -or $_.Name -eq "AvtonomeraSeetong"
         } | ForEach-Object {
-            if (Test-Path (Join-Path $_.FullName "anpr_gui.py")) {
-                $hits.Add((Get-FullPath $_.FullName)) | Out-Null
+            $guiPath = Join-Path $_.FullName "anpr_gui.py"
+            if (Test-Path $guiPath) {
+                $gui = Get-Item $guiPath
+                $hits.Add([pscustomobject]@{ Path = (Get-FullPath $_.FullName); Time = $gui.LastWriteTimeUtc }) | Out-Null
             }
             Get-ChildItem $_.FullName -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-                if (Test-Path (Join-Path $_.FullName "anpr_gui.py")) {
-                    $hits.Add((Get-FullPath $_.FullName)) | Out-Null
+                $nested = Join-Path $_.FullName "anpr_gui.py"
+                if (Test-Path $nested) {
+                    $gui = Get-Item $nested
+                    $hits.Add([pscustomobject]@{ Path = (Get-FullPath $_.FullName); Time = $gui.LastWriteTimeUtc }) | Out-Null
                 }
             }
         }
     }
-    foreach ($hit in $hits) {
-        if ($hit -like "*AvtonomeraSeetong") { return $hit }
-    }
-    if ($hits.Count -gt 0) { return $hits[0] }
-    return $null
+    if ($hits.Count -eq 0) { return $null }
+    # Prefer the newest extract so an old D:\AvtonomeraSeetong is not kept forever.
+    $best = $hits | Sort-Object Time -Descending | Select-Object -First 1
+    return $best.Path
 }
 
 function Stop-AnprProcesses {
@@ -77,11 +82,15 @@ function Stop-AnprProcesses {
 
 function Copy-Anpr([string]$src, [string]$dst) {
     New-Item -ItemType Directory -Force -Path $dst | Out-Null
+    $anprDst = Join-Path $dst "anpr"
+    if (Test-Path $anprDst) {
+        Remove-Item $anprDst -Recurse -Force -ErrorAction SilentlyContinue
+    }
     $names = @(
         "anpr_gui.py", "anpr_icon.ico", "START_ANPR.bat", "INSTALL_ANPR.bat",
         "DESKTOP_SHORTCUT_ANPR.bat", "MAKE_DESKTOP_SHORTCUT.ps1",
         "FIX_AND_CLEAN.ps1", "FIX_AND_CLEAN.bat", "requirements-anpr.txt",
-        "UNINSTALL_COMPLETE.ps1", "UNINSTALL_COMPLETE.bat"
+        "UNINSTALL_COMPLETE.ps1", "UNINSTALL_COMPLETE.bat", "UPDATE_NOW.bat"
     )
     foreach ($name in $names) {
         $from = Join-Path $src $name
@@ -96,7 +105,7 @@ function Copy-Anpr([string]$src, [string]$dst) {
     }
     $anprSrc = Join-Path $src "anpr"
     if (Test-Path $anprSrc) {
-        Copy-Item $anprSrc (Join-Path $dst "anpr") -Recurse -Force
+        Copy-Item $anprSrc $anprDst -Recurse -Force
     }
 }
 
@@ -210,9 +219,10 @@ if (-not $source) {
     exit 1
 }
 
-Write-Host ("Program folder: " + $source)
+Write-Host ("Newest program folder: " + $source)
 Write-Host ("Install to: " + $stable)
 
+# Always refresh D:\AvtonomeraSeetong from the newest extract.
 if ((Get-FullPath $source) -ne (Get-FullPath $stable)) {
     Stop-AnprProcesses
     Copy-Anpr $source $stable
@@ -229,6 +239,14 @@ if ((Get-FullPath $source) -ne (Get-FullPath $stable)) {
     exit 0
 }
 
+# Even when already in the stable folder, refresh files if a newer extract exists.
+$newest = Find-AnprSource ""
+if ($newest -and ((Get-FullPath $newest) -ne (Get-FullPath $stable))) {
+    Write-Host ("Updating from newer folder: " + $newest)
+    Stop-AnprProcesses
+    Copy-Anpr $newest $stable
+}
+
 Copy-NewestDatabase $stable
 if (-not (Install-Packages $stable)) {
     if (-not $FromStable) { pause }
@@ -240,17 +258,22 @@ if (Test-Path $shortcut) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $shortcut
 }
 
+$verFile = Join-Path $stable "anpr\version.py"
+if (Test-Path $verFile) {
+    Write-Host ("Version file: " + (Get-Content $verFile | Select-String "APP_VERSION"))
+}
+
 Stop-AnprProcesses
 Start-Anpr $stable
 Start-Sleep -Seconds 1
 Remove-LeftoverCopies $stable
 
 Write-Host ""
-Write-Host "Ready. Use desktop icon: Avtonomera Seetong"
+Write-Host "Ready. Check window title contains: 2026.08.22-r4"
+Write-Host "Use desktop icon: Avtonomera Seetong / Автономера Seetong"
 Write-Host ("Folder: " + $stable)
-Write-Host "Seetong shots folder: C:\Program Files (x86)\Seetong\pi"
-Write-Host "Extra my_search_gpu_bot copies were deleted."
+Write-Host "If title has no 2026.08.22-r4 — you still opened the OLD program."
 if (-not $FromStable) {
-    Start-Sleep -Seconds 4
+    Start-Sleep -Seconds 6
 }
 exit 0

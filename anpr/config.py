@@ -73,7 +73,7 @@ DEFAULTS: Dict[str, Any] = {
     "crop_bottom": 0.12,
     "skip_top": 0.28,
     "duplicate_sec": 30,
-    "min_confidence": 0.35,
+    "min_confidence": 0.28,
     "save_all_shots": False,
     "unknown_as_foreign": False,
     "beep_on_foreign": True,
