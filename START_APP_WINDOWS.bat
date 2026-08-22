@@ -88,7 +88,11 @@ echo.
 echo ============================================================
 echo.
 
-%PY% app_suite.py
+if exist "run_business.py" (
+    %PY% run_business.py
+) else (
+    %PY% app_suite.py
+)
 set "ERR=%errorlevel%"
 
 echo.
@@ -98,7 +102,7 @@ if not "%ERR%"=="0" (
     echo   - порт 8765 занят другим приложением
     echo   - антивирус блокирует Python
     echo   - программа лежит на диске только для чтения ^(G:^)
-    echo   - скопируйте папку на C:\бизнес и запустите снова
+    echo   - скопируйте папку на D:\бизнес и запустите снова
     echo.
 )
 pause
