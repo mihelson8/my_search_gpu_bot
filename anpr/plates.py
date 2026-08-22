@@ -208,33 +208,67 @@ def _latin_compact(text: str) -> str:
     return "".join(CYR_TO_LATIN.get(ch, ch) for ch in text).upper()
 
 
+_RESOLUTION_RE = re.compile(r"\d{3,4}\s*X\s*\d{2,4}")
+_OSD_MARKERS = (
+    "IPCAM",
+    "HDIP",
+    "HDIPCAM",
+    "CAMERA",
+    "SEETONG",
+    "MAINVIEW",
+    "2880",
+    "1620",
+    "2560",
+    "1440",
+    "1920",
+    "1080",
+    "1280",
+    "3840",
+    "2160",
+    "X162",
+    "X144",
+    "X108",
+    "880X",
+    "560X",
+    "0X16",
+    "0X14",
+    "0X10",
+)
+
+
 def _window_is_overlay_junk(chunk: str) -> bool:
+    """True for camera OSD fragments like HDIPCAM / 2560X1440."""
+    if not chunk:
+        return False
     latin = _latin_compact(chunk)
-    markers = (
-        "IPCAM",
-        "HDIP",
-        "CAMERA",
-        "2880",
-        "1620",
-        "SEETONG",
-        "MAINVIEW",
-        "X162",
-        "880X",
-        "0X16",
-    )
-    return any(marker in latin for marker in markers)
+    if _RESOLUTION_RE.search(latin):
+        return True
+    if any(marker in latin for marker in _OSD_MARKERS):
+        return True
+    # Digits glued with X (resolution) even after letter-slot noise.
+    if re.search(r"\d{3,}X\d{2,}", latin):
+        return True
+    return False
 
 
 def is_osd_text(text: str) -> bool:
-    """True for camera overlays like HD IPCAM 2880X1620."""
+    """True for camera overlays like HD IPCAM 2560X1440."""
     if not text:
         return False
-    return _window_is_overlay_junk(compact_alnum(text))
+    compact = compact_alnum(text)
+    if _window_is_overlay_junk(compact):
+        return True
+    # Whole phrase with spaces: "HD IPCAM 2560 X 1440"
+    latin = _latin_compact(re.sub(r"\s+", "", text.upper()))
+    return _window_is_overlay_junk(latin)
 
 
 def extract_plates(raw_text: str) -> List[str]:
     """Find all valid Russian plates inside noisy OCR text."""
     if not raw_text:
+        return []
+    # Never mine plates out of pure camera OSD overlays.
+    if is_osd_text(raw_text):
         return []
 
     found = []
@@ -248,13 +282,21 @@ def extract_plates(raw_text: str) -> List[str]:
             chunk = compact[i : i + size]
             if _window_is_overlay_junk(chunk):
                 continue
+            # Also reject if the local neighborhood is resolution OSD.
+            neighborhood = compact[max(0, i - 4) : i + size + 4]
+            if _window_is_overlay_junk(neighborhood):
+                continue
             candidate = apply_slot_rules(chunk)
             if plate_is_valid(candidate) and candidate not in seen:
                 seen.add(candidate)
                 found.append(candidate)
 
     whole = normalize_plate(raw_text)
-    if plate_is_valid(whole) and not _window_is_overlay_junk(compact_alnum(raw_text)) and whole not in seen:
+    if (
+        plate_is_valid(whole)
+        and not _window_is_overlay_junk(compact_alnum(raw_text))
+        and whole not in seen
+    ):
         found.insert(0, whole)
 
     # 3-digit region wins over the 8-character prefix (Н778ЕМ799 vs Н778ЕМ79).

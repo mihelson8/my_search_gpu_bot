@@ -124,14 +124,41 @@ def plate_focus_band(image):
 
 
 def mask_osd(image):
-    """Black out timestamp and HD IPCAM 2880x1620 overlay before OCR."""
+    """Black out timestamp and HDIPCAM / 2560x1440 overlays before OCR."""
+    import cv2
+
     if image is None or getattr(image, "size", 0) == 0:
         return image
     out = image.copy()
     h, w = out.shape[:2]
-    out[0 : max(int(h * 0.10), 12), 0 : max(int(w * 0.50), 40)] = 0
-    out[int(h * 0.86) : h, int(w * 0.45) : w] = 0
-    out[int(h * 0.90) : h, :] = 0
+    # Corner timestamps / resolution badges (usual camera OSD).
+    out[0 : max(int(h * 0.12), 14), 0 : max(int(w * 0.55), 40)] = 0
+    out[int(h * 0.78) : h, int(w * 0.30) : w] = 0
+    out[int(h * 0.88) : h, :] = 0
+
+    # Erase large bright white text bars (HDIPCAM / 2560X1440), keep the lot.
+    try:
+        gray = out[:, :, 1] if out.ndim == 3 else out
+        _, bright = cv2.threshold(gray, 215, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            x, y, cw, ch = cv2.boundingRect(contour)
+            if ch < 16 or cw < 50:
+                continue
+            aspect = cw / float(max(ch, 1))
+            area = cw * ch
+            if area < 0.003 * h * w or area > 0.25 * h * w:
+                continue
+            # Wide bright text lines — camera brand / resolution overlay.
+            if aspect >= 2.4:
+                pad = 4
+                y0 = max(0, y - pad)
+                y1 = min(h, y + ch + pad)
+                x0 = max(0, x - pad)
+                x1 = min(w, x + cw + pad)
+                out[y0:y1, x0:x1] = 0
+    except Exception:
+        pass
     return out
 
 
