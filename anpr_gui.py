@@ -160,7 +160,7 @@ class AnprApp:
         )
         self.preview_label.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        side = tk.Frame(body, bg=self.card, width=360)
+        side = tk.Frame(body, bg=self.card, width=400)
         side.pack(side="right", fill="y")
         side.pack_propagate(False)
         ttk.Label(side, text="Распознанный номер (тип 1)", style="Card.TLabel").pack(anchor="w", padx=16, pady=(14, 4))
@@ -189,16 +189,25 @@ class AnprApp:
         for color in ("#ffffff", "#0039a6", "#d52b1e"):
             tk.Frame(flag, bg=color, width=18, height=4).pack()
         self.plate_label = self.plate_body_label
-        ttk.Label(side, text="Крупно: авто с рамкой", style="Card.TLabel").pack(anchor="w", padx=16, pady=(10, 4))
+        self.time_label = tk.Label(
+            side,
+            text="Время определения: —",
+            bg=self.card,
+            fg="#86efac",
+            font=("Segoe UI", 12, "bold"),
+        )
+        self.time_label.pack(anchor="w", padx=16, pady=(4, 2))
+        ttk.Label(side, text="Крупно: авто с рамкой", style="Card.TLabel").pack(anchor="w", padx=16, pady=(8, 4))
         self.zoom_label = tk.Label(
             side,
             text="Когда найдётся машина, здесь будет её форма крупно.",
             bg="#020617",
             fg=self.muted,
             font=("Segoe UI", 9),
-            wraplength=320,
+            wraplength=360,
             justify="center",
-            height=11,
+            width=42,
+            height=12,
         )
         self.zoom_label.pack(fill="x", padx=16, pady=(0, 8))
         self.category_label_widget = tk.Label(
@@ -206,7 +215,7 @@ class AnprApp:
         )
         self.category_label_widget.pack(anchor="w", padx=16, pady=(4, 8))
         self.detail_label = tk.Label(
-            side, text="", bg=self.card, fg=self.muted, font=("Segoe UI", 10), wraplength=320, justify="left"
+            side, text="", bg=self.card, fg=self.muted, font=("Segoe UI", 10), wraplength=360, justify="left"
         )
         self.detail_label.pack(anchor="w", padx=16, pady=(0, 12))
 
@@ -654,8 +663,29 @@ class AnprApp:
             elapsed = time.perf_counter() - t0
             elapsed_txt = f"{elapsed:.1f} с" if elapsed >= 0.1 else f"{elapsed * 1000:.0f} мс"
             preview = annotated if annotated is not None else frame
+            # Guaranteed close-up: rebuild zoom from plate/car box if pipeline returned empty.
+            if (zoom is None or getattr(zoom, "size", 0) == 0) and hits:
+                try:
+                    from anpr.vehicles import annotate_zoom, vehicle_box_from_plate
+
+                    hit0 = hits[0]
+                    src = preview if preview is not None else frame
+                    if hit0.bbox:
+                        owner = vehicle_box_from_plate(hit0.bbox, src.shape)
+                        if vehicles:
+                            px0, py0 = hit0.bbox[0], hit0.bbox[1]
+                            for car_box in vehicles:
+                                if car_box[0] <= px0 <= car_box[2] and car_box[1] <= py0 <= car_box[3]:
+                                    owner = car_box
+                                    break
+                        zoom = annotate_zoom(src, owner, vehicles, hits[:1])
+                    elif vehicles:
+                        zoom = annotate_zoom(src, vehicles[0], vehicles, hits[:1])
+                except Exception:
+                    pass
             self.root.after(0, lambda img=preview: self._show_preview(img))
             self.root.after(0, lambda z=zoom: self._show_zoom(z))
+            self.root.after(0, lambda t=elapsed_txt: self.time_label.config(text=f"Время определения: {t}"))
             car_note = (
                 f"найдено авто: {len(vehicles)} · рамка на кадре"
                 if vehicles
@@ -667,7 +697,7 @@ class AnprApp:
                     lambda: self._set_detection(
                         self._last_plate or "—",
                         "unknown" if not self._last_plate else self._last_category,
-                        f"Номер не прочитан ({source_name}, {car_note}, {elapsed_txt}). "
+                        f"Номер не прочитан ({source_name}, {car_note}). "
                         f"Нужен вид «А 000 АА 00». Можно ввести вручную.",
                         0.0,
                     ),
@@ -705,7 +735,7 @@ class AnprApp:
             extra_txt = f"  ·  ещё: {', '.join(extras)}" if extras else ""
             detail = (
                 f"{owner}  ·  {car_note}  ·  уверенность {hit.confidence:.0%}  "
-                f"·  {hit.engine or 'ocr'}  ·  {elapsed_txt}  ·  {source_name}{extra_txt}"
+                f"·  {hit.engine or 'ocr'}  ·  {source_name}{extra_txt}"
             )
             self.root.after(
                 0,
@@ -721,6 +751,7 @@ class AnprApp:
 
     def _show_capture_error(self, message: str) -> None:
         self._set_detection("—", "unknown", message, 0.0)
+        self.time_label.config(text="Время определения: —")
         self.preview_label.config(image="", text=message)
 
     def _show_preview(self, frame) -> None:
@@ -747,7 +778,7 @@ class AnprApp:
             return
         rgb = crop[:, :, ::-1]
         image = Image.fromarray(rgb)
-        image.thumbnail((360, 240))
+        image.thumbnail((380, 260))
         self._zoom_photo = ImageTk.PhotoImage(image)
         self.zoom_label.config(image=self._zoom_photo, text="")
 
