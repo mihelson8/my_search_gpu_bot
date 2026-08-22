@@ -645,12 +645,16 @@ class AnprApp:
             if force_save or self.cfg.get("save_all_shots"):
                 shot = save_screenshot(frame, prefix="live")
             hits, vehicles, annotated, zoom = recognize_scene(
-                frame, min_confidence=float(self.cfg.get("min_confidence", 0.4))
+                frame, min_confidence=float(self.cfg.get("min_confidence", 0.35))
             )
             preview = annotated if annotated is not None else frame
             self.root.after(0, lambda img=preview: self._show_preview(img))
             self.root.after(0, lambda z=zoom: self._show_zoom(z))
-            car_note = f"найдено авто: {len(vehicles)} · форма и рамка на кадре" if vehicles else "силуэт авто не найден"
+            car_note = (
+                f"найдено авто: {len(vehicles)} · рамка на кадре"
+                if vehicles
+                else "рамка от номера"
+            )
             if not hits:
                 self.root.after(
                     0,
@@ -662,44 +666,45 @@ class AnprApp:
                     ),
                 )
                 return
-            hit = hits[0]
-            if not plate_is_valid(hit.plate) or is_osd_text(hit.plate) or is_osd_text(hit.raw_text):
-                self.root.after(
-                    0,
-                    lambda: self._set_detection(
-                        "—",
-                        "unknown",
-                        f"Номер не прочитан ({source_name}, {car_note}). Можно ввести вручную.",
-                        0.0,
-                    ),
-                )
-                return
-            info = self.db.classify(hit.plate, unknown_as_foreign=bool(self.cfg.get("unknown_as_foreign")))
-            if not shot and info["category"] != "own":
-                shot = save_screenshot(preview, prefix=info["category"])
-            duplicate = self.db.event_is_duplicate(hit.plate, int(self.cfg.get("duplicate_sec", 30)))
-            if not duplicate:
-                self.db.log_event(
-                    plate=hit.plate,
-                    category=info["category"],
-                    confidence=hit.confidence,
-                    source=f"{source_name}/{hit.engine}",
-                    screenshot_path=shot,
-                )
+
+            logged = 0
+            for hit in hits:
+                if not plate_is_valid(hit.plate) or is_osd_text(hit.plate) or is_osd_text(hit.raw_text):
+                    continue
+                info = self.db.classify(hit.plate, unknown_as_foreign=bool(self.cfg.get("unknown_as_foreign")))
+                shot_path = shot
+                if not shot_path and info["category"] != "own" and logged == 0:
+                    shot_path = save_screenshot(preview, prefix=info["category"])
+                duplicate = self.db.event_is_duplicate(hit.plate, int(self.cfg.get("duplicate_sec", 30)))
+                if not duplicate:
+                    self.db.log_event(
+                        plate=hit.plate,
+                        category=info["category"],
+                        confidence=hit.confidence,
+                        source=f"{source_name}/{hit.engine}",
+                        screenshot_path=shot_path or "",
+                    )
+                    logged += 1
+            if logged:
                 self.root.after(0, self.refresh_events)
                 self.root.after(0, self._refresh_stats)
+
+            hit = hits[0]
+            info = self.db.classify(hit.plate, unknown_as_foreign=bool(self.cfg.get("unknown_as_foreign")))
             owner = info["vehicle"]["owner_name"] if info["vehicle"] else "нет в базе"
             self._last_plate = hit.plate
             self._last_category = info["category"]
+            extras = [format_plate(h.plate) for h in hits[1:3] if plate_is_valid(h.plate)]
+            extra_txt = f"  ·  ещё: {', '.join(extras)}" if extras else ""
             detail = (
                 f"{owner}  ·  {car_note}  ·  уверенность {hit.confidence:.0%}  "
-                f"·  {hit.engine or 'ocr'}  ·  {source_name}"
+                f"·  {hit.engine or 'ocr'}  ·  {source_name}{extra_txt}"
             )
             self.root.after(
                 0,
                 lambda p=hit.plate, c=info["category"], d=detail, s=hit.confidence: self._set_detection(p, c, d, s),
             )
-            if info["category"] == "foreign" and self.cfg.get("beep_on_foreign") and not duplicate:
+            if info["category"] == "foreign" and self.cfg.get("beep_on_foreign"):
                 self.root.after(0, self._beep)
         except Exception as exc:
             message = str(exc)

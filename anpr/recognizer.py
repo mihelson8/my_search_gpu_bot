@@ -367,38 +367,44 @@ def _ocr_regions(region_map, min_confidence: float) -> List[PlateHit]:
 
 
 def recognize_scene(image, min_confidence: float = 0.35):
-    """Detect the car silhouette, cut away the rest, read Type-1 plates on the car."""
+    """Detect cars, read Type-1 plates, draw frames; works even if silhouette is weak."""
     from anpr.vehicles import (
+        VehicleSilhouette,
         annotate_scene,
         annotate_zoom,
         apply_silhouette_mask,
         bumper_box,
         crop_box,
+        downscale_for_anpr,
         find_vehicle_silhouettes,
-        zoom_box,
+        vehicle_box_from_plate,
     )
 
     if image is None or getattr(image, "size", 0) == 0:
         return [], [], image, None
 
-    work = image
+    # Huge RTSP frames (2K/4K) make OCR very slow — work on a smaller copy.
     try:
-        work = mask_osd(image)
+        work = downscale_for_anpr(image, max_w=1280)
     except Exception:
         work = image
+    try:
+        work = mask_osd(work)
+    except Exception:
+        pass
 
     silhouettes = []
     try:
-        silhouettes = find_vehicle_silhouettes(work)
+        silhouettes = find_vehicle_silhouettes(work, max_cars=6)
     except Exception:
         silhouettes = []
-    vehicles = [item.box for item in silhouettes]
 
     hits: List[PlateHit] = []
     plate_regions = []
     if silhouettes:
         masked = apply_silhouette_mask(work, silhouettes)
         for item in silhouettes:
+            # Prefer bumper crop; one ROI per car keeps multi-car scans faster.
             for roi in (bumper_box(item.box), item.box):
                 crop = crop_box(masked, roi)
                 if crop is None or getattr(crop, "size", 0) == 0:
@@ -406,46 +412,70 @@ def recognize_scene(image, min_confidence: float = 0.35):
                 regions = _collect_plate_regions(crop, origin=(roi[0], roi[1]), inside_vehicle=True)
                 plate_regions.extend(regions)
                 hits.extend(_ocr_regions(regions, min_confidence))
-    else:
-        plate_regions = _collect_plate_regions(work, origin=(0, 0), inside_vehicle=False)
-        hits = _ocr_regions(plate_regions, min_confidence)
+                if any(plate_is_valid(h.plate) and not is_osd_text(h.plate) for h in hits):
+                    break
+    # Also scan the whole frame so a second car is not missed when silhouette is weak.
+    if len({h.plate for h in hits if plate_is_valid(h.plate)}) < 2:
+        extra = _collect_plate_regions(work, origin=(0, 0), inside_vehicle=False)
+        plate_regions.extend(extra)
+        hits.extend(_ocr_regions(extra, min_confidence))
 
-    unique = []
+    unique: List[PlateHit] = []
     seen = set()
     for hit in hits:
         if hit.plate in seen:
             continue
+        if not plate_is_valid(hit.plate) or is_osd_text(hit.plate) or is_osd_text(hit.raw_text):
+            continue
         seen.add(hit.plate)
         unique.append(hit)
     unique.sort(key=lambda item: item.confidence, reverse=True)
+    unique = unique[:4]
 
-    zoom_src = None
-    if unique and unique[0].bbox:
-        zoom_src = unique[0].bbox
-    elif plate_regions:
-        zoom_src = plate_regions[0][0]
+    # If OCR found plates but silhouette failed — still draw a car frame from the plate.
+    if unique and not silhouettes:
+        for index, hit in enumerate(unique):
+            if not hit.bbox:
+                continue
+            box = vehicle_box_from_plate(hit.bbox, work.shape)
+            silhouettes.append(VehicleSilhouette(box=box, contour=None, score=1.0 - index * 0.05))
+    elif unique:
+        # Attach plate-based frames for cars that OCR saw outside silhouette boxes.
+        known = [item.box for item in silhouettes]
+        for hit in unique:
+            if not hit.bbox:
+                continue
+            px0, py0, px1, py1 = hit.bbox
+            owned = False
+            for box in known:
+                if box[0] <= px0 <= box[2] and box[1] <= py0 <= box[3]:
+                    owned = True
+                    break
+            if not owned:
+                box = vehicle_box_from_plate(hit.bbox, work.shape)
+                silhouettes.append(VehicleSilhouette(box=box, contour=None, score=0.4))
+                known.append(box)
 
-    # Main preview always keeps the live frame with car shape + detection frame.
+    vehicles = [item.box for item in silhouettes]
+
     try:
-        annotated = annotate_scene(image, silhouettes, unique)
+        annotated = annotate_scene(work, silhouettes, unique)
     except Exception:
-        annotated = image
+        annotated = work
 
     zoom = None
     try:
-        if unique and unique[0].bbox and silhouettes:
+        if unique and unique[0].bbox:
             plate_box = unique[0].bbox
-            owner_car = silhouettes[0].box
+            owner = vehicle_box_from_plate(plate_box, work.shape)
             for item in silhouettes:
                 car_box = item.box
-                if car_box[0] <= plate_box[0] <= car_box[2] or car_box[0] <= plate_box[2] <= car_box[2]:
-                    owner_car = car_box
+                if car_box[0] <= plate_box[0] <= car_box[2] and car_box[1] <= plate_box[1] <= car_box[3]:
+                    owner = car_box
                     break
-            zoom = annotate_zoom(image, owner_car, silhouettes, unique)
+            zoom = annotate_zoom(work, owner, silhouettes, unique[:1])
         elif silhouettes:
-            zoom = annotate_zoom(image, silhouettes[0].box, silhouettes, unique)
-        elif zoom_src:
-            zoom = zoom_box(image, zoom_src)
+            zoom = annotate_zoom(work, silhouettes[0].box, silhouettes, unique[:1])
     except Exception:
         zoom = None
 

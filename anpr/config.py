@@ -57,7 +57,7 @@ def sanitize_shots_dir(folder: str = "") -> str:
 
 DEFAULTS: Dict[str, Any] = {
     "source": "seetong_folder",
-    "interval_sec": 2.0,
+    "interval_sec": 1.0,
     "window_title": "Seetong Lite Client",
     "camera_ip": "192.168.0.123",
     "camera_user": "admin",

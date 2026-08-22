@@ -61,21 +61,21 @@ def _silhouettes_from_mask(mask, image_shape, min_ratio: float, max_ratio: float
     found: List[VehicleSilhouette] = []
     for contour in contours:
         x, y, cw, ch = cv2.boundingRect(contour)
-        if cw < 36 or ch < 24:
+        if cw < 28 or ch < 18:
             continue
         area = cw * ch
         ratio = area / frame_area
         if ratio < min_ratio or ratio > max_ratio:
             continue
         aspect = cw / float(ch)
-        if not (0.55 <= aspect <= 4.2):
+        if not (0.45 <= aspect <= 4.8):
             continue
         hull = cv2.contourArea(cv2.convexHull(contour)) or 1.0
         solidity = (cv2.contourArea(contour) or 0.0) / hull
-        if solidity < 0.28:
+        if solidity < 0.22:
             continue
         cy = y + ch / 2.0
-        if cy < h * 0.18:
+        if cy < h * 0.12:
             continue
         pad_x, pad_y = int(cw * 0.08), int(ch * 0.10)
         box = (
@@ -146,12 +146,12 @@ def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette
     found: List[VehicleSilhouette] = []
     try:
         fg = _foreground_mask(image)
-        found.extend(_silhouettes_from_mask(fg, image.shape, min_ratio=0.008, max_ratio=0.50))
+        found.extend(_silhouettes_from_mask(fg, image.shape, min_ratio=0.004, max_ratio=0.55))
     except Exception:
         pass
     try:
         edges = _edge_mask(image)
-        found.extend(_silhouettes_from_mask(edges, image.shape, min_ratio=0.010, max_ratio=0.45))
+        found.extend(_silhouettes_from_mask(edges, image.shape, min_ratio=0.005, max_ratio=0.50))
     except Exception:
         pass
     if not found:
@@ -176,6 +176,34 @@ def bumper_box(box: Box) -> Box:
     x0, y0, x1, y1 = box
     h = max(1, y1 - y0)
     return (x0, y0 + int(h * 0.32), x1, y1)
+
+
+def vehicle_box_from_plate(plate_box: Box, image_shape, expand: float = 3.2) -> Box:
+    """Guess a car frame around a found plate when silhouette detection failed."""
+    h, w = image_shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in plate_box]
+    pw = max(8, x1 - x0)
+    ph = max(6, y1 - y0)
+    bx0 = max(0, int(x0 - pw * expand))
+    by0 = max(0, int(y0 - ph * (expand + 0.8)))
+    bx1 = min(w, int(x1 + pw * expand))
+    by1 = min(h, int(y1 + ph * 1.4))
+    if bx1 - bx0 < 40 or by1 - by0 < 30:
+        return (max(0, x0 - 40), max(0, y0 - 80), min(w, x1 + 40), min(h, y1 + 40))
+    return (bx0, by0, bx1, by1)
+
+
+def downscale_for_anpr(image, max_w: int = 1280):
+    """Shrink huge RTSP frames so silhouette + OCR finish much faster."""
+    import cv2
+
+    if image is None or getattr(image, "size", 0) == 0:
+        return image
+    h, w = image.shape[:2]
+    if w <= max_w:
+        return image
+    scale = max_w / float(w)
+    return cv2.resize(image, (max_w, max(int(h * scale), 1)), interpolation=cv2.INTER_AREA)
 
 
 def zoom_box(image, box: Box, min_w: int = 520, min_h: int = 140, pad: float = 0.28):
@@ -359,30 +387,26 @@ def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> obje
 
 
 def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates: list = ()) -> object:
-    """Close-up of the detected car with shape and frame still drawn."""
-    crop = zoom_box(image, box, min_w=800, min_h=480, pad=0.18)
-    if crop is None or getattr(crop, "size", 0) == 0:
-        return image
-    # Re-detect local coordinates are hard after zoom; draw a full-frame corner frame.
-    h, w = crop.shape[:2]
-    draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=(40, 220, 90), thickness=3, corner=36)
+    """Close-up of the detected car/plate with frame and number text."""
     import cv2
 
+    from anpr.plates import format_plate_parts
+
+    pad = 0.55 if plates else 0.18
+    crop = zoom_box(image, box, min_w=720, min_h=360, pad=pad)
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return None
+    h, w = crop.shape[:2]
+    draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=(40, 220, 90), thickness=3, corner=36)
     cv2.putText(crop, "АВТО", (16, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (40, 220, 90), 2)
     for hit in plates:
         plate = getattr(hit, "plate", "") or ""
-        if plate:
-            from anpr.plates import format_plate_parts
-
-            body, region = format_plate_parts(plate)
-            cv2.putText(
-                crop,
-                f"{body} | {region}",
-                (16, h - 18),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 220, 255),
-                2,
-            )
-            break
+        if not plate:
+            continue
+        body, region = format_plate_parts(plate)
+        label = f"{body} | {region}" if body and body != "—" else plate
+        # Dark bar so the number is always readable on the zoom panel.
+        cv2.rectangle(crop, (0, h - 48), (w, h), (10, 10, 10), -1)
+        cv2.putText(crop, label, (16, h - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 220, 255), 2)
+        break
     return crop

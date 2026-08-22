@@ -307,6 +307,55 @@ def test_extract_from_recognizer_without_ocr():
     assert zoom is None
 
 
+def test_vehicle_box_from_plate_and_downscale():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import downscale_for_anpr, vehicle_box_from_plate
+
+    box = vehicle_box_from_plate((100, 140, 160, 160), (240, 320, 3))
+    assert box[0] < 100 and box[2] > 160
+    assert box[1] < 140 and box[3] >= 160
+    big = numpy.zeros((1440, 2560, 3), dtype=numpy.uint8)
+    small = downscale_for_anpr(big, max_w=1280)
+    assert small.shape[1] == 1280
+    assert small.shape[0] == 720
+
+
+def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr import recognizer
+    from anpr.recognizer import PlateHit, recognize_scene
+
+    frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
+    frame[170:190, 120:200] = 230
+
+    def fake_ocr(regions, min_confidence):
+        return [
+            PlateHit(
+                plate="К900НН03",
+                confidence=0.9,
+                raw_text="K900HH03",
+                bbox=(120, 170, 200, 190),
+                engine="test",
+            )
+        ]
+
+    monkeypatch.setattr(recognizer, "_ocr_regions", fake_ocr)
+    monkeypatch.setattr(
+        recognizer,
+        "_collect_plate_regions",
+        lambda *a, **k: [((120, 170, 200, 190), frame[170:190, 120:200])],
+    )
+    monkeypatch.setattr("anpr.vehicles.find_vehicle_silhouettes", lambda *a, **k: [])
+    hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
+    assert hits and hits[0].plate == "К900НН03"
+    assert vehicles, "plate-based car frame must be created"
+    assert zoom is not None
+    assert annotated is not None
+    assert int(abs(annotated.astype("int16") - frame.astype("int16")).mean()) > 0
+
+
 def test_annotate_scene_draws_shape_and_frame():
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
