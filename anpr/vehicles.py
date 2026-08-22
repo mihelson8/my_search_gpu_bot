@@ -114,20 +114,24 @@ def _foreground_mask(image):
 
     sat, val = hsv[:, :, 1], hsv[:, :, 2]
     _, mask_sat = cv2.threshold(sat, 28, 255, cv2.THRESH_BINARY)
-    white_cut = max(int(bg + 12), 120)
-    dark_cut = min(int(bg - 18), 90)
+    white_cut = max(int(bg + 6), 105)
+    dark_cut = min(int(bg - 14), 95)
     _, mask_white = cv2.threshold(val, white_cut, 255, cv2.THRESH_BINARY)
     _, mask_dark = cv2.threshold(val, max(dark_cut, 1), 255, cv2.THRESH_BINARY_INV)
 
     # Local contrast helps white body on pale asphalt.
     local = cv2.GaussianBlur(gray, (31, 31), 0)
     local_diff = cv2.absdiff(gray, local)
-    _, mask_local = cv2.threshold(local_diff, 10, 255, cv2.THRESH_BINARY)
+    _, mask_local = cv2.threshold(local_diff, 8, 255, cv2.THRESH_BINARY)
+
+    # Pale SUV on light lot: low saturation + high value blob.
+    pale = cv2.inRange(hsv, (0, 0, max(white_cut - 10, 100)), (180, 55, 255))
 
     mask = cv2.bitwise_or(mask_diff, mask_sat)
     mask = cv2.bitwise_or(mask, mask_white)
     mask = cv2.bitwise_or(mask, mask_dark)
     mask = cv2.bitwise_or(mask, mask_local)
+    mask = cv2.bitwise_or(mask, pale)
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)

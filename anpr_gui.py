@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r8».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r9».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -348,7 +348,7 @@ class AnprApp:
         self.crop_b = tk.StringVar(value=str(int(float(self.cfg.get("crop_bottom", 0.12)) * 100)))
         self.skip_top_var = tk.StringVar(value=str(int(float(self.cfg.get("skip_top", 0.28)) * 100)))
         self.dup_var = tk.StringVar(value=str(self.cfg.get("duplicate_sec", 30)))
-        self.conf_var = tk.StringVar(value=str(self.cfg.get("min_confidence", 0.35)))
+        self.conf_var = tk.StringVar(value=str(self.cfg.get("min_confidence", 0.22)))
         self.save_all_var = tk.BooleanVar(value=bool(self.cfg.get("save_all_shots")))
         self.unknown_foreign_var = tk.BooleanVar(value=bool(self.cfg.get("unknown_as_foreign")))
         self.beep_var = tk.BooleanVar(value=bool(self.cfg.get("beep_on_foreign", True)))
@@ -690,7 +690,7 @@ class AnprApp:
                 shot = save_screenshot(frame, prefix="live")
             t0 = time.perf_counter()
             hits, vehicles, annotated, zoom = recognize_scene(
-                frame, min_confidence=float(self.cfg.get("min_confidence", 0.28))
+                frame, min_confidence=float(self.cfg.get("min_confidence", 0.22))
             )
             elapsed = time.perf_counter() - t0
             elapsed_txt = f"{elapsed:.1f} с" if elapsed >= 0.1 else f"{elapsed * 1000:.0f} мс"

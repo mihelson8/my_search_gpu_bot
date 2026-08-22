@@ -304,7 +304,7 @@ def test_extract_from_recognizer_without_ocr():
     assert hits == []
     assert vehicles == []
     assert vis is not None
-    assert zoom is None
+    # Focus-band zoom may still be built so the side panel is never empty.
 
 
 def test_vehicle_box_from_plate_and_downscale():
