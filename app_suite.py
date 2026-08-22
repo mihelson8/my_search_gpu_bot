@@ -1431,11 +1431,25 @@ class SuiteRequestHandler(SimpleHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
 def start_server(port: int = 8765, open_browser: bool = True):
-    server = HTTPServer(("0.0.0.0", port), SuiteRequestHandler)
-    print(f"============================================================")
-    print(f"🚀 Программа управления бизнесом запущена!")
-    print(f"📍 Откройте в браузере: http://localhost:{port}")
-    print(f"============================================================")
+    try:
+        server = HTTPServer(("127.0.0.1", port), SuiteRequestHandler)
+    except OSError as exc:
+        print("============================================================")
+        print("ОШИБКА: не удалось запустить сервер на порту", port)
+        print("Причина:", exc)
+        print()
+        print("Что попробовать:")
+        print("  1. Закройте другое окно этой же программы")
+        print("  2. Подождите минуту и запустите снова")
+        print("  3. Перезагрузите компьютер")
+        print("============================================================")
+        raise SystemExit(1) from exc
+
+    print("============================================================")
+    print("Программа управления бизнесом запущена!")
+    print(f"Откройте в браузере: http://localhost:{port}")
+    print("Чтобы остановить — закройте это окно.")
+    print("============================================================")
 
     if open_browser:
         threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
