@@ -400,8 +400,8 @@ def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates:
 
     from anpr.plates import format_plate_parts
 
-    pad = 0.55 if plates else 0.18
-    crop = zoom_box(image, box, min_w=720, min_h=360, pad=pad)
+    pad = 0.45 if plates else 0.18
+    crop = zoom_box(image, box, min_w=720, min_h=400, pad=pad)
     if crop is None or getattr(crop, "size", 0) == 0:
         return None
     h, w = crop.shape[:2]
@@ -414,7 +414,7 @@ def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates:
         body, region = format_plate_parts(plate)
         label = f"{body} | {region}" if body and body != "—" else plate
         # Dark bar so the number is always readable on the zoom panel.
-        cv2.rectangle(crop, (0, h - 48), (w, h), (10, 10, 10), -1)
-        cv2.putText(crop, label, (16, h - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 220, 255), 2)
+        cv2.rectangle(crop, (0, h - 52), (w, h), (10, 10, 10), -1)
+        cv2.putText(crop, label, (16, h - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 220, 255), 2)
         break
     return crop

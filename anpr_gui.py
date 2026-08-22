@@ -198,7 +198,7 @@ class AnprApp:
             font=("Segoe UI", 9),
             wraplength=320,
             justify="center",
-            height=8,
+            height=11,
         )
         self.zoom_label.pack(fill="x", padx=16, pady=(0, 8))
         self.category_label_widget = tk.Label(
@@ -293,7 +293,7 @@ class AnprApp:
         grid.pack(fill="both", expand=True)
         grid.columnconfigure(1, weight=1)
 
-        self.interval_var = tk.StringVar(value=str(self.cfg.get("interval_sec", 1.5)))
+        self.interval_var = tk.StringVar(value=str(self.cfg.get("interval_sec", 0.8)))
         self.window_var = tk.StringVar(value=self.cfg.get("window_title", ""))
         self.rtsp_var = tk.StringVar(value=self.cfg.get("rtsp_url", ""))
         self.http_var = tk.StringVar(value=self.cfg.get("http_url", ""))
@@ -399,7 +399,7 @@ class AnprApp:
         source_key = SOURCE_VALUES.get(self.source_var.get(), "seetong_folder")
         return {
             "source": source_key,
-            "interval_sec": max(0.4, _float(self.interval_var, 1.5)),
+            "interval_sec": max(0.3, _float(self.interval_var, 0.8)),
             "window_title": self.window_var.get().strip() or "Seetong Lite Client",
             "camera_ip": self.camera_ip_var.get().strip(),
             "camera_user": self.camera_user_var.get().strip() or "admin",
@@ -605,7 +605,7 @@ class AnprApp:
     def _loop(self) -> None:
         while self._running:
             self._tick()
-            time.sleep(float(self.cfg.get("interval_sec", 1.5)))
+            time.sleep(float(self.cfg.get("interval_sec", 0.8)))
 
     def _tick(self, force_save: bool = False) -> None:
         if self._busy:
@@ -647,9 +647,12 @@ class AnprApp:
             shot = ""
             if force_save or self.cfg.get("save_all_shots"):
                 shot = save_screenshot(frame, prefix="live")
+            t0 = time.perf_counter()
             hits, vehicles, annotated, zoom = recognize_scene(
                 frame, min_confidence=float(self.cfg.get("min_confidence", 0.28))
             )
+            elapsed = time.perf_counter() - t0
+            elapsed_txt = f"{elapsed:.1f} с" if elapsed >= 0.1 else f"{elapsed * 1000:.0f} мс"
             preview = annotated if annotated is not None else frame
             self.root.after(0, lambda img=preview: self._show_preview(img))
             self.root.after(0, lambda z=zoom: self._show_zoom(z))
@@ -664,7 +667,8 @@ class AnprApp:
                     lambda: self._set_detection(
                         self._last_plate or "—",
                         "unknown" if not self._last_plate else self._last_category,
-                        f"Номер не прочитан ({source_name}, {car_note}). Нужен вид «А 000 АА 00». Можно ввести вручную.",
+                        f"Номер не прочитан ({source_name}, {car_note}, {elapsed_txt}). "
+                        f"Нужен вид «А 000 АА 00». Можно ввести вручную.",
                         0.0,
                     ),
                 )
@@ -701,7 +705,7 @@ class AnprApp:
             extra_txt = f"  ·  ещё: {', '.join(extras)}" if extras else ""
             detail = (
                 f"{owner}  ·  {car_note}  ·  уверенность {hit.confidence:.0%}  "
-                f"·  {hit.engine or 'ocr'}  ·  {source_name}{extra_txt}"
+                f"·  {hit.engine or 'ocr'}  ·  {elapsed_txt}  ·  {source_name}{extra_txt}"
             )
             self.root.after(
                 0,
@@ -743,7 +747,7 @@ class AnprApp:
             return
         rgb = crop[:, :, ::-1]
         image = Image.fromarray(rgb)
-        image.thumbnail((340, 170))
+        image.thumbnail((360, 240))
         self._zoom_photo = ImageTk.PhotoImage(image)
         self.zoom_label.config(image=self._zoom_photo, text="")
 
