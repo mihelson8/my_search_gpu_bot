@@ -321,23 +321,94 @@ def grab_monitor(monitor_index: int = 1):
     return frame[:, :, ::-1].copy()
 
 
+class _RtspSession:
+    """Keep one open RTSP handle. Reconnecting every tick costs ~5–10s on Seetong cams."""
+
+    def __init__(self) -> None:
+        self._cap = None
+        self._url = ""
+        self._lock = None
+
+    def _get_lock(self):
+        if self._lock is None:
+            import threading
+
+            self._lock = threading.Lock()
+        return self._lock
+
+    def release(self) -> None:
+        with self._get_lock():
+            self._release_unlocked()
+
+    def _release_unlocked(self) -> None:
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+        self._cap = None
+        self._url = ""
+
+    def _open_unlocked(self, url: str) -> None:
+        import cv2  # type: ignore
+
+        self._release_unlocked()
+        # Prefer TCP + low delay so moving cars are not several seconds behind.
+        os.environ.setdefault(
+            "OPENCV_FFMPEG_CAPTURE_OPTIONS",
+            "rtsp_transport;tcp|fflags;nobuffer|flags;low_delay|max_delay;500000",
+        )
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(url)
+        if not cap.isOpened():
+            raise RuntimeError(f"Не удалось открыть RTSP: {url}")
+        try:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
+        self._cap = cap
+        self._url = url
+
+    def read(self, url: str):
+        url = (url or "").strip()
+        if not url:
+            raise RuntimeError("Пустой RTSP URL")
+        with self._get_lock():
+            if self._cap is None or self._url != url:
+                self._open_unlocked(url)
+            assert self._cap is not None
+            # Drop stale buffered frames — otherwise plate is from seconds ago.
+            for _ in range(4):
+                if not self._cap.grab():
+                    break
+            ok, frame = self._cap.retrieve()
+            if not ok or frame is None:
+                self._open_unlocked(url)
+                assert self._cap is not None
+                ok, frame = self._cap.read()
+            if not ok or frame is None:
+                self._release_unlocked()
+                raise RuntimeError("RTSP открыт, но кадр не получен")
+            return frame
+
+
+_RTSP_SESSION = _RtspSession()
+
+
 def grab_rtsp(url: str):
     try:
-        import cv2  # type: ignore
+        import cv2  # type: ignore  # noqa: F401
     except ImportError as exc:
         raise RuntimeError(
             "Для RTSP нужен opencv-python. Установите: pip install -r requirements-anpr.txt"
         ) from exc
-    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
-    if not cap.isOpened():
-        cap = cv2.VideoCapture(url)
-    if not cap.isOpened():
-        raise RuntimeError(f"Не удалось открыть RTSP: {url}")
-    ok, frame = cap.read()
-    cap.release()
-    if not ok or frame is None:
-        raise RuntimeError("RTSP открыт, но кадр не получен")
-    return frame
+    return _RTSP_SESSION.read(url)
+
+
+def release_rtsp() -> None:
+    """Close the persistent RTSP session (call on Stop)."""
+    _RTSP_SESSION.release()
 
 
 def grab_http_snapshot(url: str):

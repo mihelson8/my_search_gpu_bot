@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r15».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r16».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -334,7 +334,7 @@ class AnprApp:
         grid.pack(fill="both", expand=True)
         grid.columnconfigure(1, weight=1)
 
-        self.interval_var = tk.StringVar(value=str(self.cfg.get("interval_sec", 0.8)))
+        self.interval_var = tk.StringVar(value=str(self.cfg.get("interval_sec", 0.25)))
         self.window_var = tk.StringVar(value=self.cfg.get("window_title", ""))
         self.rtsp_var = tk.StringVar(value=self.cfg.get("rtsp_url", ""))
         self.http_var = tk.StringVar(value=self.cfg.get("http_url", ""))
@@ -354,7 +354,7 @@ class AnprApp:
         self.beep_var = tk.BooleanVar(value=bool(self.cfg.get("beep_on_foreign", True)))
 
         rows = [
-            ("Интервал скриншотов, сек", self.interval_var),
+            ("Интервал кадров, сек (0.2 = быстро)", self.interval_var),
             ("Окно Seetong (часть заголовка)", self.window_var),
             ("RTSP URL", self.rtsp_var),
             ("HTTP snapshot URL", self.http_var),
@@ -440,7 +440,7 @@ class AnprApp:
         source_key = SOURCE_VALUES.get(self.source_var.get(), "seetong_folder")
         return {
             "source": source_key,
-            "interval_sec": max(0.3, _float(self.interval_var, 0.8)),
+            "interval_sec": max(0.15, _float(self.interval_var, 0.25)),
             "window_title": self.window_var.get().strip() or "Seetong Lite Client",
             "camera_ip": self.camera_ip_var.get().strip(),
             "camera_user": self.camera_user_var.get().strip() or "admin",
@@ -631,13 +631,31 @@ class AnprApp:
         self.btn_start.config(state="disabled")
         self.btn_stop.config(state="normal")
         self.run_label.config(text="идёт съёмка…")
+        # Warm RapidOCR once so the first live plate is not a multi-second cold start.
+        threading.Thread(target=self._warm_ocr, daemon=True).start()
         threading.Thread(target=self._loop, daemon=True).start()
+
+    def _warm_ocr(self) -> None:
+        try:
+            import numpy as np
+            from anpr.recognizer import _ocr_rapidocr
+
+            blank = np.zeros((48, 160, 3), dtype=np.uint8)
+            _ocr_rapidocr(blank)
+        except Exception:
+            pass
 
     def stop_capture(self) -> None:
         self._running = False
         self.btn_start.config(state="normal")
         self.btn_stop.config(state="disabled")
         self.run_label.config(text="остановлено")
+        try:
+            from anpr.capture import release_rtsp
+
+            release_rtsp()
+        except Exception:
+            pass
 
     def capture_once(self) -> None:
         self.cfg.update(self._settings_from_form())
@@ -645,8 +663,15 @@ class AnprApp:
 
     def _loop(self) -> None:
         while self._running:
+            t0 = time.perf_counter()
             self._tick()
-            time.sleep(float(self.cfg.get("interval_sec", 0.8)))
+            interval = float(self.cfg.get("interval_sec", 0.25))
+            # Do not stack sleep on top of a slow tick — keep cadence tight for moving cars.
+            leftover = interval - (time.perf_counter() - t0)
+            if leftover > 0.05:
+                time.sleep(leftover)
+            elif leftover > 0:
+                time.sleep(leftover)
 
     def _tick(self, force_save: bool = False) -> None:
         if self._busy:
@@ -656,6 +681,7 @@ class AnprApp:
             from anpr.capture import _is_useless_frame, crop_roi, grab_frame, save_screenshot
             from anpr.recognizer import recognize_scene
 
+            t_all = time.perf_counter()
             frame, source_name = grab_frame(
                 source=self.cfg.get("source", "seetong_folder"),
                 window_title=self.cfg.get("window_title", ""),
@@ -684,8 +710,8 @@ class AnprApp:
                     skip_top=self.cfg.get("skip_top", 0),
                 )
             self._last_frame = frame
-            self.root.after(0, lambda: self._show_preview(frame))
             if _is_useless_frame(frame):
+                self.root.after(0, lambda: self._show_preview(frame))
                 self.root.after(
                     0,
                     lambda: self._set_detection(
@@ -701,45 +727,34 @@ class AnprApp:
             shot = ""
             if force_save or self.cfg.get("save_all_shots"):
                 shot = save_screenshot(frame, prefix="live")
-            t0 = time.perf_counter()
+            t_ocr = time.perf_counter()
             hits, vehicles, annotated, zoom = recognize_scene(
                 frame, min_confidence=float(self.cfg.get("min_confidence", 0.22))
             )
-            elapsed = time.perf_counter() - t0
-            elapsed_txt = f"{elapsed:.1f} с" if elapsed >= 0.1 else f"{elapsed * 1000:.0f} мс"
+            ocr_elapsed = time.perf_counter() - t_ocr
+            # Rebuild zoom only if empty — avoid a second expensive annotate_zoom every tick.
+            if zoom is None or getattr(zoom, "size", 0) == 0:
+                try:
+                    from anpr.vehicles import annotate_zoom, downscale_for_anpr
+
+                    work_src = downscale_for_anpr(frame, max_w=640)
+                    if hits and hits[0].bbox:
+                        zoom = annotate_zoom(work_src, hits[0].bbox, vehicles, hits[:1])
+                    elif vehicles:
+                        zoom = annotate_zoom(
+                            work_src, vehicles[0], vehicles, hits[:1] if hits else []
+                        )
+                except Exception:
+                    pass
+            total_elapsed = time.perf_counter() - t_all
+            # Wall-clock (grab+OCR). Older builds showed OCR only → «1с» while real wait was ~10с.
+            if total_elapsed >= 0.1:
+                elapsed_txt = f"{total_elapsed:.1f} с"
+            else:
+                elapsed_txt = f"{total_elapsed * 1000:.0f} мс"
+            if ocr_elapsed + 0.15 < total_elapsed:
+                elapsed_txt = f"{elapsed_txt} (OCR {ocr_elapsed:.1f} с)"
             preview = annotated if annotated is not None else frame
-            # Always rebuild zoom from undimmed work frame + plate box.
-            # Annotated preview dims the lot to ~35% and makes the side panel look black.
-            try:
-                from anpr.vehicles import annotate_zoom, downscale_for_anpr, vehicle_box_from_plate
-
-                work_src = downscale_for_anpr(frame, max_w=896)
-                if hits and hits[0].bbox:
-                    hit0 = hits[0]
-                    owner = hit0.bbox
-                    zoom = annotate_zoom(work_src, owner, vehicles, hits[:1])
-                elif vehicles:
-                    zoom = annotate_zoom(
-                        work_src, vehicles[0], vehicles, hits[:1] if hits else []
-                    )
-                elif zoom is None or getattr(zoom, "size", 0) == 0:
-                    zoom = None
-            except Exception:
-                if zoom is None or getattr(zoom, "size", 0) == 0:
-                    try:
-                        from anpr.vehicles import annotate_zoom, vehicle_box_from_plate
-
-                        src = frame
-                        if hits and hits[0].bbox:
-                            hit0 = hits[0]
-                            owner = vehicle_box_from_plate(hit0.bbox, src.shape)
-                            zoom = annotate_zoom(src, owner, vehicles, hits[:1])
-                        elif vehicles:
-                            zoom = annotate_zoom(
-                                src, vehicles[0], vehicles, hits[:1] if hits else []
-                            )
-                    except Exception:
-                        pass
             self.root.after(0, lambda img=preview: self._show_preview(img))
             self.root.after(0, lambda z=zoom: self._show_zoom(z))
             self.root.after(0, lambda t=elapsed_txt: self.time_label.config(text=f"Время определения: {t}"))

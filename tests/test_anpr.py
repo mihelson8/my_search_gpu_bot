@@ -358,7 +358,7 @@ def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
     frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
     frame[170:190, 120:200] = 230
 
-    def fake_ocr(regions, min_confidence):
+    def fake_ocr_crop(crop, origin_box, min_confidence):
         return [
             PlateHit(
                 plate="К900НН03",
@@ -369,12 +369,7 @@ def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
             )
         ]
 
-    monkeypatch.setattr(recognizer, "_ocr_regions", fake_ocr)
-    monkeypatch.setattr(
-        recognizer,
-        "_collect_plate_regions",
-        lambda *a, **k: [((120, 170, 200, 190), frame[170:190, 120:200])],
-    )
+    monkeypatch.setattr(recognizer, "_ocr_crop_direct", fake_ocr_crop)
     monkeypatch.setattr("anpr.vehicles.find_vehicle_silhouettes", lambda *a, **k: [])
     hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
     assert hits and hits[0].plate == "К900НН03"
@@ -564,6 +559,50 @@ def test_zoom_box_enlarges_plate():
     zoomed = zoom_box(frame, (40, 80, 160, 100))
     assert zoomed.shape[1] > 160
     assert zoomed.shape[0] > 20
+
+
+def test_rtsp_session_reuses_open_capture(monkeypatch):
+    """Regression: opening RTSP every tick made wall-clock ~10s while OCR showed ~1s."""
+    numpy = pytest.importorskip("numpy")
+    cv2 = pytest.importorskip("cv2")
+    from anpr import capture as capture_mod
+
+    opens = {"n": 0}
+
+    class FakeCap:
+        def __init__(self, url, *args, **kwargs):
+            opens["n"] += 1
+            self.url = url
+
+        def isOpened(self):
+            return True
+
+        def set(self, *_a, **_k):
+            return True
+
+        def grab(self):
+            return True
+
+        def retrieve(self):
+            return True, numpy.zeros((40, 60, 3), dtype=numpy.uint8)
+
+        def read(self):
+            return True, numpy.zeros((40, 60, 3), dtype=numpy.uint8)
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr(cv2, "VideoCapture", FakeCap)
+    capture_mod.release_rtsp()
+    frame1 = capture_mod.grab_rtsp("rtsp://cam/test")
+    frame2 = capture_mod.grab_rtsp("rtsp://cam/test")
+    assert frame1 is not None and frame2 is not None
+    assert opens["n"] == 1
+    capture_mod.release_rtsp()
+    frame3 = capture_mod.grab_rtsp("rtsp://cam/test")
+    assert frame3 is not None
+    assert opens["n"] == 2
+    capture_mod.release_rtsp()
 
 
 def test_annotate_zoom_plate_is_bright_and_large():

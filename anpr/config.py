@@ -57,7 +57,7 @@ def sanitize_shots_dir(folder: str = "") -> str:
 
 DEFAULTS: Dict[str, Any] = {
     "source": "seetong_folder",
-    "interval_sec": 0.8,
+    "interval_sec": 0.25,
     "window_title": "Seetong Lite Client",
     "camera_ip": "192.168.0.123",
     "camera_user": "admin",
@@ -91,6 +91,15 @@ def load_config(path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
         except (OSError, json.JSONDecodeError):
             pass
     data["shots_dir"] = sanitize_shots_dir(str(data.get("shots_dir") or ""))
+    # Old default 0.8s + reconnecting RTSP felt like ~10s per plate on moving cars.
+    try:
+        interval = float(data.get("interval_sec", 0.25))
+    except (TypeError, ValueError):
+        interval = 0.25
+    if abs(interval - 0.8) < 0.02:
+        data["interval_sec"] = 0.25
+    else:
+        data["interval_sec"] = max(0.15, interval)
     return data
 
 
