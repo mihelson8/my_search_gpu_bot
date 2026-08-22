@@ -78,8 +78,32 @@ class AnprApp:
             "Seetong слева, это окно справа. Съёмка начнётся сама. Нужен номер вида «А 000 АА | 00».",
             0.0,
         )
+        self.root.after(300, self._confirm_build)
         self.root.after(200, self._warn_missing_packages)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def _confirm_build(self) -> None:
+        """Once per build: confirm which copy is running so old installs are obvious."""
+        here = os.path.abspath(os.path.dirname(__file__) or ".")
+        marker = os.path.join(here, f".seen_build_{APP_VERSION}")
+        if os.path.exists(marker):
+            self.run_label.config(text=f"сборка {APP_VERSION}")
+            return
+        try:
+            with open(marker, "w", encoding="utf-8") as handle:
+                handle.write(here)
+        except Exception:
+            pass
+        messagebox.showinfo(
+            f"Сборка {APP_VERSION}",
+            f"Открыта сборка:\n{APP_VERSION}\n\n"
+            f"Папка:\n{here}\n\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r7».\n"
+            "Если значка нет — запущена старая копия.\n\n"
+            "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
+            "Проверка: VERIFY_INSTALL.bat",
+        )
+        self.run_label.config(text=f"сборка {APP_VERSION}")
 
     def _warn_missing_packages(self) -> None:
         try:
@@ -120,9 +144,17 @@ class AnprApp:
         header = ttk.Frame(self.root, padding="14 10")
         header.pack(fill="x")
         ttk.Label(header, text="Автономера · Seetong", style="Header.TLabel").pack(side="left")
-        ttk.Label(header, text=f"v{APP_VERSION} · окно справа, камера слева", style="Muted.TLabel").pack(
-            side="left", padx=(12, 0)
+        self.build_badge = tk.Label(
+            header,
+            text=f"  СБОРКА {APP_VERSION}  ",
+            bg="#facc15",
+            fg="#111827",
+            font=("Segoe UI", 12, "bold"),
+            padx=8,
+            pady=2,
         )
+        self.build_badge.pack(side="left", padx=(14, 0))
+        ttk.Label(header, text="окно справа, камера слева", style="Muted.TLabel").pack(side="left", padx=(12, 0))
         self.stats_label = ttk.Label(header, text="", style="Muted.TLabel")
         self.stats_label.pack(side="right")
 
@@ -664,13 +696,13 @@ class AnprApp:
             elapsed_txt = f"{elapsed:.1f} с" if elapsed >= 0.1 else f"{elapsed * 1000:.0f} мс"
             preview = annotated if annotated is not None else frame
             # Guaranteed close-up: rebuild zoom from plate/car box if pipeline returned empty.
-            if (zoom is None or getattr(zoom, "size", 0) == 0) and hits:
+            if zoom is None or getattr(zoom, "size", 0) == 0:
                 try:
                     from anpr.vehicles import annotate_zoom, vehicle_box_from_plate
 
-                    hit0 = hits[0]
                     src = preview if preview is not None else frame
-                    if hit0.bbox:
+                    if hits and hits[0].bbox:
+                        hit0 = hits[0]
                         owner = vehicle_box_from_plate(hit0.bbox, src.shape)
                         if vehicles:
                             px0, py0 = hit0.bbox[0], hit0.bbox[1]
@@ -680,7 +712,7 @@ class AnprApp:
                                     break
                         zoom = annotate_zoom(src, owner, vehicles, hits[:1])
                     elif vehicles:
-                        zoom = annotate_zoom(src, vehicles[0], vehicles, hits[:1])
+                        zoom = annotate_zoom(src, vehicles[0], vehicles, hits[:1] if hits else [])
                 except Exception:
                     pass
             self.root.after(0, lambda img=preview: self._show_preview(img))
@@ -760,7 +792,23 @@ class AnprApp:
         except ImportError:
             self.preview_label.config(text="Установите Pillow для предпросмотра: pip install Pillow")
             return
-        rgb = frame[:, :, ::-1]
+        try:
+            import cv2
+
+            stamped = frame.copy()
+            cv2.rectangle(stamped, (8, 8), (8 + 12 * len(APP_VERSION) + 90, 36), (250, 204, 21), -1)
+            cv2.putText(
+                stamped,
+                f"СБОРКА {APP_VERSION}",
+                (14, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (17, 24, 39),
+                2,
+            )
+        except Exception:
+            stamped = frame
+        rgb = stamped[:, :, ::-1]
         image = Image.fromarray(rgb)
         image.thumbnail((880, 520))
         self._preview_photo = ImageTk.PhotoImage(image)

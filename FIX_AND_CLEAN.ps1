@@ -90,7 +90,8 @@ function Copy-Anpr([string]$src, [string]$dst) {
         "anpr_gui.py", "anpr_icon.ico", "START_ANPR.bat", "INSTALL_ANPR.bat",
         "DESKTOP_SHORTCUT_ANPR.bat", "MAKE_DESKTOP_SHORTCUT.ps1",
         "FIX_AND_CLEAN.ps1", "FIX_AND_CLEAN.bat", "requirements-anpr.txt",
-        "UNINSTALL_COMPLETE.ps1", "UNINSTALL_COMPLETE.bat", "UPDATE_NOW.bat"
+        "UNINSTALL_COMPLETE.ps1", "UNINSTALL_COMPLETE.bat", "UPDATE_NOW.bat",
+        "VERIFY_INSTALL.bat"
     )
     foreach ($name in $names) {
         $from = Join-Path $src $name
@@ -269,11 +270,18 @@ Start-Sleep -Seconds 1
 Remove-LeftoverCopies $stable
 
 Write-Host ""
-Write-Host "Ready. Check window title contains: 2026.08.22-r4"
-Write-Host "Use desktop icon: Avtonomera Seetong / Автономера Seetong"
-Write-Host ("Folder: " + $stable)
-Write-Host "If title has no 2026.08.22-r4 — you still opened the OLD program."
+Write-Host "========================================"
+$shownVer = "MISSING"
+if (Test-Path $verFile) {
+    $m = Select-String -Path $verFile -Pattern 'APP_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
+    if ($m) { $shownVer = $m.Matches.Groups[1].Value }
+}
+Write-Host ("  READY. File version: " + $shownVer)
+Write-Host "  In the app look for YELLOW badge: СБОРКА 2026.08.22-r7"
+Write-Host ("  Folder: " + $stable)
+Write-Host "  If badge is missing — old program is still open."
+Write-Host "========================================"
 if (-not $FromStable) {
-    Start-Sleep -Seconds 6
+    Start-Sleep -Seconds 8
 }
 exit 0
