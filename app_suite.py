@@ -11,10 +11,21 @@ import webbrowser
 from typing import Any
 from business_suite_db import BusinessDB, DEFAULT_DB_PATH
 
-db = BusinessDB()
-# If DB is completely empty of clients, seed demo data for an immediate great experience
-if len(db.get_clients()) == 0:
-    db.seed_demo_clients()
+try:
+    db = BusinessDB()
+    # If DB is completely empty of clients, seed demo data for an immediate great experience
+    if len(db.get_clients()) == 0:
+        db.seed_demo_clients()
+except Exception as exc:
+    print("============================================================")
+    print("ОШИБКА при открытии базы данных")
+    print(exc)
+    print()
+    print("Скопируйте папку программы на диск C: (например C:\\бизнес)")
+    print("и запустите START_APP_WINDOWS.bat оттуда.")
+    print("Диск G: часто бывает только для чтения (флешка Windows).")
+    print("============================================================")
+    raise SystemExit(1) from exc
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="ru">

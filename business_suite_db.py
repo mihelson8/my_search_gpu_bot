@@ -9,11 +9,38 @@ import io
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "business_suite.db")
+def _default_db_path() -> str:
+    """Prefer a writable location (AppData on Windows) so USB/ISO disks still work."""
+    local_name = "business_suite.db"
+    beside_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), local_name)
+
+    # Try next to the program first (convenient for portable use).
+    try:
+        probe = beside_script + ".write_test"
+        with open(probe, "w", encoding="utf-8") as fh:
+            fh.write("ok")
+        os.remove(probe)
+        return beside_script
+    except OSError:
+        pass
+
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        folder = os.path.join(base, "CCTV_Business_Suite")
+    else:
+        folder = os.path.join(os.path.expanduser("~"), ".cctv_business_suite")
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, local_name)
+
+
+DEFAULT_DB_PATH = _default_db_path()
 
 class BusinessDB:
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         self.db_path = db_path
+        parent = os.path.dirname(os.path.abspath(self.db_path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self._init_db()
 
     def get_connection(self) -> sqlite3.Connection:

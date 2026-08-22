@@ -69,6 +69,18 @@ if not exist "business_suite_db.py" (
     exit /b 1
 )
 
+REM Check that this folder is writable (ISO / Windows install USB often is not)
+echo test > "%~dp0.write_test.tmp" 2>nul
+if not exist "%~dp0.write_test.tmp" (
+    echo [ВНИМАНИЕ] Папка только для чтения: %CD%
+    echo Скопируйте всю эту папку на диск C:, например в C:\бизнес
+    echo Затем запустите START_APP_WINDOWS.bat уже оттуда.
+    echo Пробуем запуск всё равно ^(база уйдёт в AppData^)...
+    echo.
+) else (
+    del "%~dp0.write_test.tmp" >nul 2>&1
+)
+
 echo Запуск пульта...
 echo После старта откройте браузер: http://localhost:8765
 echo Чтобы остановить программу — закройте это окно.
@@ -85,7 +97,8 @@ if not "%ERR%"=="0" (
     echo Частые причины:
     echo   - порт 8765 занят другим приложением
     echo   - антивирус блокирует Python
-    echo   - повреждённые файлы после копирования
+    echo   - программа лежит на диске только для чтения ^(G:^)
+    echo   - скопируйте папку на C:\бизнес и запустите снова
     echo.
 )
 pause
