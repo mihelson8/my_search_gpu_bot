@@ -463,8 +463,8 @@ def test_recognized_plate_trims_car_box_glued_to_bins():
     assert result[0].box[1:] != glued.box[1:]
     assert result[0].box[2] < 400, "right-side bins must be outside the car frame"
     assert result[0].box[0] < 220 < result[0].box[2]
-    assert result[0].box[1] == glued.box[1]
-    assert result[0].box[3] == glued.box[3]
+    assert result[0].box[1] > glued.box[1], "group height must be replaced too"
+    assert result[0].box[3] <= glued.box[3]
 
 
 def test_recognized_plate_expands_partial_bumper_box_to_car_height():
@@ -927,6 +927,24 @@ def test_angled_type1_plate_is_rectified_for_ocr():
         + abs((item[0][1] + item[0][3]) / 2 - 105),
     )
     assert crop.shape[1] / float(max(crop.shape[0], 1)) >= 2.5
+
+
+def test_tiny_distant_angled_plate_candidate_is_not_dropped():
+    numpy = pytest.importorskip("numpy")
+    cv2 = pytest.importorskip("cv2")
+    from anpr.recognizer import _plate_candidates_from_mask
+
+    image = numpy.full((180, 320, 3), 70, dtype=numpy.uint8)
+    mask = numpy.zeros((180, 320), dtype=numpy.uint8)
+    tiny = cv2.boxPoints(((210, 90), (18, 5), -18)).astype("int32")
+    cv2.fillConvexPoly(mask, tiny, 255)
+    cv2.fillConvexPoly(image, tiny, (230, 230, 230))
+
+    candidates = _plate_candidates_from_mask(image, mask, 1.45, 9.5, 4.64)
+    assert candidates, "an 18x5 oblique plate must reach OCR"
+    crop = candidates[0][3]
+    assert crop.shape[1] >= 16
+    assert crop.shape[1] > crop.shape[0]
 
 
 def test_seetong_window_keywords():

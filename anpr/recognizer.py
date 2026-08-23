@@ -191,13 +191,13 @@ def _plate_candidates_from_mask(image, mask, min_aspect: float, max_aspect: floa
         if rw < rh:
             rw, rh = rh, rw
             angle += 90.0
-        if rh < 6 or rw < 22:
+        if rh < 4 or rw < 14:
             continue
         aspect = rw / float(max(rh, 1.0))
         if not (min_aspect <= aspect <= max_aspect):
             continue
         area = rw * rh
-        if area < 150 or area > 0.50 * w * h:
+        if area < 55 or area > 0.50 * w * h:
             continue
 
         # Expand in the plate's own coordinate system, then rectify it. OCR now
@@ -248,24 +248,37 @@ def find_plate_regions(image, max_candidates: int = 8) -> List[Tuple[Tuple[int, 
     gray = _to_gray(image)
     h, w = gray.shape[:2]
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 4))
-    blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
-    grad = cv2.Sobel(blackhat, cv2.CV_32F, 1, 0, ksize=-1)
-    grad = np.abs(grad)
-    grad = cv2.normalize(grad, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    grad = cv2.GaussianBlur(grad, (5, 5), 0)
-    _, thresh = cv2.threshold(grad, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-    closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
-    closed = cv2.dilate(closed, None, iterations=1)
-    scored = _plate_candidates_from_mask(image, closed, 1.8, 8.5, 4.64)
+    scored = []
+    # Tiny distant plates need a smaller character-joining kernel; nearby plates
+    # remain more stable with the larger kernels.
+    for kw, kh in ((7, 3), (13, 4), (21, 5)):
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
+        blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+        grad = cv2.Sobel(blackhat, cv2.CV_32F, 1, 0, ksize=-1)
+        grad = np.abs(grad)
+        grad = cv2.normalize(grad, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        grad = cv2.GaussianBlur(grad, (3, 3) if kw == 7 else (5, 5), 0)
+        _, thresh = cv2.threshold(grad, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        closed = cv2.morphologyEx(
+            thresh, cv2.MORPH_CLOSE, kernel, iterations=1 if kw == 7 else 2
+        )
+        closed = cv2.dilate(closed, None, iterations=1)
+        scored.extend(
+            _plate_candidates_from_mask(image, closed, 1.45, 9.5, 4.64)
+        )
 
     # White Type-1 plate: light rectangle with a region box on the right.
     # High cameras flatten the plate, so aspect can look wider than 4.6.
     mean = float(np.mean(gray))
     _, light = cv2.threshold(gray, max(int(mean + 20), 135), 255, cv2.THRESH_BINARY)
-    light_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (17, 5))
-    light_closed = cv2.morphologyEx(light, cv2.MORPH_CLOSE, light_kernel, iterations=2)
-    scored.extend(_plate_candidates_from_mask(image, light_closed, 2.8, 8.5, 4.64))
+    for kw, kh in ((9, 3), (17, 5)):
+        light_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
+        light_closed = cv2.morphologyEx(
+            light, cv2.MORPH_CLOSE, light_kernel, iterations=1 if kw == 9 else 2
+        )
+        scored.extend(
+            _plate_candidates_from_mask(image, light_closed, 1.8, 9.5, 4.64)
+        )
 
     scored.sort(key=lambda item: (item[0], item[1]))
     seen = set()
@@ -655,7 +668,7 @@ def _tighten_silhouettes_to_recognized_plates(silhouettes, hits, image_shape):
             # Preserve an already-good silhouette, but replace a car+bin group.
             if old_w > tight_w * 1.28:
                 result[index] = VehicleSilhouette(
-                    box=(tx0, oy0, tx1, oy1),
+                    box=tight,
                     contour=None,
                     score=max(float(old.score), 0.95),
                 )
@@ -694,7 +707,7 @@ def _credible_plate_region(item, image_shape) -> bool:
         crop_aspect = crop.shape[1] / float(max(crop.shape[0], 1))
     if not (2.0 <= aspect <= 9.0 or 2.0 <= crop_aspect <= 9.0):
         return False
-    if pw < max(18, int(w * 0.018)) or pw > int(w * 0.22):
+    if pw < max(12, int(w * 0.012)) or pw > int(w * 0.22):
         return False
     if not (int(h * 0.10) <= (y0 + y1) / 2.0 <= int(h * 0.64)):
         return False
