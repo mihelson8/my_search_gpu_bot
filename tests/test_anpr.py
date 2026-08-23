@@ -351,7 +351,11 @@ def test_vehicle_box_from_plate_and_downscale():
 
 def test_direct_ocr_bbox_is_bound_to_exact_plate_region():
     numpy = pytest.importorskip("numpy")
-    from anpr.recognizer import PlateHit, _bind_hits_to_plate_regions
+    from anpr.recognizer import (
+        PlateHit,
+        _bind_hits_to_plate_regions,
+        _plate_is_meaningful,
+    )
     from anpr.vehicles import vehicle_box_from_plate
 
     image_shape = (400, 720, 3)
@@ -372,6 +376,9 @@ def test_direct_ocr_bbox_is_bound_to_exact_plate_region():
     assert car[2] - car[0] < 220, f"plate-derived car frame is too wide: {car}"
     assert car[0] < exact[0] and car[2] > exact[2]
     assert car[1] < exact[1] and car[3] > exact[3]
+    assert not _plate_is_meaningful("А000АА00")
+    assert not _plate_is_meaningful("А000АА77")
+    assert _plate_is_meaningful("А123ВС77")
 
 
 def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
@@ -414,6 +421,9 @@ def test_upper_parking_row_plate_search_drives_frame_and_ocr(monkeypatch):
     frame = numpy.full((400, 720, 3), 105, dtype=numpy.uint8)
     frame[80:220, 250:430] = (38, 40, 45)
     frame[190:208, 305:390] = 225
+    frame[194:204, 320:324] = 25
+    frame[194:204, 340:344] = 25
+    frame[194:204, 360:364] = 25
     frame[240:390, :] = (190, 195, 200)  # puddle below the parked car
 
     focus_box, _focus = plate_focus_band(frame)
@@ -720,6 +730,12 @@ def test_dumpsters_are_not_marked_as_cars():
     assert cars, "real car must still be found"
     cx = (cars[0].box[0] + cars[0].box[2]) / 2
     assert cx < 160, "top detection should be the car, not the bins"
+
+    # Close-up blue + green plastic bins can be car-sized in the camera crop.
+    large = numpy.full((360, 640, 3), 105, dtype=numpy.uint8)
+    large[115:285, 330:470] = (215, 125, 35)  # blue plastic
+    large[120:290, 475:600] = (45, 175, 65)  # green plastic
+    assert find_vehicle_silhouettes(large, max_cars=5) == []
 
 
 def test_hdipcam_osd_is_not_marked_as_car():

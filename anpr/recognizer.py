@@ -17,6 +17,18 @@ class PlateHit:
     engine: str = ""
 
 
+def _plate_is_meaningful(plate: str) -> bool:
+    """Reject syntactically valid OCR placeholders such as А000АА00."""
+    if not plate_is_valid(plate):
+        return False
+    compact = "".join(ch for ch in str(plate) if ch.isalnum())
+    if len(compact) not in (8, 9):
+        return False
+    serial = compact[1:4]
+    region = compact[6:]
+    return serial != "000" and any(ch != "0" for ch in region)
+
+
 def available_engines() -> List[str]:
     engines = []
     try:
@@ -415,7 +427,7 @@ def _ocr_regions(region_map, min_confidence: float) -> List[PlateHit]:
             continue
         raw_joined = " ".join(texts)
         for plate in combine_type1_parts(texts):
-            if not plate_is_valid(plate) or plate in seen:
+            if not _plate_is_meaningful(plate) or plate in seen:
                 continue
             seen.add(plate)
             hits.append(
@@ -453,7 +465,7 @@ def _hits_from_ocr_texts(
     raw_joined = " ".join(texts)
     out: List[PlateHit] = []
     for plate in combine_type1_parts(texts) or extract_plates(raw_joined):
-        if not plate_is_valid(plate) or is_osd_text(plate):
+        if not _plate_is_meaningful(plate) or is_osd_text(plate):
             continue
         out.append(
             PlateHit(
@@ -533,6 +545,39 @@ def _bind_hits_to_plate_regions(hits: List[PlateHit], region_map, image_shape) -
     return hits
 
 
+def _credible_plate_region(item, image_shape) -> bool:
+    """Require white/neutral plate texture; reject blue bins and paving edges."""
+    import cv2
+    import numpy as np
+
+    if not item or not item[0]:
+        return False
+    box, crop = item
+    h, w = image_shape[:2]
+    x0, y0, x1, y1 = box
+    pw, ph = max(1, x1 - x0), max(1, y1 - y0)
+    aspect = pw / float(ph)
+    if not (2.0 <= aspect <= 9.0):
+        return False
+    if pw < max(18, int(w * 0.018)) or pw > int(w * 0.22):
+        return False
+    if not (int(h * 0.10) <= (y0 + y1) / 2.0 <= int(h * 0.64)):
+        return False
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return False
+    if crop.ndim == 2:
+        gray = crop
+        sat = np.zeros_like(gray)
+    else:
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        sat = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)[:, :, 1]
+    # A Type-1 plate has neutral/light substrate plus dark character texture.
+    neutral = float(np.mean(sat <= 85))
+    bright = float(np.mean(gray >= 145))
+    texture = float(np.std(gray))
+    return neutral >= 0.48 and bright >= 0.08 and texture >= 11.0
+
+
 def recognize_scene(image, min_confidence: float = 0.35):
     """Detect cars, read Type-1 plates, draw frames; works even if silhouette is weak."""
     import numpy as np
@@ -561,7 +606,9 @@ def recognize_scene(image, min_confidence: float = 0.35):
 
     try:
         # Night: keep a bit more resolution so white plates stay readable.
-        work = downscale_for_anpr(image, max_w=768 if night else 640)
+        # Distant Type-1 plates are only a few pixels high at 640 px. Keep enough
+        # detail for characters; plate-region OCR still limits the expensive crops.
+        work = downscale_for_anpr(image, max_w=1280)
     except Exception:
         work = image
 
@@ -587,16 +634,30 @@ def recognize_scene(image, min_confidence: float = 0.35):
         )
         h, w = work.shape[:2]
         global_regions = [
-            item
-            for item in global_regions
-            if int(h * 0.10) <= (item[0][1] + item[0][3]) / 2.0 <= int(h * 0.64)
-            and (item[0][2] - item[0][0]) >= max(18, int(w * 0.02))
+            item for item in global_regions if _credible_plate_region(item, work.shape)
         ]
+        if silhouettes:
+            near_cars = []
+            for item in global_regions:
+                box = item[0]
+                cx, cy = (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
+                for car in silhouettes:
+                    bx0, by0, bx1, by1 = car.box
+                    pad_x = max(8, int((bx1 - bx0) * 0.18))
+                    pad_y = max(8, int((by1 - by0) * 0.22))
+                    if (
+                        bx0 - pad_x <= cx <= bx1 + pad_x
+                        and by0 - pad_y <= cy <= by1 + pad_y
+                    ):
+                        near_cars.append(item)
+                        break
+            if near_cars:
+                global_regions = near_cars
     except Exception:
         global_regions = []
 
     def _has_good_plate(items: List[PlateHit]) -> bool:
-        return any(plate_is_valid(h.plate) and not is_osd_text(h.plate) for h in items)
+        return any(_plate_is_meaningful(h.plate) and not is_osd_text(h.plate) for h in items)
 
     # Fast path: brighten bumper (night), find white plate band, then OCR.
     if silhouettes:
@@ -655,7 +716,11 @@ def recognize_scene(image, min_confidence: float = 0.35):
     for hit in hits:
         if hit.plate in seen:
             continue
-        if not plate_is_valid(hit.plate) or is_osd_text(hit.plate) or is_osd_text(hit.raw_text):
+        if (
+            not _plate_is_meaningful(hit.plate)
+            or is_osd_text(hit.plate)
+            or is_osd_text(hit.raw_text)
+        ):
             continue
         seen.add(hit.plate)
         unique.append(hit)

@@ -87,20 +87,20 @@ def _looks_like_dumpster(image, box: Box) -> bool:
     area_ratio = (bw * bh) / float(max(h * w, 1))
     mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
 
-    # Car-sized blobs are never dumpsters — keep red/blue/black/white cars.
+    # Colored plastic bins may occupy a large close-up box. Test colour before
+    # the car-size exemption; the previous ordering let blue/green bins through.
+    if area_ratio < 0.22 and bin_color_ratio >= 0.10 and aspect < 2.8:
+        return True
+    if green_ratio >= 0.14 and area_ratio < 0.22 and aspect < 3.0:
+        return True
+    if area_ratio < 0.16 and vivid_ratio >= 0.20 and mean_sat >= 55 and aspect < 2.5:
+        return True
+    # Car-sized neutral/dark blobs are not dumpsters.
     if area_ratio >= 0.055 and bw >= 70 and bh >= 45:
         return False
     # Partial car at frame edge (tall body fragment).
     if bh >= 70 and bw >= 45 and area_ratio >= 0.02:
         return False
-
-    # Colored plastic bins (blue / yellow / green lids) — compact only.
-    if area_ratio < 0.055 and bin_color_ratio >= 0.10 and aspect < 2.6:
-        return True
-    if green_ratio >= 0.22 and area_ratio < 0.08:
-        return True
-    if area_ratio < 0.05 and vivid_ratio >= 0.18 and mean_sat >= 45 and aspect < 2.8:
-        return True
     cx = (x0 + x1) / 2.0
     near_side = cx < w * 0.14 or cx > w * 0.86
     if near_side and area_ratio < 0.06 and vivid_ratio >= 0.10 and 0.55 <= aspect <= 1.7:
