@@ -531,8 +531,9 @@ def test_upper_parking_row_plate_search_drives_frame_and_ocr(monkeypatch):
 
     focus_box, _focus = plate_focus_band(frame)
     parking_box, _parking = parking_band(frame)
-    assert focus_box[1] < 80 and focus_box[3] < 280
-    assert parking_box[1] < 80 and parking_box[3] < 280
+    assert focus_box[1] < 40 and focus_box[3] > 220
+    assert parking_box[1] < 40 and parking_box[3] > 220
+    assert focus_box[3] < 340 and parking_box[3] < 340
 
     plate_box = (305, 190, 390, 208)
     monkeypatch.setattr("anpr.vehicles.find_vehicle_silhouettes", lambda *a, **k: [])
@@ -945,6 +946,39 @@ def test_tiny_distant_angled_plate_candidate_is_not_dropped():
     crop = candidates[0][3]
     assert crop.shape[1] >= 16
     assert crop.shape[1] > crop.shape[0]
+
+
+def test_ocr_tries_rotated_views_for_oblique_plate(monkeypatch):
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr import recognizer
+
+    crop = numpy.full((18, 70, 3), 200, dtype=numpy.uint8)
+    calls = []
+
+    def fake_run(view):
+        calls.append(getattr(view, "shape", None))
+        if len(calls) < 3:
+            return "test", [("не номер", 0.9)]
+        return "test", [("М454НО01", 0.88)]
+
+    monkeypatch.setattr(recognizer, "_run_ocr", fake_run)
+    hits = recognizer._ocr_regions([((20, 30, 90, 48), crop)], 0.3)
+    assert len(calls) >= 3, "oblique plates must retry rotated crops"
+    assert hits and hits[0].plate == "М454НО01"
+
+
+def test_high_angle_dark_car_is_not_wide_asphalt():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import _is_non_vehicle
+
+    frame = numpy.full((400, 720, 3), 120, dtype=numpy.uint8)
+    # Dark SUV from a high camera: wide roof, darker glass, lighter bumper.
+    frame[150:250, 180:520] = (48, 50, 54)
+    frame[160:200, 230:470] = (22, 22, 24)
+    frame[220:250, 200:500] = (70, 72, 76)
+    assert not _is_non_vehicle(frame, (180, 150, 520, 250))
 
 
 def test_seetong_window_keywords():

@@ -190,6 +190,40 @@ def _looks_like_wet_puddle(image, box: Box) -> bool:
     return False
 
 
+def _box_has_car_structure(image, box: Box) -> bool:
+    """True when a high-angle blob has windshield / bumper structure, not a stain."""
+    import cv2
+    import numpy as np
+
+    if image is None or getattr(image, "size", 0) == 0:
+        return False
+    h, w = image.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w, x1), min(h, y1)
+    crop = image[y0:y1, x0:x1]
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return False
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
+    ch, cw = gray.shape[:2]
+    if ch < 24 or cw < 36:
+        return False
+    glass = gray[int(ch * 0.12) : int(ch * 0.48), int(cw * 0.18) : int(cw * 0.82)]
+    left = gray[:, 0 : max(int(cw * 0.16), 1)]
+    right = gray[:, int(cw * 0.84) : cw]
+    bumper = gray[int(ch * 0.62) : ch, :]
+    if glass.size == 0 or left.size == 0 or right.size == 0 or bumper.size == 0:
+        return False
+    sides = float(0.5 * (np.mean(left) + np.mean(right)))
+    glass_mean = float(np.mean(glass))
+    bumper_mean = float(np.mean(bumper))
+    if sides >= glass_mean + 10:
+        return True
+    if abs(glass_mean - bumper_mean) >= 14:
+        return True
+    return False
+
+
 def _is_non_vehicle(image, box: Box) -> bool:
     if image is not None and getattr(image, "size", 0) > 0:
         h, w = image.shape[:2]
@@ -202,12 +236,11 @@ def _is_non_vehicle(image, box: Box) -> bool:
         if bw < int(w * 0.10) and area_ratio < 0.018:
             return True
         # A front/rear car under this high camera is never a very wide, shallow
-        # sheet. Preserve a coherent bright neutral body whose lower edge was
-        # tightened away; otherwise these are asphalt or objects glued by it.
+        # sheet. Preserve a coherent body (bright paint or windshield structure).
         if bw >= int(w * 0.28) and bh <= int(h * 0.50) and aspect >= 2.45:
             mean_sat, mean_val, _vivid, _bin, _green = _box_color_stats(image, box)
             bright_silver_body = mean_sat <= 35 and mean_val >= 155
-            if not bright_silver_body:
+            if not bright_silver_body and not _box_has_car_structure(image, box):
                 return True
     return (
         _looks_like_dumpster(image, box)
@@ -1099,7 +1132,7 @@ def bumper_box(box: Box) -> Box:
     """Lower part of the car silhouette — where the Type-1 plate sits."""
     x0, y0, x1, y1 = box
     h = max(1, y1 - y0)
-    return (x0, y0 + int(h * 0.32), x1, y1)
+    return (x0, y0 + int(h * 0.18), x1, y1)
 
 
 def vehicle_box_from_plate(plate_box: Box, image_shape, expand: float = 0.95) -> Box:

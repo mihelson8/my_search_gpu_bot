@@ -142,12 +142,12 @@ def _upscale_for_ocr(crop, max_side: int = 560):
 
 
 def plate_focus_band(image):
-    """Upper parking row where this high camera sees parked cars and plates."""
+    """Parking row of a high camera: cars occupy most of the frame height."""
     h, w = image.shape[:2]
-    y0 = int(h * 0.10)
-    y1 = int(h * 0.62)
-    x0 = int(w * 0.02)
-    x1 = int(w * 0.98)
+    y0 = int(h * 0.04)
+    y1 = int(h * 0.82)
+    x0 = int(w * 0.01)
+    x1 = int(w * 0.99)
     if y1 - y0 < 40 or x1 - x0 < 60:
         return (0, 0, w, h), image
     return (x0, y0, x1, y1), image[y0:y1, x0:x1]
@@ -168,12 +168,12 @@ def mask_osd(image):
 
 
 def parking_band(image):
-    """Keep the upper parked-car row; exclude the large puddle below it."""
+    """Keep parked cars under a high camera; only drop the very bottom puddle."""
     h, w = image.shape[:2]
-    y0 = int(h * 0.08)
-    y1 = int(h * 0.64)
-    x0 = int(w * 0.02)
-    x1 = int(w * 0.98)
+    y0 = int(h * 0.04)
+    y1 = int(h * 0.82)
+    x0 = int(w * 0.01)
+    x1 = int(w * 0.99)
     if y1 - y0 < 40 or x1 - x0 < 40:
         return (0, 0, w, h), image
     return (x0, y0, x1, y1), image[y0:y1, x0:x1]
@@ -323,14 +323,17 @@ def _iter_search_views(image, origin=(0, 0), inside_vehicle: bool = False):
         return
     if inside_vehicle:
         h, w = image.shape[:2]
-        # Bumper strip first — smaller crop → much faster OCR on live RTSP.
-        y0 = int(h * 0.40)
-        if h - y0 >= 36 and w >= 60:
-            yield (ox, oy + y0), image[y0:h, :]
-            return
-        yield (ox, oy), image
+        # High-angle rear plates sit on the tailgate, not only the lowest bumper.
+        bands = (
+            (int(h * 0.22), h),
+            (int(h * 0.08), int(h * 0.70)),
+            (0, h),
+        )
+        for y0, y1 in bands:
+            if y1 - y0 >= 28 and w >= 48:
+                yield (ox, oy + y0), image[y0:y1, :]
         return
-    for box, view in _search_views(image, max_views=2):
+    for box, view in _search_views(image, max_views=4):
         x0, y0, _x1, _y1 = box
         yield (ox + x0, oy + y0), view
 
@@ -404,6 +407,34 @@ def _rapidocr_installed() -> bool:
         return True
     except ImportError:
         return False
+
+
+def _rotated_ocr_views(image, angles=(-32, -20, 20, 32)):
+    """Rotate a small plate crop so an oblique Type-1 plate becomes horizontal."""
+    import cv2
+
+    views = []
+    if image is None or getattr(image, "size", 0) == 0:
+        return views
+    h, w = image.shape[:2]
+    if h > 220 or w > 640:
+        return views
+    center = (w / 2.0, h / 2.0)
+    for angle in angles:
+        try:
+            matrix = cv2.getRotationMatrix2D(center, float(angle), 1.0)
+            views.append(
+                cv2.warpAffine(
+                    image,
+                    matrix,
+                    (w, h),
+                    flags=cv2.INTER_CUBIC,
+                    borderMode=cv2.BORDER_REPLICATE,
+                )
+            )
+        except Exception:
+            continue
+    return views
 
 
 def _run_ocr(image, allow_tesseract: bool = False) -> Tuple[str, List[Tuple[str, float]]]:
@@ -503,6 +534,7 @@ def _ocr_regions(region_map, min_confidence: float) -> List[PlateHit]:
             views.append(binary)
         except Exception:
             pass
+        views.extend(_rotated_ocr_views(prepared))
         for view in views:
             engine, raw_hits = _run_ocr(view)
             if not raw_hits:
@@ -707,9 +739,9 @@ def _credible_plate_region(item, image_shape) -> bool:
         crop_aspect = crop.shape[1] / float(max(crop.shape[0], 1))
     if not (2.0 <= aspect <= 9.0 or 2.0 <= crop_aspect <= 9.0):
         return False
-    if pw < max(12, int(w * 0.012)) or pw > int(w * 0.22):
+    if pw < max(10, int(w * 0.008)) or pw > int(w * 0.28):
         return False
-    if not (int(h * 0.10) <= (y0 + y1) / 2.0 <= int(h * 0.64)):
+    if not (int(h * 0.04) <= (y0 + y1) / 2.0 <= int(h * 0.86)):
         return False
     if crop is None or getattr(crop, "size", 0) == 0:
         return False
@@ -723,7 +755,7 @@ def _credible_plate_region(item, image_shape) -> bool:
     neutral = float(np.mean(sat <= 85))
     bright = float(np.mean(gray >= 145))
     texture = float(np.std(gray))
-    return neutral >= 0.48 and bright >= 0.08 and texture >= 11.0
+    return neutral >= 0.38 and bright >= 0.04 and texture >= 7.0
 
 
 def recognize_scene(image, min_confidence: float = 0.35):
@@ -760,12 +792,13 @@ def recognize_scene(image, min_confidence: float = 0.35):
 
     # One RapidOCR call per tick; night gets a second bumper/focus attempt.
     _OCR_BUDGET["n"] = 0
-    _OCR_BUDGET["max"] = 2 if night else 1
+    # High-angle plates need a few tiny rotated crops, not one whole-frame pass.
+    _OCR_BUDGET["max"] = 5 if night else 4
     _FAST_FRAME["n"] = int(_FAST_FRAME.get("n", 0)) + 1
 
     silhouettes = []
     try:
-        silhouettes = find_vehicle_silhouettes(work, max_cars=4)
+        silhouettes = find_vehicle_silhouettes(work, max_cars=6)
         silhouettes = [item for item in silhouettes if not _is_non_vehicle(work, item.box)]
     except Exception:
         silhouettes = []
@@ -818,25 +851,32 @@ def recognize_scene(image, min_confidence: float = 0.35):
     def _has_good_plate(items: List[PlateHit]) -> bool:
         return any(_plate_is_meaningful(h.plate) and not is_osd_text(h.plate) for h in items)
 
-    # Fast path: brighten bumper (night), find white plate band, then OCR.
+    # Fast path: search the rear/tailgate of each framed car, not only the first blob.
     if silhouettes:
-        item = silhouettes[0]
-        roi = bumper_box(item.box)
-        crop = crop_box(work, roi)
-        if crop is not None and getattr(crop, "size", 0) > 0:
+        for item in silhouettes[:3]:
+            roi = bumper_box(item.box)
+            crop = crop_box(work, roi)
+            if crop is None or getattr(crop, "size", 0) == 0:
+                continue
             try:
                 crop = brighten_crop(crop, min_mean=100.0)
             except Exception:
                 pass
             regions = _collect_plate_regions(
-                crop, origin=(roi[0], roi[1]), inside_vehicle=True, max_regions=1
+                crop, origin=(roi[0], roi[1]), inside_vehicle=True, max_regions=2
             )
             if regions:
-                hits.extend(_ocr_regions(regions, min_confidence=max(0.10, min_confidence - 0.12)))
+                hits.extend(
+                    _ocr_regions(regions, min_confidence=max(0.10, min_confidence - 0.12))
+                )
             if not _has_good_plate(hits):
                 hits.extend(
-                    _ocr_crop_direct(crop, roi, min_confidence=max(0.10, min_confidence - 0.12))
+                    _ocr_crop_direct(
+                        crop, roi, min_confidence=max(0.10, min_confidence - 0.12)
+                    )
                 )
+            if _has_good_plate(hits):
+                break
 
     if not _has_good_plate(hits) and global_regions:
         _OCR_BUDGET["max"] = max(int(_OCR_BUDGET.get("max", 1)), 3)
