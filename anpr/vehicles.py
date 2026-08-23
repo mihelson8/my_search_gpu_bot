@@ -83,22 +83,29 @@ def _looks_like_dumpster(image, box: Box) -> bool:
     x0, y0, x1, y1 = box
     bw, bh = max(1, x1 - x0), max(1, y1 - y0)
     aspect = bw / float(bh)
-    mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
-    # Colored plastic bins (blue / yellow / green lids).
-    if bin_color_ratio >= 0.08 and aspect < 2.6:
-        return True
-    if green_ratio >= 0.18:
-        return True
-    if vivid_ratio >= 0.16 and mean_sat >= 40 and aspect < 2.8:
-        return True
     h, w = image.shape[:2]
-    cx = (x0 + x1) / 2.0
-    near_side = cx < w * 0.16 or cx > w * 0.84
-    if near_side and vivid_ratio >= 0.08 and 0.55 <= aspect <= 1.7:
-        return True
-    # Compact colorful object — typical dumpster from above.
     area_ratio = (bw * bh) / float(max(h * w, 1))
-    if area_ratio < 0.12 and mean_sat >= 35 and vivid_ratio >= 0.10:
+    mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
+
+    # Car-sized blobs are never dumpsters — keep red/blue/black/white cars.
+    if area_ratio >= 0.055 and bw >= 70 and bh >= 45:
+        return False
+    # Partial car at frame edge (tall body fragment).
+    if bh >= 70 and bw >= 45 and area_ratio >= 0.02:
+        return False
+
+    # Colored plastic bins (blue / yellow / green lids) — compact only.
+    if area_ratio < 0.055 and bin_color_ratio >= 0.10 and aspect < 2.6:
+        return True
+    if green_ratio >= 0.22 and area_ratio < 0.08:
+        return True
+    if area_ratio < 0.05 and vivid_ratio >= 0.18 and mean_sat >= 45 and aspect < 2.8:
+        return True
+    cx = (x0 + x1) / 2.0
+    near_side = cx < w * 0.14 or cx > w * 0.86
+    if near_side and area_ratio < 0.06 and vivid_ratio >= 0.10 and 0.55 <= aspect <= 1.7:
+        return True
+    if area_ratio < 0.08 and mean_sat >= 40 and vivid_ratio >= 0.12 and aspect < 2.2:
         return True
     return False
 
@@ -242,111 +249,153 @@ def _silhouettes_from_mask(
 
 
 def _foreground_mask(image):
-    """Pixels that differ from parking asphalt — white through black car bodies."""
+    """Deprecated single mask — kept for tests; prefer dark/light split masks."""
+    dark, light = _car_tone_masks(image)
+    import cv2
+
+    return cv2.bitwise_or(dark, light)
+
+
+def _car_tone_masks(image):
+    """Return (dark_body_mask, light_body_mask) ignoring wet asphalt grain."""
     import cv2
     import numpy as np
 
     h, w = image.shape[:2]
-    target_w = 360
+    target_w = 420
     scale = target_w / float(max(w, 1))
-    small_w = max(int(w * scale), 80)
-    small_h = max(int(h * scale), 60)
+    small_w = max(int(w * scale), 100)
+    small_h = max(int(h * scale), 70)
     small = cv2.resize(image, (small_w, small_h), interpolation=cv2.INTER_AREA)
     if small.ndim == 2:
         small = cv2.cvtColor(small, cv2.COLOR_GRAY2BGR)
     hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (7, 7), 0)
+    # Median blur removes wet-lot speckles better than Gaussian.
+    soft = cv2.medianBlur(gray, 21)
+    sh, sw = soft.shape[:2]
 
-    bg = float(np.median(gray))
-    diff = cv2.absdiff(gray, np.full_like(gray, int(np.clip(bg, 0, 255))))
-    diff_cut = 12 if bg >= 100 else 18
-    _, mask_diff = cv2.threshold(diff, diff_cut, 255, cv2.THRESH_BINARY)
+    # Asphalt = dominant tone in the parking band (ignore bright sky/OSD).
+    parking = soft[int(sh * 0.22) : sh, :]
+    hist = np.bincount(parking.ravel(), minlength=256).astype(np.float64)
+    # Soften histogram so a large dark car does not steal the mode alone.
+    hist = np.convolve(hist, np.ones(9) / 9.0, mode="same")
+    bg = float(int(np.argmax(hist)))
+    # Fallback: side gutters if mode looks empty.
+    sides = np.concatenate(
+        [
+            soft[int(sh * 0.30) : int(sh * 0.90), 0 : max(sw // 12, 3)].ravel(),
+            soft[int(sh * 0.30) : int(sh * 0.90), max(sw - sw // 12, 0) : sw].ravel(),
+        ]
+    )
+    if sides.size:
+        side_bg = float(np.median(sides))
+        if abs(side_bg - bg) < 35:
+            bg = side_bg
+    bg_std = float(np.std(sides)) if sides.size else 10.0
+    # Noisy lots need a larger gap so texture is not a "car".
+    dark_gap = max(18, int(14 + bg_std * 0.55))
+    light_gap = max(20, int(16 + bg_std * 0.55))
 
-    val = hsv[:, :, 2]
-    white_cut = max(int(bg + 16), 120)
-    dark_cut = min(int(bg - 12), 100)
-    _, mask_white = cv2.threshold(val, white_cut, 255, cv2.THRESH_BINARY)
-    _, mask_dark = cv2.threshold(val, max(dark_cut, 1), 255, cv2.THRESH_BINARY_INV)
+    darker = np.clip(int(round(bg)) - soft.astype(np.int16), 0, 255).astype(np.uint8)
+    brighter = np.clip(soft.astype(np.int16) - int(round(bg)), 0, 255).astype(np.uint8)
+    _, mask_dark = cv2.threshold(darker, dark_gap, 255, cv2.THRESH_BINARY)
+    _, mask_light = cv2.threshold(brighter, light_gap, 255, cv2.THRESH_BINARY)
 
-    local = cv2.GaussianBlur(gray, (31, 31), 0)
-    local_diff = cv2.absdiff(gray, local)
-    _, mask_local = cv2.threshold(local_diff, 7 if bg < 110 else 10, 255, cv2.THRESH_BINARY)
+    pale_lo = max(int(bg + light_gap), 125)
+    pale = cv2.inRange(hsv, (0, 0, pale_lo), (180, 80, 255))
+    dark_hi = max(int(bg - dark_gap), 65)
+    dark_body = cv2.inRange(hsv, (0, 0, 0), (180, 110, dark_hi))
 
-    # Locally darker than asphalt — catches black cars even when lot is mid-gray.
-    darker = np.clip(local.astype(np.int16) - gray.astype(np.int16), 0, 255).astype(np.uint8)
-    _, mask_darker = cv2.threshold(darker, 10, 255, cv2.THRESH_BINARY)
+    dark = cv2.bitwise_or(mask_dark, dark_body)
+    light = cv2.bitwise_or(mask_light, pale)
 
-    # Locally brighter — white / silver / beige bodies.
-    brighter = np.clip(gray.astype(np.int16) - local.astype(np.int16), 0, 255).astype(np.uint8)
-    _, mask_brighter = cv2.threshold(brighter, 12, 255, cv2.THRESH_BINARY)
+    # Remove only small vivid dumpster components from both masks.
+    vivid = cv2.inRange(hsv, (8, 75, 65), (40, 255, 255))
+    vivid = cv2.bitwise_or(vivid, cv2.inRange(hsv, (95, 75, 65), (135, 255, 255)))
+    vivid = cv2.bitwise_or(vivid, cv2.inRange(hsv, (40, 60, 50), (85, 255, 255)))
+    vivid_n, _lbl, vivid_stats, _ = cv2.connectedComponentsWithStats(vivid, connectivity=8)
+    for i in range(1, vivid_n):
+        area = int(vivid_stats[i, cv2.CC_STAT_AREA])
+        if area >= 0.04 * sh * sw:
+            continue
+        x = int(vivid_stats[i, cv2.CC_STAT_LEFT])
+        y = int(vivid_stats[i, cv2.CC_STAT_TOP])
+        ww = int(vivid_stats[i, cv2.CC_STAT_WIDTH])
+        hh = int(vivid_stats[i, cv2.CC_STAT_HEIGHT])
+        patch = vivid[y : y + hh, x : x + ww] > 0
+        dark[y : y + hh, x : x + ww][patch] = 0
+        light[y : y + hh, x : x + ww][patch] = 0
 
-    # White/silver cars: brighter than lot, low saturation.
-    pale_lo = max(int(bg + 20), 125)
-    pale = cv2.inRange(hsv, (0, 0, pale_lo), (180, 70, 255))
+    clear_osd_zones(dark)
+    clear_osd_zones(light)
+    k_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))
+    k_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    dark = cv2.morphologyEx(dark, cv2.MORPH_CLOSE, k_close, iterations=2)
+    dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, k_open, iterations=1)
+    light = cv2.morphologyEx(light, cv2.MORPH_CLOSE, k_close, iterations=2)
+    light = cv2.morphologyEx(light, cv2.MORPH_OPEN, k_open, iterations=1)
 
-    # Black / dark-blue / dark-gray body: low value, low-mid saturation.
-    dark_hi = max(int(bg - 8), 78)
-    dark_body = cv2.inRange(hsv, (0, 0, 0), (180, 90, dark_hi))
+    dark = cv2.resize(dark, (w, h), interpolation=cv2.INTER_NEAREST)
+    light = cv2.resize(light, (w, h), interpolation=cv2.INTER_NEAREST)
+    return clear_osd_zones(dark), clear_osd_zones(light)
 
-    mask = mask_diff
-    mask = cv2.bitwise_or(mask, mask_white)
-    mask = cv2.bitwise_or(mask, mask_dark)
-    mask = cv2.bitwise_or(mask, mask_local)
-    mask = cv2.bitwise_or(mask, mask_darker)
-    mask = cv2.bitwise_or(mask, mask_brighter)
-    mask = cv2.bitwise_or(mask, pale)
-    mask = cv2.bitwise_or(mask, dark_body)
 
-    # Cut dumpsters + grass out of the vehicle mask.
-    vivid_bins = cv2.inRange(hsv, (8, 60, 55), (50, 255, 255))  # yellow/orange
-    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (85, 60, 55), (145, 255, 255)))  # blue
-    vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (35, 50, 40), (95, 255, 255)))  # green lids/grass
-    mask[vivid_bins > 0] = 0
-
-    # Never treat HDIPCAM / resolution OSD as a car blob.
-    clear_osd_zones(mask)
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
-    out = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
-    return clear_osd_zones(out)
-
-def _edge_mask(image):
+def _edge_car_mask(image):
+    """Fallback outline mask when asphalt texture hides tonal car blobs."""
     import cv2
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
-    blur = cv2.GaussianBlur(gray, (9, 9), 0)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
-    closed = cv2.morphologyEx(blur, cv2.MORPH_CLOSE, kernel, iterations=2)
-    edges = cv2.Canny(closed, 40, 120)
-    edges = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7)), iterations=2)
-    return cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
+    h, w = image.shape[:2]
+    target_w = 420
+    scale = target_w / float(max(w, 1))
+    small = cv2.resize(
+        image,
+        (max(int(w * scale), 100), max(int(h * scale), 70)),
+        interpolation=cv2.INTER_AREA,
+    )
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY) if small.ndim == 3 else small
+    blur = cv2.medianBlur(gray, 7)
+    edges = cv2.Canny(blur, 40, 120)
+    edges = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)), iterations=2)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    filled = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=3)
+    clear_osd_zones(filled)
+    return cv2.resize(filled, (w, h), interpolation=cv2.INTER_NEAREST)
 
 
 def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette]:
-    """Return car outlines (contour + box) from a high parking-lot camera."""
+    """Find car shapes (light→dark) and return tight boxes for framing."""
     if image is None or getattr(image, "size", 0) == 0:
         return []
     found: List[VehicleSilhouette] = []
     try:
-        fg = _foreground_mask(image)
+        dark, light = _car_tone_masks(image)
+        # Split dark vs light so silver and black cars stay separate blobs.
         found.extend(
-            _silhouettes_from_mask(fg, image.shape, min_ratio=0.008, max_ratio=0.45, image=image)
+            _silhouettes_from_mask(dark, image.shape, min_ratio=0.015, max_ratio=0.42, image=image)
+        )
+        found.extend(
+            _silhouettes_from_mask(light, image.shape, min_ratio=0.015, max_ratio=0.42, image=image)
         )
     except Exception:
         pass
-    # Edge mask is intentionally skipped: grass and dumpster lids create false cars.
+    if len(found) < 1:
+        try:
+            edges = _edge_car_mask(image)
+            found.extend(
+                _silhouettes_from_mask(
+                    edges, image.shape, min_ratio=0.018, max_ratio=0.40, image=image
+                )
+            )
+        except Exception:
+            pass
     found = [item for item in found if not _is_non_vehicle(image, item.box)]
     if not found:
         return []
-    kept = _nms(found, iou_thresh=0.42)
+    kept = _nms(found, iou_thresh=0.40)
     kept.sort(key=lambda item: item.score, reverse=True)
-    # One clear car is enough for this gate camera.
-    if kept:
-        return kept[:1]
-    return []
+    limit = max(1, min(int(max_cars), 3))
+    return kept[:limit]
 
 
 def find_vehicle_rois(image, max_cars: int = 6) -> List[Box]:

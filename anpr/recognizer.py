@@ -536,7 +536,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
 
     silhouettes = []
     try:
-        silhouettes = find_vehicle_silhouettes(work, max_cars=1)
+        silhouettes = find_vehicle_silhouettes(work, max_cars=3)
         silhouettes = [item for item in silhouettes if not _is_non_vehicle(work, item.box)]
     except Exception:
         silhouettes = []

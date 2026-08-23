@@ -417,6 +417,31 @@ def test_light_and_dark_cars_get_frame():
     assert light_cars, "white/silver car on asphalt must get a frame"
 
 
+def test_wet_lot_finds_silver_and_dark_cars_separately():
+    """Regression: wet asphalt texture used to yield 0 cars / one giant blob."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    rs = numpy.random.RandomState(1)
+    frame = numpy.full((400, 720, 3), 110, dtype=numpy.uint8)
+    frame = numpy.clip(frame.astype(numpy.int16) + rs.randint(-25, 25, frame.shape), 0, 255).astype(
+        numpy.uint8
+    )
+    # Silver SUV left
+    frame[150:290, 50:260] = (145, 148, 152)
+    frame[165:210, 80:230] = (120, 125, 130)
+    # Dark sedan right
+    frame[160:300, 320:560] = (35, 36, 40)
+    frame[180:230, 360:520] = (55, 58, 60)
+
+    cars = find_vehicle_silhouettes(frame, max_cars=5)
+    assert len(cars) >= 2, f"expected silver + dark, got {cars}"
+    centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
+    assert centers[0] < 250, "silver SUV should be on the left"
+    assert centers[-1] > 350, "dark sedan should be on the right"
+
+
 def test_night_scene_zoom_shows_bumper_when_plate_unread(monkeypatch):
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
