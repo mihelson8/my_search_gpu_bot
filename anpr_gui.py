@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r29».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r30».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -875,7 +875,8 @@ class AnprApp:
         if plate and plate != "—":
             body, region = format_plate_parts(plate)
         else:
-            body, region = "А 000 АА", "00"
+            # Do not show a fake valid-looking plate when OCR found nothing.
+            body, region = "— ——— ——", "—"
         self.plate_body_label.config(text=body)
         self.plate_region_label.config(text=region)
         self.category_label_widget.config(

@@ -100,16 +100,19 @@ def _upscale_for_ocr(crop, max_side: int = 560):
         return crop
     h, w = crop.shape[:2]
     mean0 = float(np.mean(crop))
+    tiny = h < 24 or w < 100
     # Night / dark bumper: stretch more so white Type-1 digits reach OCR size.
-    scale_h = max(96 / max(h, 1), 2.4 if mean0 < 60 else 2.0)
-    scale_w = max(260 / max(w, 1), 2.1 if mean0 < 60 else 1.8)
+    target_h = 160 if tiny else 104
+    target_w = 420 if tiny else 300
+    scale_h = max(target_h / max(h, 1), 2.8 if mean0 < 60 else 2.2)
+    scale_w = max(target_w / max(w, 1), 2.5 if mean0 < 60 else 2.0)
     out = cv2.resize(
         crop,
-        (max(int(w * scale_w), 200), max(int(h * scale_h), 72)),
+        (max(int(w * scale_w), target_w), max(int(h * scale_h), target_h)),
         interpolation=cv2.INTER_CUBIC,
     )
     oh, ow = out.shape[:2]
-    side_cap = max_side if mean0 >= 55 else max(max_side, 520)
+    side_cap = max(max_side, 720 if tiny else max_side)
     if max(oh, ow) > side_cap:
         scale = side_cap / float(max(oh, ow))
         out = cv2.resize(
@@ -121,7 +124,11 @@ def _upscale_for_ocr(crop, max_side: int = 560):
     clip = 4.2 if mean0 < 60 else 2.8
     clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8))
     gray = clahe.apply(gray)
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    if tiny:
+        soft = cv2.GaussianBlur(gray, (0, 0), 1.2)
+        gray = cv2.addWeighted(gray, 1.9, soft, -0.9, 0)
+    else:
+        gray = cv2.GaussianBlur(gray, (3, 3), 0)
     # Night: optional invert if plate is still the brightest blob (white on dark bumper).
     if mean0 < 55 and float(np.mean(gray)) < 90:
         gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
@@ -389,6 +396,15 @@ def _collect_plate_regions(image, origin=(0, 0), inside_vehicle: bool = False, m
                 if key in seen_boxes:
                     continue
                 seen_boxes.add(key)
+                # Keep the exact box for drawing, but OCR a larger bumper context.
+                vw, vh = view.shape[1], view.shape[0]
+                pw, ph = max(1, x1 - x0), max(1, y1 - y0)
+                ex, ey = max(4, int(pw * 0.32)), max(4, int(ph * 0.90))
+                ax0, ay0 = max(0, x0 - ex), max(0, y0 - ey)
+                ax1, ay1 = min(vw, x1 + ex), min(vh, y1 + ey)
+                expanded = view[ay0:ay1, ax0:ax1]
+                if expanded is not None and getattr(expanded, "size", 0) > 0:
+                    crop = expanded
                 region_map.append((box, crop))
                 if len(region_map) >= max_regions:
                     return region_map
@@ -406,41 +422,61 @@ def _collect_plate_regions(image, origin=(0, 0), inside_vehicle: bool = False, m
 
 
 def _ocr_regions(region_map, min_confidence: float) -> List[PlateHit]:
+    import cv2
+
     hits: List[PlateHit] = []
     seen = set()
     for bbox, crop in region_map[:3]:
         try:
-            crop = _upscale_for_ocr(crop)
+            prepared = _upscale_for_ocr(crop, max_side=760)
+        except Exception:
+            prepared = crop
+        views = [prepared]
+        try:
+            gray = _to_gray(prepared)
+            # High-contrast second attempt recovers tiny dark glyphs on white.
+            binary = cv2.adaptiveThreshold(
+                gray,
+                255,
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY,
+                31,
+                7,
+            )
+            views.append(binary)
         except Exception:
             pass
-        engine, raw_hits = _run_ocr(crop)
-        if not raw_hits:
-            continue
-        texts = []
-        best_score = 0.0
-        for raw_text, score in raw_hits:
-            if score < min_confidence or is_osd_text(raw_text):
+        for view in views:
+            engine, raw_hits = _run_ocr(view)
+            if not raw_hits:
                 continue
-            texts.append(raw_text)
-            best_score = max(best_score, float(score))
-        if not texts:
-            continue
-        raw_joined = " ".join(texts)
-        for plate in combine_type1_parts(texts):
-            if not _plate_is_meaningful(plate) or plate in seen:
+            texts = []
+            best_score = 0.0
+            for raw_text, score in raw_hits:
+                if score < min_confidence or is_osd_text(raw_text):
+                    continue
+                texts.append(raw_text)
+                best_score = max(best_score, float(score))
+            if not texts:
                 continue
-            seen.add(plate)
-            hits.append(
-                PlateHit(
-                    plate=plate,
-                    confidence=best_score,
-                    raw_text=raw_joined,
-                    bbox=bbox,
-                    engine=engine,
+            raw_joined = " ".join(texts)
+            for plate in combine_type1_parts(texts) or extract_plates(raw_joined):
+                if not _plate_is_meaningful(plate) or plate in seen:
+                    continue
+                seen.add(plate)
+                hits.append(
+                    PlateHit(
+                        plate=plate,
+                        confidence=best_score,
+                        raw_text=raw_joined,
+                        bbox=bbox,
+                        engine=engine,
+                    )
                 )
-            )
-            # One good plate from this crop is enough — stop early.
-            break
+                # One good plate from this crop is enough — stop early.
+                break
+            if hits:
+                break
         if hits:
             break
     hits.sort(key=lambda item: item.confidence, reverse=True)
@@ -653,6 +689,19 @@ def recognize_scene(image, min_confidence: float = 0.35):
                         break
             if near_cars:
                 global_regions = near_cars
+            # OCR the candidate nearest a car's lower center first.
+            def _plate_position_score(item):
+                box = item[0]
+                cx, cy = (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
+                scores = []
+                for car in silhouettes:
+                    bx0, by0, bx1, by1 = car.box
+                    bw, bh = max(1, bx1 - bx0), max(1, by1 - by0)
+                    tx, ty = (bx0 + bx1) / 2.0, by0 + bh * 0.72
+                    scores.append(abs(cx - tx) / bw + abs(cy - ty) / bh)
+                return min(scores) if scores else 99.0
+
+            global_regions.sort(key=_plate_position_score)
     except Exception:
         global_regions = []
 

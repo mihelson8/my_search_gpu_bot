@@ -381,6 +381,47 @@ def test_direct_ocr_bbox_is_bound_to_exact_plate_region():
     assert _plate_is_meaningful("А123ВС77")
 
 
+def test_plate_region_keeps_exact_box_but_expands_ocr_context(monkeypatch):
+    numpy = pytest.importorskip("numpy")
+    from anpr import recognizer
+
+    frame = numpy.zeros((120, 240, 3), dtype=numpy.uint8)
+    exact = (90, 70, 150, 82)
+    monkeypatch.setattr(
+        recognizer, "_iter_search_views", lambda image, origin, inside: [((0, 0), image)]
+    )
+    monkeypatch.setattr(
+        recognizer,
+        "find_plate_regions",
+        lambda view, max_candidates=3: [(exact, view[70:82, 90:150])],
+    )
+
+    regions = recognizer._collect_plate_regions(frame)
+    assert regions[0][0] == exact
+    assert regions[0][1].shape[0] > 12
+    assert regions[0][1].shape[1] > 60
+
+
+def test_tiny_plate_ocr_retries_high_contrast_view(monkeypatch):
+    numpy = pytest.importorskip("numpy")
+    from anpr import recognizer
+
+    crop = numpy.full((10, 55, 3), 180, dtype=numpy.uint8)
+    calls = []
+
+    def fake_run(view):
+        calls.append(view)
+        return ("test", [("не номер", 0.9)]) if len(calls) == 1 else (
+            "test",
+            [("А123ВС77", 0.91)],
+        )
+
+    monkeypatch.setattr(recognizer, "_run_ocr", fake_run)
+    hits = recognizer._ocr_regions([((10, 20, 65, 30), crop)], 0.3)
+    assert len(calls) == 2
+    assert hits and hits[0].plate == "А123ВС77"
+
+
 def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
