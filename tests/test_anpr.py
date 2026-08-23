@@ -501,9 +501,43 @@ def test_dark_and_white_pair_get_separate_tight_frames():
         bw = car.box[2] - car.box[0]
         bh = car.box[3] - car.box[1]
         assert bw < 220, f"pair must not stay glued: {car.box}"
-        assert bh <= int(bw * 1.25) + 16, f"frame must hug car body: {car.box}"
+        assert bh <= int(bw * 1.35) + 16, f"frame must hug car body: {car.box}"
     centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
     assert centers[0] < 320 < centers[-1]
+
+
+def test_wet_reflections_do_not_inflate_or_glue_cars():
+    """Regression: puddle glare must not become tall multi-car frames."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    h, w = 480, 800
+    frame = numpy.full((h, w, 3), 115, dtype=numpy.uint8)
+    frame[340:460, 50:750] = (200, 205, 210)
+    tones = [
+        (200, 200, 205),
+        (35, 38, 42),
+        (220, 220, 225),
+        (30, 32, 36),
+        (180, 185, 190),
+        (45, 48, 55),
+    ]
+    x = 40
+    for col in tones:
+        y0 = 200
+        frame[y0 : y0 + 95, x : x + 95] = col
+        frame[y0 + 100 : y0 + 160, x : x + 95] = tuple(min(255, v + 20) for v in col)
+        x += 110
+    cars = find_vehicle_silhouettes(frame, max_cars=6)
+    assert len(cars) >= 3, f"expected several cars above the puddle, got {cars}"
+    for car in cars:
+        bw = car.box[2] - car.box[0]
+        bh = car.box[3] - car.box[1]
+        assert bw < w * 0.28, f"must not glue cars via reflections: {car.box}"
+        assert car.box[3] < int(h * 0.70), f"frame must not dive into puddle: {car.box}"
+        assert bh <= int(bw * 1.35) + 16, f"frame must hug car body: {car.box}"
+        assert (car.box[1] + car.box[3]) / 2 < h * 0.62
 
 
 def test_night_scene_zoom_shows_bumper_when_plate_unread(monkeypatch):

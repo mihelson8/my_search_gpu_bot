@@ -210,12 +210,15 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
 
 
 # High parking cam: blobs wider than this must be *attempted* to split.
-_SPLIT_ATTEMPT_W_RATIO = 0.18
+_SPLIT_ATTEMPT_W_RATIO = 0.16
 # Absolute reject — almost certainly several cars or the whole lot.
 _MAX_GROUP_W_RATIO = 0.62
 # Keep frame tight to the body; bumper only needs a thin strip for the plate.
-_BUMPER_EXPAND_RATIO = 0.22
-_MAX_BOX_ASPECT_H_OVER_W = 1.20
+_BUMPER_EXPAND_RATIO = 0.20
+_MAX_BOX_ASPECT_H_OVER_W = 1.15
+# Cars sit above the wet foreground on a typical Seetong parking cam.
+_PARKING_MASK_BOTTOM = 0.78
+_PARKING_FRAME_BOTTOM = 0.60
 
 
 def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | None = None) -> bool:
@@ -225,9 +228,13 @@ def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | No
     bw, bh = max(1, x1 - x0), max(1, y1 - y0)
     area_ratio = (bw * bh) / float(max(h * w, 1))
     aspect = bw / float(bh)
+    cy = (y0 + y1) / 2.0
     if bw < 55 or bh < 40:
         return True
     if area_ratio < 0.015:
+        return True
+    # Puddle / reflection blobs sit too low in the frame.
+    if cy > h * 0.72 or (y1 > int(h * 0.85) and y0 > int(h * 0.55)):
         return True
     # Reject whole-frame / multi-car mega-blobs (group must never be one frame).
     if area_ratio > 0.50 or bw > int(w * 0.85):
@@ -235,7 +242,9 @@ def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | No
     # Wide+flat = parking row glued together.
     if _looks_like_car_group(box, w, min_width=max(48, int(w * 0.055)), frame_h=h):
         return True
-    if aspect < 0.60 or aspect > 3.8:
+    if aspect < 0.65 or aspect > 4.0:
+        return True
+    if bh > int(bw * 1.40) + 16 and y1 > int(h * 0.75):
         return True
     if score < 0.16:
         return True
@@ -343,13 +352,14 @@ def _color_transition_spans(image, box: Box, min_width: int) -> list:
         return []
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
     col = gray.mean(axis=0).astype(np.float32)
-    k = max(5, min(25, (bw // 28) | 1))
+    # Light blur only — strong blur erases the dark|light car boundary.
+    k = max(3, min(9, (bw // 40) | 1))
     col = cv2.GaussianBlur(col.reshape(1, -1), (k, 1), 0).ravel()
     grad = np.abs(np.diff(col))
     if grad.size < min_width:
         return []
     # Absolute jump — percentile alone fires on windshield reflections.
-    thr = max(28.0, float(np.percentile(grad, 92)))
+    thr = max(14.0, float(np.percentile(grad, 85)))
     cuts = []
     i = min_width
     while i < bw - min_width:
@@ -361,7 +371,7 @@ def _color_transition_spans(image, box: Box, min_width: int) -> list:
             # Real dark|light pair: plateaus on each side must differ a lot.
             left = float(col[max(0, cut - min_width) : cut].mean())
             right = float(col[cut : min(bw, cut + min_width)].mean())
-            if grad[j] >= thr and abs(left - right) >= 40.0:
+            if grad[j] >= thr and abs(left - right) >= 35.0:
                 cuts.append(cut)
                 i = cut + min_width
                 continue
@@ -417,34 +427,22 @@ def _looks_like_car_group(box: Box, frame_w: int, col=None, min_width: int = 55,
     x0, y0, x1, y1 = [int(v) for v in box]
     bw = max(1, x1 - x0)
     bh = max(1, y1 - y0)
-    # separate_row clears the bumper band — restore height for close-up checks only.
-    bh_eff = max(bh, int(bh * 1.25) + 10)
+    # separate_row / frame clamp shorten height — restore for geometry checks.
+    bh_eff = max(bh, int(bh * 1.25) + 10, int(bw * 0.48))
     if frame_h:
         bh_eff = min(bh_eff, max(1, frame_h - y0))
-    aspect_raw = bw / float(bh)
     aspect_eff = bw / float(bh_eff)
     # Close-up single car: fills much of a small/medium frame.
-    if frame_h and bw >= int(frame_w * 0.42) and bh_eff >= int(frame_h * 0.26) and aspect_eff < 3.1:
+    if frame_h and bw >= int(frame_w * 0.40) and bh_eff >= int(frame_h * 0.22) and aspect_eff < 2.6:
         return False
-    if frame_h and bh_eff >= int(frame_h * 0.34) and bw <= int(frame_w * 0.72) and aspect_eff < 2.9:
+    if frame_h and bh_eff >= int(frame_h * 0.32) and bw <= int(frame_w * 0.72) and aspect_eff < 2.5:
         return False
-    if bw >= int(frame_w * 0.70) and aspect_raw >= 2.4:
+    # Still wider than ~2.3 car-heights after restoring body height → several cars.
+    if bw >= int(frame_w * 0.22) and aspect_eff >= 2.30:
         return True
-    if bw >= int(frame_w * 0.34) and aspect_raw >= 2.3:
-        return True
-    if bw >= int(frame_w * 0.28) and aspect_raw >= 2.8:
-        return True
-    # Parking-row view: use RAW height (already bumper-trimmed) so 2 glued cars stay "wide".
-    if (
-        frame_h
-        and frame_w >= 480
-        and bh < int(frame_h * 0.34)
-        and bw >= int(frame_w * 0.16)
-        and aspect_raw >= 1.45
-    ):
+    if bw >= int(frame_w * 0.34) and aspect_eff >= 2.05:
         return True
     if col is not None and len(col) >= min_width * 2:
-        # Only true gaps count — peak/valley dips appear inside a single windshield.
         act = _spans_from_active(col, min_width=min_width)
         if len(act) >= 2:
             return True
@@ -467,11 +465,16 @@ def _column_split_boxes(
     if col is None:
         return [box]
 
-    # True gaps in the mask are always safe to cut.
+    # True gaps in the mask are safe only when they separate solid bodies.
     spans = _spans_from_active(col, min_width=min_width)
     is_group = _looks_like_car_group(
         box, frame_w, col=col, min_width=min_width, frame_h=frame_h
     )
+    if len(spans) >= 2:
+        covered = sum(max(0, b - a) for a, b in spans)
+        # Hollow single car (windshield hole) covers little of the blob width.
+        if covered < int(bw * 0.55) and not is_group:
+            spans = []
     # Dark|light neighbours: cut on a sharp brightness jump even without a mask gap.
     if len(spans) < 2:
         color_spans = _color_transition_spans(image, box, min_width=min_width)
@@ -584,7 +587,7 @@ def _tighten_box_to_mask(mask, box: Box) -> Box:
 
 
 def _include_bumper_plate(image, box: Box, max_extra: int) -> Box:
-    """Grow the bottom slightly if a white plate / dark bumper sits just under the body."""
+    """Grow the bottom slightly for a Type-1 plate — never chase wet-asphalt glare."""
     import cv2
     import numpy as np
 
@@ -593,23 +596,55 @@ def _include_bumper_plate(image, box: Box, max_extra: int) -> Box:
     h, w = image.shape[:2]
     x0, y0, x1, y1 = [int(v) for v in box]
     x0, x1 = max(0, x0), min(w, x1)
-    if x1 - x0 < 20:
+    bw = max(1, x1 - x0)
+    if bw < 20:
         return box
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
-    limit = min(h, y1 + max_extra)
+    limit = min(h, y1 + max_extra, int(h * _PARKING_MASK_BOTTOM) + 8)
     best = y1
     miss = 0
     for y in range(y1, limit):
         row = gray[y, x0:x1]
         bright = float((row >= 195).mean())
         dark = float((row <= 70).mean())
-        # Plate band or bumper fascia — stop on asphalt texture.
-        if bright >= 0.18 or dark >= 0.40:
+        # Full-width mirror / puddle glare — stop immediately.
+        if bright >= 0.78:
+            on = (row >= 195).astype(np.uint8)
+            # Count longest bright run; puddles span almost the whole box.
+            longest = 0
+            run = 0
+            for v in on:
+                if v:
+                    run += 1
+                    longest = max(longest, run)
+                else:
+                    run = 0
+            if longest >= int(0.78 * bw):
+                break
+        plate_like = False
+        if 0.10 <= bright <= 0.85:
+            # Plate is a compact bright run, not a puddle sheet.
+            on = (row >= 195).astype(np.uint8)
+            runs = []
+            start = None
+            for i, v in enumerate(on):
+                if v and start is None:
+                    start = i
+                elif not v and start is not None:
+                    runs.append(i - start)
+                    start = None
+            if start is not None:
+                runs.append(len(on) - start)
+            longest = max(runs) if runs else 0
+            if 0.10 * bw <= longest <= 0.85 * bw:
+                plate_like = True
+        bumper_like = dark >= 0.45 and bright < 0.40
+        if plate_like or bumper_like:
             best = y + 1
             miss = 0
         else:
             miss += 1
-            if miss >= 4 and y > y1 + 6:
+            if miss >= 3 and y > y1 + 4:
                 break
     return (x0, y0, x1, best)
 
@@ -626,17 +661,21 @@ def _fit_box_to_car_body(mask, box: Box, full_mask=None, image=None) -> Box:
     if x1 - x0 < 20 or y1 - y0 < 20:
         return (x0, y0, x1, y1)
 
-    x0, y0, x1, y1 = _tighten_dense_xy(src, (x0, y0, x1, y1), row_thr=0.12, col_thr=0.10)
+    x0, y0, x1, y1 = _tighten_dense_xy(src, (x0, y0, x1, y1), row_thr=0.14, col_thr=0.12)
     bw = max(1, x1 - x0)
     body_h = max(1, y1 - y0)
-    # Modest default bumper — plate hunt may extend a bit more.
-    bump = max(10, int(body_h * _BUMPER_EXPAND_RATIO))
+    bump = max(8, int(body_h * _BUMPER_EXPAND_RATIO))
     y1 = min(h, y1 + bump)
-    box = _include_bumper_plate(image, (x0, y0, x1, y1), max_extra=max(18, int(body_h * 0.45)))
+    box = _include_bumper_plate(image, (x0, y0, x1, y1), max_extra=max(16, int(body_h * 0.40)))
     x0, y0, x1, y1 = box
     max_h = max(int(bw * _MAX_BOX_ASPECT_H_OVER_W), 48)
     if (y1 - y0) > max_h:
         y1 = y0 + max_h
+    # Clamp out of the wet foreground for high parking-row cameras.
+    if y0 < int(h * 0.40) and (x1 - x0) < int(w * 0.55):
+        y1 = min(y1, int(h * _PARKING_FRAME_BOTTOM))
+    if y1 - y0 < 40:
+        y1 = min(h, y0 + 40)
     return (x0, y0, x1, y1)
 
 
@@ -653,8 +692,8 @@ def _tighten_dense_xy(mask, box: Box, row_thr: float = 0.12, col_thr: float = 0.
         return (x0, y0, x1, y1)
     row_frac = roi.mean(axis=1)
     col_frac = roi.mean(axis=0)
-    r_thr = max(row_thr, float(row_frac.max()) * 0.28)
-    c_thr = max(col_thr, float(col_frac.max()) * 0.22)
+    r_thr = max(row_thr, float(row_frac.max()) * 0.30)
+    c_thr = max(col_thr, float(col_frac.max()) * 0.24)
     rows = np.where(row_frac >= r_thr)[0]
     cols = np.where(col_frac >= c_thr)[0]
     if rows.size == 0 or cols.size == 0:
@@ -668,17 +707,16 @@ def _tighten_dense_xy(mask, box: Box, row_thr: float = 0.12, col_thr: float = 0.
 
 
 def _separate_row_mask(mask):
-    """Clear near shadow carpet; break thin bridges between adjacent cars."""
+    """Clear wet foreground; break thin bridges between adjacent cars."""
     import cv2
 
     if mask is None or getattr(mask, "size", 0) == 0:
         return mask
     out = mask.copy()
     h, w = out.shape[:2]
-    # Clear far-foreground puddles/shadows that inflate the frame downward.
-    out[int(h * 0.70) : h, :] = 0
-    # Narrow vertical open — wide kernels punch holes through a single body.
-    k_bridge = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 23))
+    # Hard cut: deep foreground puddle reflections are not car bodies.
+    out[int(h * _PARKING_MASK_BOTTOM) : h, :] = 0
+    k_bridge = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 17))
     return cv2.morphologyEx(out, cv2.MORPH_OPEN, k_bridge, iterations=1)
 
 
@@ -702,16 +740,22 @@ def _silhouettes_from_mask(
         if bw < 55 or bh < 40:
             return
         aspect = bw / float(bh)
+        cy = (y0 + y1) / 2.0
+        # Puddle-only / reflection frames (center deep in the wet foreground).
+        if cy > h * 0.70 and y0 > int(h * 0.48):
+            return
+        if bh > int(bw * 1.35) + 12 and y1 > int(h * 0.72):
+            return
         # Never accept a multi-car group as one detection (width alone is OK for close-ups).
         if _looks_like_car_group((x0, y0, x1, y1), w, min_width=max(48, int(w * 0.055)), frame_h=h):
             return
         if bw > int(w * 0.82):
             return
         ratio = (bw * bh) / frame_area
-        if ratio < min_ratio or ratio > min(max_ratio, 0.45):
+        if ratio < min_ratio or ratio > min(max_ratio, 0.42):
             return
         # High-angle front view can look nearly square / slightly tall.
-        if not (0.70 <= aspect <= 3.4):
+        if not (0.70 <= aspect <= 4.0):
             return
         if image is not None and _is_non_vehicle(image, box):
             return
@@ -728,6 +772,9 @@ def _silhouettes_from_mask(
         x, y, cw, ch = cv2.boundingRect(contour)
         if cw < 55 or ch < 40:
             continue
+        # Contours that live mostly in the wet foreground are reflections.
+        if (y + ch / 2.0) > h * 0.70 and y > int(h * 0.50):
+            continue
         area = cw * ch
         ratio = area / frame_area
         pad_x, pad_y = int(cw * 0.02), int(ch * 0.02)
@@ -738,10 +785,10 @@ def _silhouettes_from_mask(
             min(h, y + ch + pad_y),
         )
         # Any blob that may be several cars must be split before framing.
-        min_w = max(48, int(w * 0.055))
+        min_w = max(44, int(w * 0.05))
         need_split = (
             cw > int(w * _SPLIT_ATTEMPT_W_RATIO)
-            or (cw >= max(140, int(w * 0.28)) and cw >= int(ch * 1.55))
+            or (cw >= max(120, int(w * 0.22)) and cw >= int(ch * 1.45))
             or (ratio > max_ratio and cw > int(ch * 1.8))
             or _looks_like_car_group(box, w, min_width=min_w, frame_h=h)
         )
@@ -905,6 +952,16 @@ def _car_tone_masks(image):
 
     clear_osd_zones(dark)
     clear_osd_zones(light)
+    # Kill wet-asphalt specular glare in the foreground (reflections ≠ cars).
+    sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
+    yy = np.arange(sh, dtype=np.int32)[:, None]
+    wet = (sat < 35) & (val > 180) & (yy >= int(sh * 0.64))
+    dark[wet] = 0
+    light[wet] = 0
+    # Hard parking-band cut on the small masks before upscale.
+    dark[int(sh * _PARKING_MASK_BOTTOM) :, :] = 0
+    light[int(sh * _PARKING_MASK_BOTTOM) :, :] = 0
     # Mild close — large kernels glue a packed parking row into one blob.
     k_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     k_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -915,6 +972,8 @@ def _car_tone_masks(image):
 
     dark = cv2.resize(dark, (w, h), interpolation=cv2.INTER_NEAREST)
     light = cv2.resize(light, (w, h), interpolation=cv2.INTER_NEAREST)
+    dark[int(h * _PARKING_MASK_BOTTOM) :, :] = 0
+    light[int(h * _PARKING_MASK_BOTTOM) :, :] = 0
     return clear_osd_zones(dark), clear_osd_zones(light)
 
 
