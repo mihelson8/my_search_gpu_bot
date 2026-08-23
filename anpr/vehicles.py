@@ -172,10 +172,13 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
     score -= vivid_ratio * 0.55
     score -= bin_color_ratio * 0.90
     score -= green_ratio * 0.80
-    # White / silver cars are common here.
-    if mean_sat < 40 and mean_val >= 110:
-        score += 0.14
-    elif mean_sat < 50:
+    # White / silver cars.
+    if mean_sat < 45 and mean_val >= 125:
+        score += 0.16
+    # Black / dark-blue / dark-gray cars (high camera on asphalt).
+    elif mean_sat < 55 and mean_val <= 85:
+        score += 0.16
+    elif mean_sat < 55:
         score += 0.05
     crop = image[y0:y1, x0:x1]
     if crop is not None and getattr(crop, "size", 0) > 0:
@@ -217,7 +220,7 @@ def _silhouettes_from_mask(
         cy = y + ch / 2.0
         if cy < h * 0.20:
             continue
-        pad_x, pad_y = int(cw * 0.08), int(ch * 0.10)
+        pad_x, pad_y = int(cw * 0.04), int(ch * 0.05)
         box = (
             max(0, x - pad_x),
             max(0, y - pad_y),
@@ -239,7 +242,7 @@ def _silhouettes_from_mask(
 
 
 def _foreground_mask(image):
-    """Pixels that differ from the parking-lot background (asphalt)."""
+    """Pixels that differ from parking asphalt — white through black car bodies."""
     import cv2
     import numpy as np
 
@@ -257,33 +260,43 @@ def _foreground_mask(image):
 
     bg = float(np.median(gray))
     diff = cv2.absdiff(gray, np.full_like(gray, int(np.clip(bg, 0, 255))))
-    diff_cut = 14 if bg >= 110 else 22
+    diff_cut = 12 if bg >= 100 else 18
     _, mask_diff = cv2.threshold(diff, diff_cut, 255, cv2.THRESH_BINARY)
 
     val = hsv[:, :, 2]
-    white_cut = max(int(bg + 18), 125)
-    dark_cut = min(int(bg - 14), 95)
+    white_cut = max(int(bg + 16), 120)
+    dark_cut = min(int(bg - 12), 100)
     _, mask_white = cv2.threshold(val, white_cut, 255, cv2.THRESH_BINARY)
     _, mask_dark = cv2.threshold(val, max(dark_cut, 1), 255, cv2.THRESH_BINARY_INV)
 
     local = cv2.GaussianBlur(gray, (31, 31), 0)
     local_diff = cv2.absdiff(gray, local)
-    _, mask_local = cv2.threshold(local_diff, 8 if bg < 110 else 12, 255, cv2.THRESH_BINARY)
+    _, mask_local = cv2.threshold(local_diff, 7 if bg < 110 else 10, 255, cv2.THRESH_BINARY)
 
-    # White/silver cars: brighter than lot asphalt, low saturation.
-    pale_lo = max(int(bg + 25), 135)
-    pale = cv2.inRange(hsv, (0, 0, pale_lo), (180, 55, 255))
+    # Locally darker than asphalt — catches black cars even when lot is mid-gray.
+    darker = np.clip(local.astype(np.int16) - gray.astype(np.int16), 0, 255).astype(np.uint8)
+    _, mask_darker = cv2.threshold(darker, 10, 255, cv2.THRESH_BINARY)
 
-    if bg >= 100:
-        _, strong_diff = cv2.threshold(diff, max(diff_cut + 10, 24), 255, cv2.THRESH_BINARY)
-        mask = cv2.bitwise_or(mask_local, mask_dark)
-        mask = cv2.bitwise_or(mask, strong_diff)
-        mask = cv2.bitwise_or(mask, pale)
-    else:
-        mask = cv2.bitwise_or(mask_diff, mask_white)
-        mask = cv2.bitwise_or(mask, mask_dark)
-        mask = cv2.bitwise_or(mask, mask_local)
-        mask = cv2.bitwise_or(mask, pale)
+    # Locally brighter — white / silver / beige bodies.
+    brighter = np.clip(gray.astype(np.int16) - local.astype(np.int16), 0, 255).astype(np.uint8)
+    _, mask_brighter = cv2.threshold(brighter, 12, 255, cv2.THRESH_BINARY)
+
+    # White/silver cars: brighter than lot, low saturation.
+    pale_lo = max(int(bg + 20), 125)
+    pale = cv2.inRange(hsv, (0, 0, pale_lo), (180, 70, 255))
+
+    # Black / dark-blue / dark-gray body: low value, low-mid saturation.
+    dark_hi = max(int(bg - 8), 78)
+    dark_body = cv2.inRange(hsv, (0, 0, 0), (180, 90, dark_hi))
+
+    mask = mask_diff
+    mask = cv2.bitwise_or(mask, mask_white)
+    mask = cv2.bitwise_or(mask, mask_dark)
+    mask = cv2.bitwise_or(mask, mask_local)
+    mask = cv2.bitwise_or(mask, mask_darker)
+    mask = cv2.bitwise_or(mask, mask_brighter)
+    mask = cv2.bitwise_or(mask, pale)
+    mask = cv2.bitwise_or(mask, dark_body)
 
     # Cut dumpsters + grass out of the vehicle mask.
     vivid_bins = cv2.inRange(hsv, (8, 60, 55), (50, 255, 255))  # yellow/orange
@@ -506,48 +519,32 @@ def cut_away_background(image, vehicles: Sequence[VehicleLike]):
     return crop_to_vehicles(masked, vehicles)
 
 
-def draw_corner_frame(vis, box: Box, color=(40, 220, 90), thickness: int = 3, corner: int = 28) -> None:
-    """Draw an L-corner bounding frame around the detected car."""
+# Bright azure frame like the operator reference: tight rectangle around the whole car.
+CAR_FRAME_BGR = (255, 175, 35)
+
+
+def draw_corner_frame(vis, box: Box, color=CAR_FRAME_BGR, thickness: int = 2, corner: int = 28) -> None:
+    """Draw a tight rectangle around the car (reference-style blue frame)."""
     import cv2
 
     x0, y0, x1, y1 = [int(v) for v in box]
     if x1 - x0 < 12 or y1 - y0 < 12:
         return
-    length = max(12, min(corner, (x1 - x0) // 3, (y1 - y0) // 3))
-    # top-left
-    cv2.line(vis, (x0, y0), (x0 + length, y0), color, thickness)
-    cv2.line(vis, (x0, y0), (x0, y0 + length), color, thickness)
-    # top-right
-    cv2.line(vis, (x1, y0), (x1 - length, y0), color, thickness)
-    cv2.line(vis, (x1, y0), (x1, y0 + length), color, thickness)
-    # bottom-left
-    cv2.line(vis, (x0, y1), (x0 + length, y1), color, thickness)
-    cv2.line(vis, (x0, y1), (x0, y1 - length), color, thickness)
-    # bottom-right
-    cv2.line(vis, (x1, y1), (x1 - length, y1), color, thickness)
-    cv2.line(vis, (x1, y1), (x1, y1 - length), color, thickness)
-    cv2.rectangle(vis, (x0, y0), (x1, y1), color, 1)
+    cv2.rectangle(vis, (x0, y0), (x1, y1), color, thickness)
 
 
 def draw_vehicle_shape(vis, item: VehicleLike, label: str = "АВТО") -> None:
-    """Draw car silhouette contour + detection frame at the moment the car is found."""
+    """Draw a tight blue rectangle around the whole car (light or dark body)."""
     import cv2
 
-    contour = _as_contour(item)
     x0, y0, x1, y1 = _as_box(item)
-    color = (40, 220, 90)
-    if contour is not None and len(contour):
-        cv2.drawContours(vis, [contour], -1, color, 2)
-        # Soft fill so the shape of the car is obvious without hiding the plate.
-        overlay = vis.copy()
-        cv2.drawContours(overlay, [contour], -1, (30, 140, 60), thickness=-1)
-        cv2.addWeighted(overlay, 0.18, vis, 0.82, 0, vis)
-        cv2.drawContours(vis, [contour], -1, color, 2)
-    draw_corner_frame(vis, (x0, y0, x1, y1), color=color, thickness=3)
+    color = CAR_FRAME_BGR
+    # Full solid rectangle — matches the operator reference frame.
+    cv2.rectangle(vis, (x0, y0), (x1, y1), color, 2)
     text = label or "АВТО"
     text_y = max(22, y0 - 8)
-    cv2.rectangle(vis, (x0, text_y - 18), (x0 + 8 + 12 * len(text), text_y + 4), (16, 60, 28), -1)
-    cv2.putText(vis, text, (x0 + 4, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (220, 255, 220), 2)
+    cv2.rectangle(vis, (x0, text_y - 18), (x0 + 8 + 12 * len(text), text_y + 4), (40, 30, 10), -1)
+    cv2.putText(vis, text, (x0 + 4, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (220, 240, 255), 2)
 
 
 def draw_type1_plate(vis, box: Box, plate: str = "") -> None:
@@ -582,10 +579,7 @@ def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> obje
             continue
         real_vehicles.append(item)
     if real_vehicles:
-        mask = silhouette_mask(vis.shape, real_vehicles, dilate=15)
-        # Mild dim only — heavy 0.35 made false OSD frames look like a black screen.
-        dim = (vis.astype(np.float32) * 0.72).astype(vis.dtype)
-        vis = np.where(mask[:, :, None] > 0, vis, dim)
+        # Keep the lot bright; the blue rectangle is the only highlight.
         for index, item in enumerate(real_vehicles):
             title = "АВТО" if index == 0 else f"АВТО {index + 1}"
             draw_vehicle_shape(vis, item, label=title)
@@ -638,9 +632,9 @@ def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates:
         plate_focus = False
 
     h, w = crop.shape[:2]
-    draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=(40, 220, 90), thickness=4, corner=40)
+    draw_corner_frame(crop, (8, 8, w - 8, h - 8), color=CAR_FRAME_BGR, thickness=3)
     title = "НОМЕР КРУПНО" if plate_focus else "АВТО"
-    cv2.putText(crop, title, (16, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (40, 220, 90), 2)
+    cv2.putText(crop, title, (16, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.85, CAR_FRAME_BGR, 2)
     for hit in plates:
         plate = getattr(hit, "plate", "") or ""
         if not plate:

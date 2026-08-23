@@ -390,11 +390,31 @@ def test_annotate_scene_draws_shape_and_frame():
     annotated = annotate_scene(frame, [silhouette], [])
     assert annotated is not None
     assert annotated.shape == frame.shape
-    # Corner frame pixels near the box should be greenish, not plain asphalt gray.
+    # Tight blue reference frame: B channel dominates on the box edge.
     corner = annotated[120, 80]
-    assert int(corner[1]) > int(corner[0])  # G > B for green frame
+    assert int(corner[0]) > int(corner[1])  # B > G for azure frame
     draw_corner_frame(frame.copy(), (10, 10, 100, 80))
     draw_vehicle_shape(frame.copy(), silhouette, label="АВТО")
+
+
+def test_light_and_dark_cars_get_frame():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    asphalt = numpy.full((240, 320, 3), 105, dtype=numpy.uint8)
+
+    dark = asphalt.copy()
+    dark[110:200, 60:250] = (28, 30, 32)
+    dark[120:155, 90:220] = (55, 58, 60)
+    dark_cars = find_vehicle_silhouettes(dark, max_cars=3)
+    assert dark_cars, "dark car on asphalt must get a frame"
+
+    light = asphalt.copy()
+    light[110:200, 60:250] = (210, 212, 215)
+    light[120:155, 90:220] = (185, 188, 190)
+    light_cars = find_vehicle_silhouettes(light, max_cars=3)
+    assert light_cars, "white/silver car on asphalt must get a frame"
 
 
 def test_recognize_scene_keeps_detection_frame_on_preview():
