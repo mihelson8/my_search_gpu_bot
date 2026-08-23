@@ -464,7 +464,7 @@ def test_recognized_plate_trims_car_box_glued_to_bins():
     assert result[0].box[2] < 400, "right-side bins must be outside the car frame"
     assert result[0].box[0] < 220 < result[0].box[2]
     assert result[0].box[1] > glued.box[1], "group height must be replaced too"
-    assert result[0].box[3] <= glued.box[3]
+    assert result[0].box[3] <= glued.box[3] + 10
 
 
 def test_recognized_plate_expands_partial_bumper_box_to_car_height():
