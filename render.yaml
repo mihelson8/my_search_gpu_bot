@@ -1,6 +1,6 @@
-# Blueprint для развёртывания ветеринарного бота (vet_bot.py) на Render.
+# Blueprint для развёртывания ботов на Render.
 # Как использовать: Render Dashboard -> New -> Blueprint -> выбрать этот репозиторий.
-# Токен задаётся вручную в интерфейсе, в репозиторий он не попадает.
+# Токены задаются вручную в интерфейсе, в репозиторий не попадают.
 services:
   - type: web
     name: vet-triage-bot
@@ -13,6 +13,25 @@ services:
     envVars:
       # Токен от @BotFather: sync false означает "спросить при создании сервиса"
       - key: VET_BOT_TOKEN
+        sync: false
+      - key: PORT
+        value: 10000
+  - type: web
+    name: max-translator-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile.maxbot
+    plan: free
+    region: frankfurt
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: MAX_BOT_TOKEN
+        sync: false
+      - key: MAX_MODE
+        value: polling
+      - key: MAX_WEBHOOK_URL
+        sync: false
+      - key: MAX_WEBHOOK_SECRET
         sync: false
       - key: PORT
         value: 10000
