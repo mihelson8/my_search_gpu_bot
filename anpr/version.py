@@ -1,4 +1,4 @@
 """App build id shown in the window title so updates are obvious."""
 
-APP_VERSION = "2026.08.23-r23"
+APP_VERSION = "2026.08.23-r24"
 APP_TITLE = f"Автономера · Seetong · {APP_VERSION}"
