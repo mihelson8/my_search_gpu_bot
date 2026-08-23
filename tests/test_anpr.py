@@ -493,7 +493,7 @@ def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
     frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
     frame[170:190, 120:200] = 230
 
-    def fake_ocr_crop(crop, origin_box, min_confidence):
+    def fake_ocr_regions(region_map, min_confidence):
         return [
             PlateHit(
                 plate="К900НН03",
@@ -504,7 +504,12 @@ def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
             )
         ]
 
-    monkeypatch.setattr(recognizer, "_ocr_crop_direct", fake_ocr_crop)
+    monkeypatch.setattr(recognizer, "_ocr_regions", fake_ocr_regions)
+    monkeypatch.setattr(
+        recognizer,
+        "_collect_plate_regions",
+        lambda *a, **k: [((120, 170, 200, 190), frame[170:190, 120:200])],
+    )
     monkeypatch.setattr("anpr.vehicles.find_vehicle_silhouettes", lambda *a, **k: [])
     hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
     assert hits and hits[0].plate == "К900НН03"
@@ -966,6 +971,20 @@ def test_ocr_tries_rotated_views_for_oblique_plate(monkeypatch):
     hits = recognizer._ocr_regions([((20, 30, 90, 48), crop)], 0.3)
     assert len(calls) >= 3, "oblique plates must retry rotated crops"
     assert hits and hits[0].plate == "М454НО01"
+
+
+def test_wheel_and_puddle_scrap_is_not_a_car():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import _is_non_vehicle, _looks_like_wheel_or_stain
+
+    frame = numpy.full((400, 720, 3), 120, dtype=numpy.uint8)
+    # Compact dark wheel + wet stain at the van's front-left corner.
+    frame[250:320, 80:160] = (35, 36, 38)
+    frame[300:330, 70:170] = (170, 175, 180)
+    box = (80, 250, 160, 330)
+    assert _looks_like_wheel_or_stain(frame, box)
+    assert _is_non_vehicle(frame, box)
 
 
 def test_high_angle_dark_car_is_not_wide_asphalt():

@@ -228,6 +228,24 @@ def _box_has_car_structure(image, box: Box) -> bool:
     return False
 
 
+def _looks_like_wheel_or_stain(image, box: Box) -> bool:
+    """True for a compact wheel / puddle scrap framed as АВТО."""
+    if image is None or getattr(image, "size", 0) == 0:
+        return False
+    h, w = image.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    area_ratio = (bw * bh) / float(max(w * h, 1))
+    aspect = bw / float(bh)
+    cy = (y0 + y1) / 2.0
+    # A real parked body fills more of this high camera than a tyre next to a puddle.
+    if area_ratio <= 0.055 and cy >= h * 0.52 and aspect <= 1.95:
+        return True
+    if bh <= int(h * 0.20) and y1 >= int(h * 0.60) and area_ratio <= 0.08:
+        return True
+    return False
+
+
 def _is_non_vehicle(image, box: Box) -> bool:
     if image is not None and getattr(image, "size", 0) > 0:
         h, w = image.shape[:2]
@@ -238,6 +256,8 @@ def _is_non_vehicle(image, box: Box) -> bool:
         # Tiny isolated stains are common on wet concrete. A real distant car
         # that is this small must be recovered from its plate instead.
         if bw < int(w * 0.10) and area_ratio < 0.018:
+            return True
+        if _looks_like_wheel_or_stain(image, box):
             return True
         # A front/rear car under this high camera is never a very wide, shallow
         # sheet. Preserve a coherent body (bright paint or windshield structure).
@@ -290,7 +310,11 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
     score += min(area_ratio, 0.32) * 0.70
     if area_ratio < 0.03:
         score -= 0.20
-    score += (cy / max(h, 1)) * 0.12
+    # High camera: cars sit in the mid band. Low compact blobs are wheels/puddles.
+    if 0.28 <= (cy / max(h, 1)) <= 0.62:
+        score += 0.10
+    elif cy / max(h, 1) >= 0.70:
+        score -= 0.18
     if w * 0.12 <= cx <= w * 0.88:
         score += 0.08
     else:

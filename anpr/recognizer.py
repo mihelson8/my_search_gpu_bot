@@ -851,9 +851,17 @@ def recognize_scene(image, min_confidence: float = 0.35):
     def _has_good_plate(items: List[PlateHit]) -> bool:
         return any(_plate_is_meaningful(h.plate) and not is_osd_text(h.plate) for h in items)
 
-    # Fast path: search the rear/tailgate of each framed car, not only the first blob.
-    if silhouettes:
-        for item in silhouettes[:3]:
+    # Read exact plate candidates first. OCR on a wheel/puddle box wastes the budget
+    # and is why r36 spent ~4.5s without reading a number.
+    if global_regions:
+        hits.extend(
+            _ocr_regions(global_regions[:3], min_confidence=max(0.08, min_confidence - 0.16))
+        )
+
+    if not _has_good_plate(hits) and silhouettes:
+        for item in silhouettes[:2]:
+            if _is_non_vehicle(work, item.box):
+                continue
             roi = bumper_box(item.box)
             crop = crop_box(work, roi)
             if crop is None or getattr(crop, "size", 0) == 0:
@@ -869,44 +877,8 @@ def recognize_scene(image, min_confidence: float = 0.35):
                 hits.extend(
                     _ocr_regions(regions, min_confidence=max(0.10, min_confidence - 0.12))
                 )
-            if not _has_good_plate(hits):
-                hits.extend(
-                    _ocr_crop_direct(
-                        crop, roi, min_confidence=max(0.10, min_confidence - 0.12)
-                    )
-                )
             if _has_good_plate(hits):
                 break
-
-    if not _has_good_plate(hits) and global_regions:
-        _OCR_BUDGET["max"] = max(int(_OCR_BUDGET.get("max", 1)), 3)
-        hits.extend(
-            _ocr_regions(global_regions[:3], min_confidence=max(0.08, min_confidence - 0.16))
-        )
-
-    if not _has_good_plate(hits):
-        _OCR_BUDGET["max"] = max(int(_OCR_BUDGET.get("max", 1)), 3)
-        try:
-            (fx0, fy0, fx1, fy1), focus = plate_focus_band(work)
-            try:
-                focus = brighten_crop(focus, min_mean=95.0)
-            except Exception:
-                pass
-            fh, fw = focus.shape[:2]
-            # Parked plates are in the upper-row body/bumper strip, not the puddle.
-            mid = focus[int(fh * 0.18) : int(fh * 0.90), :]
-            if mid is not None and getattr(mid, "size", 0) > 0:
-                my0 = fy0 + int(fh * 0.18)
-                mx0 = fx0
-                hits.extend(
-                    _ocr_crop_direct(
-                        mid,
-                        (mx0, my0, mx0 + mid.shape[1], my0 + mid.shape[0]),
-                        min_confidence=max(0.08, min_confidence - 0.14),
-                    )
-                )
-        except Exception:
-            pass
 
     hits = _bind_hits_to_plate_regions(hits, global_regions, work.shape)
 
