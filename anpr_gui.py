@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r18».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r19».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -736,14 +736,14 @@ class AnprApp:
             # Rebuild zoom only if empty — avoid a second expensive annotate_zoom every tick.
             if zoom is None or getattr(zoom, "size", 0) == 0:
                 try:
-                    from anpr.vehicles import annotate_zoom, downscale_for_anpr
+                    from anpr.vehicles import annotate_zoom, bumper_box, downscale_for_anpr
 
-                    work_src = downscale_for_anpr(frame, max_w=640)
+                    work_src = downscale_for_anpr(frame, max_w=768)
                     if hits and hits[0].bbox:
                         zoom = annotate_zoom(work_src, hits[0].bbox, vehicles, hits[:1])
                     elif vehicles:
                         zoom = annotate_zoom(
-                            work_src, vehicles[0], vehicles, hits[:1] if hits else []
+                            work_src, bumper_box(vehicles[0]), vehicles, hits[:1] if hits else []
                         )
                 except Exception:
                     pass

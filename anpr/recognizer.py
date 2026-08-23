@@ -82,30 +82,37 @@ def preprocess_plate_crop(crop):
 def _upscale_for_ocr(crop, max_side: int = 560):
     """Enlarge small plate crops for OCR, but never create a huge image."""
     import cv2
+    import numpy as np
 
     if crop is None or getattr(crop, "size", 0) == 0:
         return crop
     h, w = crop.shape[:2]
-    # High-angle plates are small and flattened; enlarge modestly.
-    scale_h = max(88 / max(h, 1), 2.0)
-    scale_w = max(240 / max(w, 1), 1.8)
+    mean0 = float(np.mean(crop))
+    # Night / dark bumper: stretch more so white Type-1 digits reach OCR size.
+    scale_h = max(96 / max(h, 1), 2.4 if mean0 < 60 else 2.0)
+    scale_w = max(260 / max(w, 1), 2.1 if mean0 < 60 else 1.8)
     out = cv2.resize(
         crop,
-        (max(int(w * scale_w), 180), max(int(h * scale_h), 64)),
+        (max(int(w * scale_w), 200), max(int(h * scale_h), 72)),
         interpolation=cv2.INTER_CUBIC,
     )
     oh, ow = out.shape[:2]
-    if max(oh, ow) > max_side:
-        scale = max_side / float(max(oh, ow))
+    side_cap = max_side if mean0 >= 55 else max(max_side, 520)
+    if max(oh, ow) > side_cap:
+        scale = side_cap / float(max(oh, ow))
         out = cv2.resize(
             out,
             (max(int(ow * scale), 120), max(int(oh * scale), 48)),
             interpolation=cv2.INTER_AREA,
         )
     gray = _to_gray(out)
-    clahe = cv2.createCLAHE(clipLimit=2.8, tileGridSize=(8, 8))
+    clip = 4.2 if mean0 < 60 else 2.8
+    clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8))
     gray = clahe.apply(gray)
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    # Night: optional invert if plate is still the brightest blob (white on dark bumper).
+    if mean0 < 55 and float(np.mean(gray)) < 90:
+        gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
     if out.ndim == 2:
         return gray
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
@@ -465,7 +472,13 @@ def _ocr_crop_direct(crop, origin_box, min_confidence: float) -> List[PlateHit]:
     if crop is None or getattr(crop, "size", 0) == 0:
         return []
     try:
-        prepared = _upscale_for_ocr(crop, max_side=420)
+        from anpr.vehicles import brighten_crop
+
+        crop = brighten_crop(crop, min_mean=95.0)
+    except Exception:
+        pass
+    try:
+        prepared = _upscale_for_ocr(crop, max_side=520)
     except Exception:
         prepared = crop
     engine, raw_hits = _run_ocr(prepared)
@@ -486,10 +499,13 @@ def _ocr_crop_direct(crop, origin_box, min_confidence: float) -> List[PlateHit]:
 
 def recognize_scene(image, min_confidence: float = 0.35):
     """Detect cars, read Type-1 plates, draw frames; works even if silhouette is weak."""
+    import numpy as np
+
     from anpr.vehicles import (
         VehicleSilhouette,
         annotate_scene,
         annotate_zoom,
+        brighten_crop,
         bumper_box,
         crop_box,
         downscale_for_anpr,
@@ -501,15 +517,21 @@ def recognize_scene(image, min_confidence: float = 0.35):
     if image is None or getattr(image, "size", 0) == 0:
         return [], [], image, None
 
+    night = False
     try:
-        # Smaller work frame = much faster silhouette + RapidOCR on CPU.
-        work = downscale_for_anpr(image, max_w=640)
+        night = float(np.mean(image)) < 70.0
+    except Exception:
+        night = False
+
+    try:
+        # Night: keep a bit more resolution so white plates stay readable.
+        work = downscale_for_anpr(image, max_w=768 if night else 640)
     except Exception:
         work = image
 
-    # One RapidOCR call per tick — second pass only if the first returned nothing.
+    # One RapidOCR call per tick; night gets a second bumper/focus attempt.
     _OCR_BUDGET["n"] = 0
-    _OCR_BUDGET["max"] = 1
+    _OCR_BUDGET["max"] = 2 if night else 1
     _FAST_FRAME["n"] = int(_FAST_FRAME.get("n", 0)) + 1
 
     silhouettes = []
@@ -524,21 +546,34 @@ def recognize_scene(image, min_confidence: float = 0.35):
     def _has_good_plate(items: List[PlateHit]) -> bool:
         return any(plate_is_valid(h.plate) and not is_osd_text(h.plate) for h in items)
 
-    # Fast path: skip morphology plate-finder; OCR bumper / focus strip directly.
+    # Fast path: brighten bumper (night), find white plate band, then OCR.
     if silhouettes:
         item = silhouettes[0]
         roi = bumper_box(item.box)
         crop = crop_box(work, roi)
         if crop is not None and getattr(crop, "size", 0) > 0:
-            hits.extend(
-                _ocr_crop_direct(crop, roi, min_confidence=max(0.12, min_confidence - 0.10))
+            try:
+                crop = brighten_crop(crop, min_mean=100.0)
+            except Exception:
+                pass
+            regions = _collect_plate_regions(
+                crop, origin=(roi[0], roi[1]), inside_vehicle=True, max_regions=1
             )
+            if regions:
+                hits.extend(_ocr_regions(regions, min_confidence=max(0.10, min_confidence - 0.12)))
+            if not _has_good_plate(hits):
+                hits.extend(
+                    _ocr_crop_direct(crop, roi, min_confidence=max(0.10, min_confidence - 0.12))
+                )
 
     if not _has_good_plate(hits):
-        # Allow one more OCR attempt on the plate focus band.
-        _OCR_BUDGET["max"] = 2
+        _OCR_BUDGET["max"] = max(int(_OCR_BUDGET.get("max", 1)), 2)
         try:
             (fx0, fy0, fx1, fy1), focus = plate_focus_band(work)
+            try:
+                focus = brighten_crop(focus, min_mean=95.0)
+            except Exception:
+                pass
             fh, fw = focus.shape[:2]
             mid = focus[int(fh * 0.45) : int(fh * 0.92), int(fw * 0.18) : int(fw * 0.82)]
             if mid is not None and getattr(mid, "size", 0) > 0:
@@ -548,7 +583,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
                     _ocr_crop_direct(
                         mid,
                         (mx0, my0, mx0 + mid.shape[1], my0 + mid.shape[0]),
-                        min_confidence=max(0.10, min_confidence - 0.12),
+                        min_confidence=max(0.08, min_confidence - 0.14),
                     )
                 )
         except Exception:
@@ -588,7 +623,8 @@ def recognize_scene(image, min_confidence: float = 0.35):
         if unique and unique[0].bbox:
             zoom = annotate_zoom(work, unique[0].bbox, silhouettes, unique[:1])
         elif silhouettes:
-            zoom = annotate_zoom(work, silhouettes[0].box, silhouettes, unique[:1])
+            # No plate yet — still show bright bumper close-up, not a black car body.
+            zoom = annotate_zoom(work, bumper_box(silhouettes[0].box), silhouettes, [])
     except Exception:
         zoom = None
 

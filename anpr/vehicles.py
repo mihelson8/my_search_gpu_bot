@@ -395,7 +395,7 @@ def downscale_for_anpr(image, max_w: int = 1280):
 
 
 def brighten_crop(crop, min_mean: float = 78.0):
-    """Lift dark RTSP crops so white Type-1 digits stay readable in the side panel."""
+    """Lift dark RTSP / night crops so white Type-1 digits stay readable."""
     import cv2
     import numpy as np
 
@@ -405,19 +405,20 @@ def brighten_crop(crop, min_mean: float = 78.0):
     if mean >= min_mean:
         return crop
     out = crop.copy()
+    # Stronger CLAHE at night (mean often < 40 on dark cars).
+    clip = 4.5 if mean < 55 else 3.2
     if out.ndim == 2:
-        clahe = cv2.createCLAHE(clipLimit=3.2, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8))
         return clahe.apply(out)
     lab = cv2.cvtColor(out, cv2.COLOR_BGR2LAB)
     l_ch, a_ch, b_ch = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=3.2, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8))
     l_ch = clahe.apply(l_ch)
     merged = cv2.merge([l_ch, a_ch, b_ch])
     out = cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
-    # Mild gain if still dim after CLAHE (high camera / evening).
     mean2 = float(np.mean(out))
     if mean2 < min_mean:
-        gain = min(min_mean / max(mean2, 1.0), 1.85)
+        gain = min(min_mean / max(mean2, 1.0), 2.4 if mean < 45 else 1.85)
         out = np.clip(out.astype(np.float32) * gain, 0, 255).astype(np.uint8)
     return out
 
@@ -622,13 +623,13 @@ def annotate_zoom(image, box: Box, vehicles: Sequence[VehicleLike] = (), plates:
     crop = zoom_box(image, focus, min_w=min_w, min_h=min_h, pad=pad)
     if crop is None or getattr(crop, "size", 0) == 0:
         return None
-    crop = brighten_crop(crop, min_mean=88.0)
+    crop = brighten_crop(crop, min_mean=100.0)
     # Guard: if crop is still nearly black, fall back to a wider bumper slice.
-    if float(np.mean(crop)) < 28.0 and box and box != focus:
+    if float(np.mean(crop)) < 40.0 and box and box != focus:
         crop = zoom_box(image, box, min_w=900, min_h=400, pad=0.45)
         if crop is None or getattr(crop, "size", 0) == 0:
             return None
-        crop = brighten_crop(crop, min_mean=88.0)
+        crop = brighten_crop(crop, min_mean=100.0)
         plate_focus = False
 
     h, w = crop.shape[:2]

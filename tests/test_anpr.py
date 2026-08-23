@@ -417,6 +417,31 @@ def test_light_and_dark_cars_get_frame():
     assert light_cars, "white/silver car on asphalt must get a frame"
 
 
+def test_night_scene_zoom_shows_bumper_when_plate_unread(monkeypatch):
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr import recognizer
+    from anpr.recognizer import recognize_scene
+    from anpr.vehicles import VehicleSilhouette
+
+    frame = numpy.full((360, 640, 3), 25, dtype=numpy.uint8)
+    frame[140:280, 160:480] = (18, 18, 20)
+    frame[250:270, 260:400] = (200, 200, 200)  # white plate on dark bumper
+
+    monkeypatch.setattr(
+        "anpr.vehicles.find_vehicle_silhouettes",
+        lambda *a, **k: [VehicleSilhouette(box=(160, 140, 480, 280), contour=None, score=1.0)],
+    )
+    monkeypatch.setattr(recognizer, "_ocr_crop_direct", lambda *a, **k: [])
+    monkeypatch.setattr(recognizer, "_ocr_regions", lambda *a, **k: [])
+    monkeypatch.setattr(recognizer, "_collect_plate_regions", lambda *a, **k: [])
+    hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
+    assert not hits
+    assert vehicles
+    assert zoom is not None
+    assert float(zoom.mean()) > 30.0
+
+
 def test_recognize_scene_keeps_detection_frame_on_preview():
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
