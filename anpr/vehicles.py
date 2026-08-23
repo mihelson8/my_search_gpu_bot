@@ -197,9 +197,13 @@ def _is_non_vehicle(image, box: Box) -> bool:
         bw, bh = max(1, x1 - x0), max(1, y1 - y0)
         aspect = bw / float(bh)
         # A front/rear car under this high camera is never a very wide, shallow
-        # sheet. These boxes are exposed asphalt or several objects glued by it.
+        # sheet. Preserve a coherent bright neutral body whose lower edge was
+        # tightened away; otherwise these are asphalt or objects glued by it.
         if bw >= int(w * 0.28) and bh <= int(h * 0.34) and aspect >= 3.05:
-            return True
+            mean_sat, mean_val, _vivid, _bin, _green = _box_color_stats(image, box)
+            bright_silver_body = mean_sat <= 35 and mean_val >= 155
+            if not bright_silver_body:
+                return True
     return (
         _looks_like_dumpster(image, box)
         or _looks_like_camera_osd(image, box)
