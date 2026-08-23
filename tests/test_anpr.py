@@ -171,6 +171,27 @@ def test_csv_roundtrip(temp_db):
         os.remove(other_path)
 
 
+def test_update_script_picks_highest_build_not_newer_file_date(tmp_path):
+    from anpr.install_util import choose_anpr_source, revision_number
+
+    old = tmp_path / "AvtonomeraSeetong"
+    new = tmp_path / "my_search_gpu_bot-new"
+    (old / "anpr").mkdir(parents=True)
+    (new / "anpr").mkdir(parents=True)
+    (old / "anpr" / "version.py").write_text('APP_VERSION = "2026.08.23-r36"\n', encoding="utf-8")
+    (new / "anpr" / "version.py").write_text('APP_VERSION = "2026.08.23-r38"\n', encoding="utf-8")
+    (old / "anpr_gui.py").write_text("# old\n", encoding="utf-8")
+    (new / "anpr_gui.py").write_text("# new\n", encoding="utf-8")
+    # Installed copy looks "newer" by file date, like after the previous update.
+    now = os.path.getmtime(old / "anpr_gui.py")
+    os.utime(old / "anpr_gui.py", (now, now))
+    os.utime(new / "anpr_gui.py", (now - 86_400, now - 86_400))
+
+    assert revision_number("2026.08.23-r38") == 38
+    chosen = choose_anpr_source([str(old), str(new)], preferred=str(old))
+    assert chosen == str(new), "must install the higher rN even if the old folder is newer"
+
+
 def test_side_window_geometry_keeps_seetong_visible():
     assert side_window_geometry(1920, 1080, win_w=980, win_h=720, margin=16) == "980x720+924+64"
     assert side_window_geometry(800, 600, win_w=980, win_h=720, margin=16) == "768x568+16+16"

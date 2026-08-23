@@ -38,37 +38,46 @@ function Get-SearchRoots {
     return $roots
 }
 
+function Get-AppRevision([string]$dir) {
+    $verFile = Join-Path $dir "anpr\version.py"
+    if (-not (Test-Path $verFile)) { return -1 }
+    $m = Select-String -Path $verFile -Pattern 'APP_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
+    if (-not $m) { return -1 }
+    $ver = $m.Matches.Groups[1].Value
+    if ($ver -match '-r(\d+)\s*$') { return [int]$Matches[1] }
+    return 0
+}
+
 function Find-AnprSource([string]$start) {
     $hits = New-Object System.Collections.Generic.List[object]
-    if ($start -and (Test-Path (Join-Path $start "anpr_gui.py"))) {
-        $gui = Get-Item (Join-Path $start "anpr_gui.py")
-        $hits.Add([pscustomobject]@{ Path = (Get-FullPath $start); Time = $gui.LastWriteTimeUtc }) | Out-Null
+    function Add-Hit([string]$dir) {
+        if (-not $dir) { return }
+        $full = Get-FullPath $dir
+        if (-not (Test-Path (Join-Path $full "anpr_gui.py"))) { return }
+        $rev = Get-AppRevision $full
+        $time = (Get-Item (Join-Path $full "anpr_gui.py")).LastWriteTimeUtc
+        $hits.Add([pscustomobject]@{ Path = $full; Rev = $rev; Time = $time }) | Out-Null
     }
+    Add-Hit $start
     foreach ($root in Get-SearchRoots) {
-        if (Test-Path (Join-Path $root "anpr_gui.py")) {
-            $gui = Get-Item (Join-Path $root "anpr_gui.py")
-            $hits.Add([pscustomobject]@{ Path = (Get-FullPath $root); Time = $gui.LastWriteTimeUtc }) | Out-Null
-        }
+        Add-Hit $root
         Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Where-Object {
             $_.Name -like "my_search_gpu_bot*" -or $_.Name -eq "AvtonomeraSeetong"
         } | ForEach-Object {
-            $guiPath = Join-Path $_.FullName "anpr_gui.py"
-            if (Test-Path $guiPath) {
-                $gui = Get-Item $guiPath
-                $hits.Add([pscustomobject]@{ Path = (Get-FullPath $_.FullName); Time = $gui.LastWriteTimeUtc }) | Out-Null
-            }
+            Add-Hit $_.FullName
             Get-ChildItem $_.FullName -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-                $nested = Join-Path $_.FullName "anpr_gui.py"
-                if (Test-Path $nested) {
-                    $gui = Get-Item $nested
-                    $hits.Add([pscustomobject]@{ Path = (Get-FullPath $_.FullName); Time = $gui.LastWriteTimeUtc }) | Out-Null
-                }
+                Add-Hit $_.FullName
             }
         }
     }
     if ($hits.Count -eq 0) { return $null }
-    # Prefer the newest extract so an old D:\AvtonomeraSeetong is not kept forever.
-    $best = $hits | Sort-Object Time -Descending | Select-Object -First 1
+    # GitHub ZIP keeps old file dates. Always pick the highest rN, not LastWriteTime.
+    $bestRev = ($hits | Measure-Object -Property Rev -Maximum).Maximum
+    $top = @($hits | Where-Object { $_.Rev -eq $bestRev })
+    $startFull = Get-FullPath $start
+    $preferred = $top | Where-Object { $_.Path -eq $startFull } | Select-Object -First 1
+    if ($preferred) { return $preferred.Path }
+    $best = $top | Sort-Object Time -Descending | Select-Object -First 1
     return $best.Path
 }
 
@@ -149,15 +158,16 @@ function Remove-LeftoverCopies([string]$stable) {
             $full = Get-FullPath $_.FullName
             if ($full -eq $stableFull) { return }
             if ($full -like "*\Seetong*") { return }
+            $rev = Get-AppRevision $full
+            $installed = Get-AppRevision $stableFull
+            if ($rev -ge $installed -and $rev -ge 0) {
+                Write-Host ("Keeping newer/same extract: " + $_.FullName + " r" + $rev)
+                return
+            }
             Write-Host ("Deleting extra folder: " + $_.FullName)
             Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
         }
-        Get-ChildItem $root -File -ErrorAction SilentlyContinue | Where-Object {
-            $_.Name -like "my_search_gpu_bot*.zip"
-        } | ForEach-Object {
-            Write-Host ("Deleting extra zip: " + $_.FullName)
-            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-        }
+        # Do not delete downloaded ZIPs. The next update may still need them.
     }
     $botFast = Join-Path $env:USERPROFILE "bot_fast.py"
     if (Test-Path $botFast) {
@@ -221,6 +231,7 @@ if (-not $source) {
 }
 
 Write-Host ("Newest program folder: " + $source)
+Write-Host ("Selected build: r" + (Get-AppRevision $source))
 Write-Host ("Install to: " + $stable)
 
 # Always refresh D:\AvtonomeraSeetong from the newest extract.
@@ -277,7 +288,7 @@ if (Test-Path $verFile) {
     if ($m) { $shownVer = $m.Matches.Groups[1].Value }
 }
 Write-Host ("  READY. File version: " + $shownVer)
-Write-Host "  In the app look for YELLOW badge: BUILD 2026.08.23-r37"
+Write-Host "  In the app look for YELLOW badge: BUILD 2026.08.23-r38"
 Write-Host ("  Folder: " + $stable)
 Write-Host "  If badge is missing - old program is still open."
 Write-Host "========================================"
