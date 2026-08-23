@@ -581,6 +581,43 @@ def _bind_hits_to_plate_regions(hits: List[PlateHit], region_map, image_shape) -
     return hits
 
 
+def _tighten_silhouettes_to_recognized_plates(silhouettes, hits, image_shape):
+    """Trim a glued car/bin silhouette horizontally around its recognized plate."""
+    from anpr.vehicles import VehicleSilhouette, vehicle_box_from_plate
+
+    result = list(silhouettes)
+    for hit in hits:
+        if not hit.bbox:
+            continue
+        px0, py0, px1, py1 = hit.bbox
+        pcx, pcy = (px0 + px1) / 2.0, (py0 + py1) / 2.0
+        matches = []
+        for index, item in enumerate(result):
+            x0, y0, x1, y1 = item.box
+            if x0 <= pcx <= x1 and y0 <= pcy <= y1:
+                bw = max(1, x1 - x0)
+                distance = abs(pcx - (x0 + x1) / 2.0) / bw
+                matches.append((distance, index, bw))
+
+        tight = vehicle_box_from_plate(hit.bbox, image_shape, expand=1.30)
+        if matches:
+            _distance, index, old_w = min(matches)
+            old = result[index]
+            tx0, _ty0, tx1, _ty1 = tight
+            tight_w = max(1, tx1 - tx0)
+            # Preserve an already-good silhouette, but replace a car+bin group.
+            if old_w > tight_w * 1.28:
+                _ox0, oy0, _ox1, oy1 = old.box
+                result[index] = VehicleSilhouette(
+                    box=(tx0, oy0, tx1, oy1),
+                    contour=None,
+                    score=max(float(old.score), 0.95),
+                )
+        else:
+            result.append(VehicleSilhouette(box=tight, contour=None, score=1.0))
+    return result
+
+
 def _credible_plate_region(item, image_shape) -> bool:
     """Require white/neutral plate texture; reject blue bins and paving edges."""
     import cv2
@@ -619,7 +656,6 @@ def recognize_scene(image, min_confidence: float = 0.35):
     import numpy as np
 
     from anpr.vehicles import (
-        VehicleSilhouette,
         annotate_scene,
         annotate_zoom,
         brighten_crop,
@@ -627,7 +663,6 @@ def recognize_scene(image, min_confidence: float = 0.35):
         crop_box,
         downscale_for_anpr,
         find_vehicle_silhouettes,
-        vehicle_box_from_plate,
         _is_non_vehicle,
     )
 
@@ -776,63 +811,19 @@ def recognize_scene(image, min_confidence: float = 0.35):
     unique.sort(key=lambda item: item.confidence, reverse=True)
     unique = unique[:1]
 
-    # Plate-shaped regions also provide conservative car proposals even before
-    # OCR succeeds. This avoids the old failure where no silhouette meant no OCR.
-    if len(silhouettes) < 2 and global_regions:
-        h, w = work.shape[:2]
-        for index, (plate_box, _crop) in enumerate(global_regions[:6]):
-            px0, py0, px1, py1 = plate_box
-            pw, ph = max(1, px1 - px0), max(1, py1 - py0)
-            aspect = pw / float(ph)
-            if not (2.0 <= aspect <= 9.0):
-                continue
-            if not (int(h * 0.12) <= (py0 + py1) / 2.0 <= int(h * 0.62)):
-                continue
-            box = vehicle_box_from_plate(plate_box, work.shape, expand=0.95)
-            if _is_non_vehicle(work, box):
-                continue
-            bx0, by0, bx1, by1 = box
-            # Tight parking-row fallback; never extend into the puddle.
-            box = (bx0, by0, bx1, min(by1, int(h * 0.66)))
-            if box[2] - box[0] < 45 or box[3] - box[1] < 35:
-                continue
-            duplicate = False
-            for old in silhouettes:
-                ox0, oy0, ox1, oy1 = old.box
-                ix0, iy0 = max(box[0], ox0), max(box[1], oy0)
-                ix1, iy1 = min(box[2], ox1), min(box[3], oy1)
-                inter = max(0, ix1 - ix0) * max(0, iy1 - iy0)
-                small = min(
-                    max(1, (box[2] - box[0]) * (box[3] - box[1])),
-                    max(1, (ox1 - ox0) * (oy1 - oy0)),
-                )
-                if inter / float(small) >= 0.45:
-                    duplicate = True
-                    break
-            if not duplicate:
-                silhouettes.append(
-                    VehicleSilhouette(box=box, contour=None, score=0.72 - index * 0.03)
-                )
-            if len(silhouettes) >= 6:
-                break
-
-    if unique and not silhouettes:
-        for index, hit in enumerate(unique):
-            if not hit.bbox:
-                continue
-            box = vehicle_box_from_plate(hit.bbox, work.shape)
-            if _is_non_vehicle(work, box):
-                continue
-            silhouettes.append(VehicleSilhouette(box=box, contour=None, score=1.0 - index * 0.05))
+    # Bright plate-like rectangles do not create cars until OCR confirms them.
+    # A confirmed plate can add a missing car or trim a car glued to nearby bins.
+    if unique:
+        silhouettes = _tighten_silhouettes_to_recognized_plates(
+            silhouettes, unique, work.shape
+        )
 
     silhouettes = [item for item in silhouettes if not _is_non_vehicle(work, item.box)]
     vehicles = [item.box for item in silhouettes]
 
     try:
-        candidate_boxes = [item[0] for item in global_regions[:3]]
-        annotated = annotate_scene(
-            work, silhouettes, unique, plate_candidates=candidate_boxes
-        )
+        # Yellow is reserved for an actually recognized plate.
+        annotated = annotate_scene(work, silhouettes, unique, plate_candidates=())
     except Exception:
         annotated = work
 

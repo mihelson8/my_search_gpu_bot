@@ -422,6 +422,32 @@ def test_tiny_plate_ocr_retries_high_contrast_view(monkeypatch):
     assert hits and hits[0].plate == "А123ВС77"
 
 
+def test_recognized_plate_trims_car_box_glued_to_bins():
+    from anpr.recognizer import (
+        PlateHit,
+        _tighten_silhouettes_to_recognized_plates,
+    )
+    from anpr.vehicles import VehicleSilhouette
+
+    plate = PlateHit(
+        plate="У120НО05",
+        confidence=0.9,
+        raw_text="У120НО05",
+        bbox=(220, 200, 280, 215),
+        engine="test",
+    )
+    glued = VehicleSilhouette(box=(100, 50, 560, 250), contour=None, score=0.8)
+    result = _tighten_silhouettes_to_recognized_plates(
+        [glued], [plate], (400, 720, 3)
+    )
+    assert len(result) == 1
+    assert result[0].box[1:] != glued.box[1:]
+    assert result[0].box[2] < 400, "right-side bins must be outside the car frame"
+    assert result[0].box[0] < 220 < result[0].box[2]
+    assert result[0].box[1] == glued.box[1]
+    assert result[0].box[3] == glued.box[3]
+
+
 def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
