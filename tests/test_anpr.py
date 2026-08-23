@@ -442,6 +442,24 @@ def test_wet_lot_finds_silver_and_dark_cars_separately():
     assert centers[-1] > 350, "dark sedan should be on the right"
 
 
+def test_small_shadow_blob_is_not_framed():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    frame = numpy.full((360, 640, 3), 100, dtype=numpy.uint8)
+    # Tiny dark stain — must not become АВТО.
+    frame[200:230, 80:120] = (25, 25, 25)
+    # Real dark car.
+    frame[140:280, 280:520] = (30, 32, 34)
+    frame[160:210, 320:480] = (50, 52, 55)
+    cars = find_vehicle_silhouettes(frame, max_cars=5)
+    assert cars, "real car must be found"
+    assert len(cars) == 1
+    cx = (cars[0].box[0] + cars[0].box[2]) / 2
+    assert cx > 250
+
+
 def test_night_scene_zoom_shows_bumper_when_plate_unread(monkeypatch):
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")

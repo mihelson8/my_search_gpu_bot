@@ -166,25 +166,30 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
     mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
 
     score = base
-    if 1.35 <= aspect <= 3.8:
-        score += 0.22
-    elif 1.05 <= aspect < 1.35:
-        score += 0.04
+    # Top-down cars are usually wider than tall, but not tiny squares.
+    if 1.25 <= aspect <= 3.4:
+        score += 0.26
+    elif 1.10 <= aspect < 1.25:
+        score += 0.08
     else:
-        score -= 0.12
-    score += min(area_ratio, 0.35) * 0.55
-    score += (cy / max(h, 1)) * 0.10
-    if w * 0.18 <= cx <= w * 0.82:
-        score += 0.06
+        score -= 0.18
+    score += min(area_ratio, 0.32) * 0.70
+    if area_ratio < 0.03:
+        score -= 0.20
+    score += (cy / max(h, 1)) * 0.12
+    if w * 0.12 <= cx <= w * 0.88:
+        score += 0.08
+    else:
+        score -= 0.10
     score -= vivid_ratio * 0.55
     score -= bin_color_ratio * 0.90
     score -= green_ratio * 0.80
     # White / silver cars.
     if mean_sat < 45 and mean_val >= 125:
-        score += 0.16
-    # Black / dark-blue / dark-gray cars (high camera on asphalt).
+        score += 0.18
+    # Black / dark-blue / dark-gray cars.
     elif mean_sat < 55 and mean_val <= 85:
-        score += 0.16
+        score += 0.18
     elif mean_sat < 55:
         score += 0.05
     crop = image[y0:y1, x0:x1]
@@ -195,9 +200,35 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
         lower = gray[int(ch * 0.55) : ch, :]
         if upper.size and lower.size and float(np.mean(upper)) + 8 < float(np.mean(lower)):
             score += 0.10
-        if float(np.std(gray)) > 18:
-            score += 0.04
+        std = float(np.std(gray))
+        if std > 18:
+            score += 0.05
+        elif std < 8:
+            # Flat shadow / oil stain — not a car body.
+            score -= 0.22
     return score
+
+
+def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | None = None) -> bool:
+    """Reject shadows, fragments and weak extras so only real cars get a frame."""
+    h, w = image.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    area_ratio = (bw * bh) / float(max(h * w, 1))
+    aspect = bw / float(bh)
+    if bw < 85 or bh < 55:
+        return True
+    if area_ratio < 0.030:
+        return True
+    if aspect < 1.08 or aspect > 3.6:
+        return True
+    if score < 0.28:
+        return True
+    # Second/third detections must be nearly as strong as the best car.
+    if best_score is not None and best_score > 0:
+        if score < max(0.40, best_score * 0.72):
+            return True
+    return False
 
 
 def _silhouettes_from_mask(
@@ -211,21 +242,21 @@ def _silhouettes_from_mask(
     found: List[VehicleSilhouette] = []
     for contour in contours:
         x, y, cw, ch = cv2.boundingRect(contour)
-        if cw < 40 or ch < 24:
+        if cw < 70 or ch < 45:
             continue
         area = cw * ch
         ratio = area / frame_area
         if ratio < min_ratio or ratio > max_ratio:
             continue
         aspect = cw / float(ch)
-        if not (0.85 <= aspect <= 4.0):
+        if not (1.05 <= aspect <= 3.8):
             continue
         hull = cv2.contourArea(cv2.convexHull(contour)) or 1.0
         solidity = (cv2.contourArea(contour) or 0.0) / hull
-        if solidity < 0.25:
+        if solidity < 0.28:
             continue
         cy = y + ch / 2.0
-        if cy < h * 0.20:
+        if cy < h * 0.22:
             continue
         pad_x, pad_y = int(cw * 0.04), int(ch * 0.05)
         box = (
@@ -239,9 +270,8 @@ def _silhouettes_from_mask(
         score = ratio + (cy / h) * 0.08 + min(solidity, 1.0) * 0.04
         if image is not None:
             score = _car_likeness_score(image, box, base=score)
-        if score < 0.08:
+        if score < 0.28:
             continue
-        # Reject weak corner detections even if likeness is borderline.
         if image is not None and _looks_like_camera_osd(image, box):
             continue
         found.append(VehicleSilhouette(box=box, contour=contour, score=score))
@@ -364,27 +394,27 @@ def _edge_car_mask(image):
 
 
 def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette]:
-    """Find car shapes (light→dark) and return tight boxes for framing."""
+    """Find car shapes (light→dark) and return only confident frames."""
     if image is None or getattr(image, "size", 0) == 0:
         return []
     found: List[VehicleSilhouette] = []
     try:
         dark, light = _car_tone_masks(image)
-        # Split dark vs light so silver and black cars stay separate blobs.
         found.extend(
-            _silhouettes_from_mask(dark, image.shape, min_ratio=0.015, max_ratio=0.42, image=image)
+            _silhouettes_from_mask(dark, image.shape, min_ratio=0.028, max_ratio=0.40, image=image)
         )
         found.extend(
-            _silhouettes_from_mask(light, image.shape, min_ratio=0.015, max_ratio=0.42, image=image)
+            _silhouettes_from_mask(light, image.shape, min_ratio=0.028, max_ratio=0.40, image=image)
         )
     except Exception:
         pass
-    if len(found) < 1:
+    # Edge fallback only when nothing tonal was found (avoids shadow frames).
+    if not found:
         try:
             edges = _edge_car_mask(image)
             found.extend(
                 _silhouettes_from_mask(
-                    edges, image.shape, min_ratio=0.018, max_ratio=0.40, image=image
+                    edges, image.shape, min_ratio=0.035, max_ratio=0.38, image=image
                 )
             )
         except Exception:
@@ -394,8 +424,18 @@ def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette
         return []
     kept = _nms(found, iou_thresh=0.40)
     kept.sort(key=lambda item: item.score, reverse=True)
-    limit = max(1, min(int(max_cars), 3))
-    return kept[:limit]
+    best = kept[0].score
+    strong = [
+        item
+        for item in kept
+        if not _is_weak_car_candidate(image, item.box, item.score, best_score=best)
+    ]
+    if not strong and kept:
+        if not _is_weak_car_candidate(image, kept[0].box, kept[0].score, best_score=None):
+            strong = [kept[0]]
+    # At most 2 confident cars — extras were false shadows/stains.
+    limit = max(1, min(int(max_cars), 2))
+    return strong[:limit]
 
 
 def find_vehicle_rois(image, max_cars: int = 6) -> List[Box]:
