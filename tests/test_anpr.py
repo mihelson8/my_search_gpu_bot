@@ -506,6 +506,29 @@ def test_dark_and_white_pair_get_separate_tight_frames():
     assert centers[0] < 320 < centers[-1]
 
 
+def test_wet_puddle_alone_is_not_a_car():
+    """Regression: АВТО must not frame a bright puddle with no car body."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    h, w = 400, 640
+    frame = numpy.full((h, w, 3), 110, dtype=numpy.uint8)
+    # Bright wet sheet on the right — the false АВТО from operator screenshots.
+    frame[220:380, 380:620] = (195, 200, 205)
+    frame[250:360, 400:600] = (210, 215, 220)
+    assert find_vehicle_silhouettes(frame, max_cars=5) == []
+
+    # Same puddle plus a real dark car on the left — only the car remains.
+    frame[140:250, 60:220] = (35, 38, 42)
+    frame[155:195, 85:195] = (60, 62, 68)
+    cars = find_vehicle_silhouettes(frame, max_cars=5)
+    assert cars, "real car must still be found beside the puddle"
+    cx = (cars[0].box[0] + cars[0].box[2]) / 2
+    assert cx < 280, f"top detection should be the car, not the puddle: {cars[0].box}"
+    assert cars[0].box[3] < int(h * 0.72)
+
+
 def test_wet_reflections_do_not_inflate_or_glue_cars():
     """Regression: puddle glare must not become tall multi-car frames."""
     numpy = pytest.importorskip("numpy")

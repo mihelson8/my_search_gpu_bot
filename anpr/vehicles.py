@@ -135,8 +135,67 @@ def _looks_like_camera_osd(image, box: Box) -> bool:
     return False
 
 
+def _looks_like_wet_puddle(image, box: Box) -> bool:
+    """True for bright wet-asphalt / sky reflections that must not be АВТО."""
+    import cv2
+    import numpy as np
+
+    if image is None or getattr(image, "size", 0) == 0:
+        return False
+    h, w = image.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w, x1), min(h, y1)
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    if bw < 40 or bh < 30:
+        return False
+    # Parking-row car bodies start higher than puddle sheets.
+    if y0 < int(h * 0.48) and bh >= 50:
+        return False
+    cy = (y0 + y1) / 2.0
+    crop = image[y0:y1, x0:x1]
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return False
+    if crop.ndim == 2:
+        crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR)
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    mean_sat = float(np.mean(sat))
+    mean_val = float(np.mean(val))
+    std = float(np.std(gray))
+    bright = float(np.mean(val >= 160))
+    very_bright = float(np.mean(val >= 190))
+    ch = gray.shape[0]
+    upper = gray[0 : max(int(ch * 0.40), 1), :]
+    lower = gray[int(ch * 0.55) : ch, :]
+    # Structured car body (darker roof/windshield over bumper) is not a puddle.
+    if upper.size and lower.size and float(np.mean(upper)) + 18 < float(np.mean(lower)) and std >= 16:
+        return False
+    # Sky/water mirror: bright, desaturated, low texture, mid/low in frame.
+    if cy >= h * 0.50 and mean_sat <= 42 and mean_val >= 150 and bright >= 0.55 and std <= 24:
+        return True
+    if cy >= h * 0.52 and very_bright >= 0.45 and mean_sat <= 45 and std <= 28:
+        return True
+    # Tall stick of wet pavement with almost no upper body structure.
+    if (
+        bh >= int(bw * 1.20)
+        and y0 >= int(h * 0.45)
+        and mean_sat <= 50
+        and bright >= 0.50
+        and std <= 26
+    ):
+        return True
+    return False
+
+
 def _is_non_vehicle(image, box: Box) -> bool:
-    return _looks_like_dumpster(image, box) or _looks_like_camera_osd(image, box)
+    return (
+        _looks_like_dumpster(image, box)
+        or _looks_like_camera_osd(image, box)
+        or _looks_like_wet_puddle(image, box)
+    )
 
 
 def clear_osd_zones(mask):
@@ -192,6 +251,9 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
         score += 0.18
     elif mean_sat < 55:
         score += 0.05
+    # Wet glare / puddle sheet — only when the box itself starts mid/low.
+    if mean_sat < 40 and mean_val >= 155 and y0 >= int(h * 0.50) and cy >= h * 0.58:
+        score -= 0.45
     crop = image[y0:y1, x0:x1]
     if crop is not None and getattr(crop, "size", 0) > 0:
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
@@ -204,8 +266,12 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
         if std > 18:
             score += 0.05
         elif std < 8:
-            # Flat shadow / oil stain — not a car body.
-            score -= 0.22
+            # Flat shadow / oil stain — not a car body (keep bright silver panels).
+            if not (mean_sat < 50 and mean_val >= 130 and y0 < int(h * 0.55)):
+                score -= 0.22
+        # Uniform bright sheet = puddle, not a painted body (only mid/low boxes).
+        if std < 14 and float(np.mean(gray)) >= 160 and mean_sat < 40 and y0 >= int(h * 0.50):
+            score -= 0.35
     return score
 
 
@@ -234,7 +300,9 @@ def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | No
     if area_ratio < 0.015:
         return True
     # Puddle / reflection blobs sit too low in the frame.
-    if cy > h * 0.72 or (y1 > int(h * 0.85) and y0 > int(h * 0.55)):
+    if cy > h * 0.70 or (y1 > int(h * 0.82) and y0 > int(h * 0.50)):
+        return True
+    if _looks_like_wet_puddle(image, box):
         return True
     # Reject whole-frame / multi-car mega-blobs (group must never be one frame).
     if area_ratio > 0.50 or bw > int(w * 0.85):
