@@ -105,25 +105,9 @@ class AnprApp:
         )
         self.run_label.config(text=f"сборка {APP_VERSION}")
 
-    def _startup_dialog_marker(self) -> str:
-        here = os.path.abspath(os.path.dirname(__file__) or ".")
-        return os.path.join(here, ".seen_startup_dialog")
-
     def _maybe_startup_dialog(self) -> None:
-        """First launch: show the old camera/source dialog, then auto-start capture."""
-        if os.path.exists(self._startup_dialog_marker()):
-            self.start_capture()
-            return
-
-        def _done() -> None:
-            try:
-                with open(self._startup_dialog_marker(), "w", encoding="utf-8") as handle:
-                    handle.write("1")
-            except Exception:
-                pass
-            self.start_capture()
-
-        self.open_camera_dialog(on_close=_done)
+        """Always open the old camera/source dialog, then auto-start capture."""
+        self.open_camera_dialog(on_close=self.start_capture)
 
     def _warn_missing_packages(self) -> None:
         try:
