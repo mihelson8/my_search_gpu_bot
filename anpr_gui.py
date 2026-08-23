@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r33».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r34».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -692,13 +692,15 @@ class AnprApp:
             )
             source = self.cfg.get("source", "seetong_folder")
             if source in ("http", "rtsp", "file", "seetong_folder"):
+                # These sources are already the camera image, not a desktop UI.
+                # Keep its full height; the old 28% top skip hid distant cars.
                 frame = crop_roi(
                     frame,
                     left=0.0,
-                    top=0.02,
+                    top=0.0,
                     right=0.0,
-                    bottom=0.06,
-                    skip_top=self.cfg.get("skip_top", 0),
+                    bottom=0.0,
+                    skip_top=0.0,
                 )
             else:
                 frame = crop_roi(

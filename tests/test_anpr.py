@@ -292,6 +292,15 @@ def test_crop_skips_distant_road():
     assert cropped.shape[1] == 100
 
 
+def test_legacy_height_crop_is_migrated_to_full_camera_frame(tmp_path):
+    import json
+    from anpr.config import load_config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"skip_top": 0.28}), encoding="utf-8")
+    assert load_config(str(path))["skip_top"] == 0.0
+
+
 def test_mostly_black_frame():
     numpy = pytest.importorskip("numpy")
     from anpr.capture import _is_mostly_black, _is_useless_frame
@@ -422,6 +431,16 @@ def test_tiny_plate_ocr_retries_high_contrast_view(monkeypatch):
     assert hits and hits[0].plate == "А123ВС77"
 
 
+def test_tiny_plate_upscale_preserves_character_aspect():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.recognizer import _upscale_for_ocr
+
+    plate = numpy.full((10, 50, 3), 190, dtype=numpy.uint8)
+    enlarged = _upscale_for_ocr(plate)
+    assert enlarged.shape[1] / float(enlarged.shape[0]) >= 4.5
+
+
 def test_recognized_plate_trims_car_box_glued_to_bins():
     from anpr.recognizer import (
         PlateHit,
@@ -446,6 +465,23 @@ def test_recognized_plate_trims_car_box_glued_to_bins():
     assert result[0].box[0] < 220 < result[0].box[2]
     assert result[0].box[1] == glued.box[1]
     assert result[0].box[3] == glued.box[3]
+
+
+def test_recognized_plate_expands_partial_bumper_box_to_car_height():
+    from anpr.recognizer import (
+        PlateHit,
+        _tighten_silhouettes_to_recognized_plates,
+    )
+    from anpr.vehicles import VehicleSilhouette
+
+    plate = PlateHit("У120НО05", 0.9, "У120НО05", (250, 210, 300, 220), "test")
+    bumper_only = VehicleSilhouette((245, 195, 310, 235), None, 0.7)
+    result = _tighten_silhouettes_to_recognized_plates(
+        [bumper_only], [plate], (400, 720, 3)
+    )
+    assert result[0].box[1] < bumper_only.box[1]
+    assert result[0].box[3] > bumper_only.box[3]
+    assert result[0].box[3] - result[0].box[1] >= 80
 
 
 def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):

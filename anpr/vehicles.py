@@ -1109,9 +1109,11 @@ def vehicle_box_from_plate(plate_box: Box, image_shape, expand: float = 0.95) ->
     pw = max(8, x1 - x0)
     ph = max(6, y1 - y0)
     bx0 = max(0, int(x0 - pw * expand))
-    by0 = max(0, int(y0 - ph * 4.5))
+    # Rear plates sit low on the body. Keep roof and wheels in the frame,
+    # especially for oblique station wagons where the first mask sees only bumper.
+    by0 = max(0, int(y0 - ph * 6.5))
     bx1 = min(w, int(x1 + pw * expand))
-    by1 = min(h, int(y1 + ph * 1.2))
+    by1 = min(h, int(y1 + ph * 2.5))
     if bx1 - bx0 < 40 or by1 - by0 < 30:
         return (max(0, x0 - 40), max(0, y0 - 80), min(w, x1 + 40), min(h, y1 + 40))
     return (bx0, by0, bx1, by1)

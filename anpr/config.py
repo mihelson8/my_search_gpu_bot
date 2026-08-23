@@ -71,7 +71,7 @@ DEFAULTS: Dict[str, Any] = {
     "crop_top": 0.12,
     "crop_right": 0.01,
     "crop_bottom": 0.12,
-    "skip_top": 0.28,
+    "skip_top": 0.0,
     "duplicate_sec": 30,
     "min_confidence": 0.22,
     "save_all_shots": False,
@@ -100,6 +100,12 @@ def load_config(path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
         data["interval_sec"] = 0.25
     else:
         data["interval_sec"] = max(0.15, interval)
+    # Legacy builds discarded 28% of the camera height. Keep the full frame.
+    try:
+        if abs(float(data.get("skip_top", 0.0)) - 0.28) < 0.01:
+            data["skip_top"] = 0.0
+    except (TypeError, ValueError):
+        data["skip_top"] = 0.0
     return data
 
 

@@ -104,11 +104,15 @@ def _upscale_for_ocr(crop, max_side: int = 560):
     # Night / dark bumper: stretch more so white Type-1 digits reach OCR size.
     target_h = 160 if tiny else 104
     target_w = 420 if tiny else 300
-    scale_h = max(target_h / max(h, 1), 2.8 if mean0 < 60 else 2.2)
-    scale_w = max(target_w / max(w, 1), 2.5 if mean0 < 60 else 2.0)
+    min_scale = 2.8 if mean0 < 60 else 2.2
+    scale = max(
+        target_h / max(h, 1),
+        target_w / max(w, 1),
+        min_scale,
+    )
     out = cv2.resize(
         crop,
-        (max(int(w * scale_w), target_w), max(int(h * scale_h), target_h)),
+        (max(int(w * scale), target_w), max(int(h * scale), target_h)),
         interpolation=cv2.INTER_CUBIC,
     )
     oh, ow = out.shape[:2]
@@ -643,13 +647,28 @@ def _tighten_silhouettes_to_recognized_plates(silhouettes, hits, image_shape):
         if matches:
             _distance, index, old_w = min(matches)
             old = result[index]
-            tx0, _ty0, tx1, _ty1 = tight
+            tx0, ty0, tx1, ty1 = tight
+            ox0, oy0, ox1, oy1 = old.box
             tight_w = max(1, tx1 - tx0)
+            tight_h = max(1, ty1 - ty0)
+            old_h = max(1, oy1 - oy0)
             # Preserve an already-good silhouette, but replace a car+bin group.
             if old_w > tight_w * 1.28:
-                _ox0, oy0, _ox1, oy1 = old.box
                 result[index] = VehicleSilhouette(
                     box=(tx0, oy0, tx1, oy1),
+                    contour=None,
+                    score=max(float(old.score), 0.95),
+                )
+            elif old_w < tight_w * 0.78 or old_h < tight_h * 0.78:
+                # A side-angle mask often contains only the rear bumper. Grow it
+                # to the full plate-derived height instead of showing a tiny box.
+                result[index] = VehicleSilhouette(
+                    box=(
+                        min(ox0, tx0),
+                        min(oy0, ty0),
+                        max(ox1, tx1),
+                        max(oy1, ty1),
+                    ),
                     contour=None,
                     score=max(float(old.score), 0.95),
                 )
