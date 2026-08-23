@@ -349,6 +349,31 @@ def test_vehicle_box_from_plate_and_downscale():
     assert small.shape[0] == 720
 
 
+def test_direct_ocr_bbox_is_bound_to_exact_plate_region():
+    numpy = pytest.importorskip("numpy")
+    from anpr.recognizer import PlateHit, _bind_hits_to_plate_regions
+    from anpr.vehicles import vehicle_box_from_plate
+
+    image_shape = (400, 720, 3)
+    exact = (310, 175, 380, 190)
+    broad = (120, 100, 600, 280)
+    hit = PlateHit(
+        plate="А123ВС77",
+        confidence=0.9,
+        raw_text="A123BC77",
+        bbox=broad,
+        engine="test",
+    )
+    crop = numpy.zeros((15, 70, 3), dtype=numpy.uint8)
+    result = _bind_hits_to_plate_regions([hit], [(exact, crop)], image_shape)
+    assert result[0].bbox == exact, "recognized text must use the exact plate rectangle"
+
+    car = vehicle_box_from_plate(exact, image_shape)
+    assert car[2] - car[0] < 220, f"plate-derived car frame is too wide: {car}"
+    assert car[0] < exact[0] and car[2] > exact[2]
+    assert car[1] < exact[1] and car[3] > exact[3]
+
+
 def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")

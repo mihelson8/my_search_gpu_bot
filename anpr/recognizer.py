@@ -497,6 +497,42 @@ def _ocr_crop_direct(crop, origin_box, min_confidence: float) -> List[PlateHit]:
     return _hits_from_ocr_texts(raw_hits, engine, bbox, min_confidence)
 
 
+def _bind_hits_to_plate_regions(hits: List[PlateHit], region_map, image_shape) -> List[PlateHit]:
+    """Replace a broad direct-OCR bbox with the nearest exact plate-region bbox."""
+    if not hits or not region_map:
+        return hits
+    h, w = image_shape[:2]
+    frame_area = float(max(h * w, 1))
+    boxes = [item[0] for item in region_map if item and item[0]]
+    if not boxes:
+        return hits
+    for hit in hits:
+        old = hit.bbox
+        broad = old is None
+        if old:
+            ow, oh = max(1, old[2] - old[0]), max(1, old[3] - old[1])
+            aspect = ow / float(oh)
+            broad = (
+                ow * oh > frame_area * 0.045
+                or ow > w * 0.24
+                or not (2.0 <= aspect <= 9.0)
+            )
+        if not broad:
+            continue
+        if old:
+            cx, cy = (old[0] + old[2]) / 2.0, (old[1] + old[3]) / 2.0
+        else:
+            cx, cy = w / 2.0, h * 0.35
+        hit.bbox = min(
+            boxes,
+            key=lambda box: (
+                ((box[0] + box[2]) / 2.0 - cx) ** 2
+                + ((box[1] + box[3]) / 2.0 - cy) ** 2
+            ),
+        )
+    return hits
+
+
 def recognize_scene(image, min_confidence: float = 0.35):
     """Detect cars, read Type-1 plates, draw frames; works even if silhouette is weak."""
     import numpy as np
@@ -612,6 +648,8 @@ def recognize_scene(image, min_confidence: float = 0.35):
         except Exception:
             pass
 
+    hits = _bind_hits_to_plate_regions(hits, global_regions, work.shape)
+
     unique: List[PlateHit] = []
     seen = set()
     for hit in hits:
@@ -636,7 +674,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
                 continue
             if not (int(h * 0.12) <= (py0 + py1) / 2.0 <= int(h * 0.62)):
                 continue
-            box = vehicle_box_from_plate(plate_box, work.shape, expand=1.35)
+            box = vehicle_box_from_plate(plate_box, work.shape, expand=0.95)
             if _is_non_vehicle(work, box):
                 continue
             bx0, by0, bx1, by1 = box
@@ -677,7 +715,10 @@ def recognize_scene(image, min_confidence: float = 0.35):
     vehicles = [item.box for item in silhouettes]
 
     try:
-        annotated = annotate_scene(work, silhouettes, unique)
+        candidate_boxes = [item[0] for item in global_regions[:3]]
+        annotated = annotate_scene(
+            work, silhouettes, unique, plate_candidates=candidate_boxes
+        )
     except Exception:
         annotated = work
 

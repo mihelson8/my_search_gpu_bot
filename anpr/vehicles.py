@@ -1084,16 +1084,16 @@ def bumper_box(box: Box) -> Box:
     return (x0, y0 + int(h * 0.32), x1, y1)
 
 
-def vehicle_box_from_plate(plate_box: Box, image_shape, expand: float = 1.35) -> Box:
+def vehicle_box_from_plate(plate_box: Box, image_shape, expand: float = 0.95) -> Box:
     """Guess a car frame around a found plate when silhouette detection failed."""
     h, w = image_shape[:2]
     x0, y0, x1, y1 = [int(v) for v in plate_box]
     pw = max(8, x1 - x0)
     ph = max(6, y1 - y0)
     bx0 = max(0, int(x0 - pw * expand))
-    by0 = max(0, int(y0 - ph * (expand + 2.6)))
+    by0 = max(0, int(y0 - ph * 4.5))
     bx1 = min(w, int(x1 + pw * expand))
-    by1 = min(h, int(y1 + ph * 1.0))
+    by1 = min(h, int(y1 + ph * 1.2))
     if bx1 - bx0 < 40 or by1 - by0 < 30:
         return (max(0, x0 - 40), max(0, y0 - 80), min(w, x1 + 40), min(h, y1 + 40))
     return (bx0, by0, bx1, by1)
@@ -1284,7 +1284,12 @@ def draw_type1_plate(vis, box: Box, plate: str = "") -> None:
         cv2.putText(vis, label, (x0, max(18, y0 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 220, 255), 2)
 
 
-def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> object:
+def annotate_scene(
+    image,
+    vehicles: Sequence[VehicleLike],
+    plates: list,
+    plate_candidates: Sequence[Box] = (),
+) -> object:
     """Keep the parking view, highlight car shape + frame the moment a car is detected."""
     import cv2
     import numpy as np
@@ -1302,6 +1307,15 @@ def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> obje
         for index, item in enumerate(real_vehicles):
             title = "АВТО" if index == 0 else f"АВТО {index + 1}"
             draw_vehicle_shape(vis, item, label=title)
+    # Show exact plate candidates even before OCR succeeds. Do not draw broad
+    # OCR crops; candidates come from the Type-1 geometry detector.
+    hit_boxes = [getattr(hit, "bbox", None) for hit in plates]
+    for box in plate_candidates:
+        if not box:
+            continue
+        if any(existing == box for existing in hit_boxes):
+            continue
+        draw_type1_plate(vis, box, "")
     for hit in plates:
         box = getattr(hit, "bbox", None)
         if not box:
