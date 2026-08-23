@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from anpr.config import DEFAULTS, load_config, save_config
+from anpr.config import DEFAULTS, load_config, save_config, side_window_geometry
 from anpr.database import AnprDB
 from anpr.plates import (
     category_label,
@@ -68,12 +68,20 @@ def test_overlay_text_is_not_a_plate():
     from anpr.plates import is_osd_text
 
     assert extract_plates("HD IPCAM 2880X1620") == []
+    assert extract_plates("HDIPCAM 2560X1440") == []
+    assert extract_plates("2560X1440") == []
     assert extract_plates("H001PC AM") == []
     assert extract_plates("2880X1 620") == []
     assert format_plate("2880X1620") == "—"
     assert not plate_is_valid(normalize_plate("HDIPCAM"))
     assert is_osd_text("HD IPCAM 2880X1620")
+    assert is_osd_text("HDIPCAM 2560X1440")
+    assert is_osd_text("2560 X 1440")
     assert extract_plates("C 292 HT 01") == ["С292НТ01"]
+    # Sliding window must not invent М256ОХ144 from the resolution string.
+    assert "М256ОХ144" not in extract_plates("НDIРСАМ2560Х1440")
+    assert "М256ОХ144" not in extract_plates("HDIPCAM2560X1440")
+    assert "А560ХН40" not in extract_plates("A560XH40 HDIPCAM")
 
 
 def test_format_and_labels():
@@ -163,6 +171,21 @@ def test_csv_roundtrip(temp_db):
         os.remove(other_path)
 
 
+def test_side_window_geometry_keeps_seetong_visible():
+    assert side_window_geometry(1920, 1080, win_w=980, win_h=720, margin=16) == "980x720+924+64"
+    assert side_window_geometry(800, 600, win_w=980, win_h=720, margin=16) == "768x568+16+16"
+
+
+def test_sanitize_drops_leftover_extract_folders():
+    from anpr.config import OFFICIAL_SEETONG_SHOTS_DIR, is_leftover_extract_path, sanitize_shots_dir
+
+    leftover = r"D:\my_search_gpu_bot-cursor-anpr-seetong-plates-6b83\pi"
+    assert is_leftover_extract_path(leftover)
+    assert sanitize_shots_dir(leftover) == OFFICIAL_SEETONG_SHOTS_DIR
+    assert sanitize_shots_dir("") == OFFICIAL_SEETONG_SHOTS_DIR
+    assert sanitize_shots_dir(OFFICIAL_SEETONG_SHOTS_DIR) == OFFICIAL_SEETONG_SHOTS_DIR
+
+
 def test_config_roundtrip(tmp_path):
     path = str(tmp_path / "config.json")
     save_config({"interval_sec": 2.5, "source": "rtsp"}, path)
@@ -182,6 +205,70 @@ def test_newest_image_path(tmp_path):
     os.utime(older, (1000, 1000))
     os.utime(newer, (2000, 2000))
     assert newest_image_path(str(tmp_path)).endswith("new.jpg")
+
+
+def test_newest_image_path_ignores_other_folders(tmp_path, monkeypatch):
+    from anpr import capture
+    from anpr.config import OFFICIAL_SEETONG_SHOTS_DIR
+
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "nouser"))
+    monkeypatch.setenv("HOME", str(tmp_path / "nouser"))
+    missing = tmp_path / "missing-pi"
+    other = tmp_path / "other-pi"
+    other.mkdir()
+    (other / "cam.jpg").write_bytes(b"x")
+    with pytest.raises(RuntimeError) as exc:
+        capture.newest_image_path(str(missing))
+    assert "снимков" in str(exc.value)
+    assert capture.seetong_shot_candidates(r"D:\my_search_gpu_bot-old\pi") == [OFFICIAL_SEETONG_SHOTS_DIR]
+
+
+def test_seetong_shot_candidates_include_requested_folder():
+    from anpr.capture import seetong_shot_candidates
+
+    paths = seetong_shot_candidates(r"C:\Program Files (x86)\Seetong\pi")
+    assert len(paths) == 1
+    assert "seetong" in paths[0].lower()
+
+
+def test_folder_source_falls_back_to_window(monkeypatch):
+    from anpr.capture import WindowInfo, grab_frame
+
+    class FakeFrame:
+        size = 12
+
+        def mean(self):
+            return 80.0
+
+    fake = FakeFrame()
+    monkeypatch.setattr(
+        "anpr.capture.grab_newest_in_folder",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("Нет папки снимков Seetong: C:\\x")),
+    )
+    monkeypatch.setattr(
+        "anpr.capture.find_seetong_window",
+        lambda *_a, **_k: WindowInfo(1, "Seetong Lite Client", 0, 0, 100, 80),
+    )
+    monkeypatch.setattr("anpr.capture.grab_window", lambda *_a, **_k: fake)
+    frame, title = grab_frame("seetong_folder", shots_dir=r"C:\Program Files (x86)\Seetong\pi")
+    assert frame is fake
+    assert "Seetong" in title
+
+
+def test_folder_and_window_failure_has_clear_hint(monkeypatch):
+    from anpr.capture import grab_frame
+
+    monkeypatch.setattr(
+        "anpr.capture.grab_newest_in_folder",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("Нет папки снимков Seetong: C:\\x")),
+    )
+    monkeypatch.setattr("anpr.capture.find_seetong_window", lambda *_a, **_k: None)
+    with pytest.raises(RuntimeError) as exc:
+        grab_frame("seetong_folder", shots_dir=r"C:\Program Files (x86)\Seetong\pi")
+    message = str(exc.value)
+    assert "Нет папки снимков Seetong:" not in message
+    assert "Main View" in message
+    assert "фотоаппарата" in message
 
 
 def test_crop_roi():
@@ -207,12 +294,32 @@ def test_crop_skips_distant_road():
 
 def test_mostly_black_frame():
     numpy = pytest.importorskip("numpy")
-    from anpr.capture import _is_mostly_black
+    from anpr.capture import _is_mostly_black, _is_useless_frame
 
     black = numpy.zeros((40, 40, 3), dtype=numpy.uint8)
     white = numpy.full((40, 40, 3), 200, dtype=numpy.uint8)
+    green = numpy.zeros((40, 40, 3), dtype=numpy.uint8)
+    green[:, :] = (40, 180, 40)
+    noisy = numpy.random.randint(0, 255, (40, 40, 3), dtype=numpy.uint8)
     assert _is_mostly_black(black)
     assert not _is_mostly_black(white)
+    assert _is_useless_frame(black)
+    assert _is_useless_frame(green)
+    assert not _is_useless_frame(noisy)
+
+
+def test_mask_osd_keeps_center_plate():
+    numpy = pytest.importorskip("numpy")
+    from anpr.recognizer import mask_osd
+
+    frame = numpy.full((240, 320, 3), 90, dtype=numpy.uint8)
+    # White Type-1 plate in the lower-center bumper zone.
+    frame[170:188, 110:210] = 230
+    # Corner OSD badge.
+    frame[220:238, 240:318] = 250
+    masked = mask_osd(frame)
+    assert int(masked[179, 160].mean()) > 200, "plate pixels must survive OSD wipe"
+    assert int(masked[230, 280].mean()) == 0, "corner resolution badge must be wiped"
 
 
 def test_extract_from_recognizer_without_ocr():
@@ -225,7 +332,324 @@ def test_extract_from_recognizer_without_ocr():
     assert hits == []
     assert vehicles == []
     assert vis is not None
-    assert zoom is None
+    # Focus-band zoom may still be built so the side panel is never empty.
+
+
+def test_vehicle_box_from_plate_and_downscale():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import downscale_for_anpr, vehicle_box_from_plate
+
+    box = vehicle_box_from_plate((100, 140, 160, 160), (240, 320, 3))
+    assert box[0] < 100 and box[2] > 160
+    assert box[1] < 140 and box[3] >= 160
+    big = numpy.zeros((1440, 2560, 3), dtype=numpy.uint8)
+    small = downscale_for_anpr(big, max_w=1280)
+    assert small.shape[1] == 1280
+    assert small.shape[0] == 720
+
+
+def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr import recognizer
+    from anpr.recognizer import PlateHit, recognize_scene
+
+    frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
+    frame[170:190, 120:200] = 230
+
+    def fake_ocr_crop(crop, origin_box, min_confidence):
+        return [
+            PlateHit(
+                plate="К900НН03",
+                confidence=0.9,
+                raw_text="K900HH03",
+                bbox=(120, 170, 200, 190),
+                engine="test",
+            )
+        ]
+
+    monkeypatch.setattr(recognizer, "_ocr_crop_direct", fake_ocr_crop)
+    monkeypatch.setattr("anpr.vehicles.find_vehicle_silhouettes", lambda *a, **k: [])
+    hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
+    assert hits and hits[0].plate == "К900НН03"
+    assert vehicles, "plate-based car frame must be created"
+    assert zoom is not None
+    assert annotated is not None
+    assert int(abs(annotated.astype("int16") - frame.astype("int16")).mean()) > 0
+
+
+def test_upper_parking_row_plate_search_drives_frame_and_ocr(monkeypatch):
+    """A missed silhouette must not hide plates in the real upper car row."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr import recognizer
+    from anpr.recognizer import PlateHit, plate_focus_band, parking_band, recognize_scene
+
+    frame = numpy.full((400, 720, 3), 105, dtype=numpy.uint8)
+    frame[80:220, 250:430] = (38, 40, 45)
+    frame[190:208, 305:390] = 225
+    frame[240:390, :] = (190, 195, 200)  # puddle below the parked car
+
+    focus_box, _focus = plate_focus_band(frame)
+    parking_box, _parking = parking_band(frame)
+    assert focus_box[1] < 80 and focus_box[3] < 280
+    assert parking_box[1] < 80 and parking_box[3] < 280
+
+    plate_box = (305, 190, 390, 208)
+    monkeypatch.setattr("anpr.vehicles.find_vehicle_silhouettes", lambda *a, **k: [])
+    monkeypatch.setattr(
+        recognizer,
+        "_collect_plate_regions",
+        lambda *a, **k: [(plate_box, frame[190:208, 305:390])],
+    )
+    monkeypatch.setattr(
+        recognizer,
+        "_ocr_regions",
+        lambda *a, **k: [
+            PlateHit(
+                plate="А123ВС77",
+                confidence=0.92,
+                raw_text="A123BC77",
+                bbox=plate_box,
+                engine="test",
+            )
+        ],
+    )
+
+    hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
+    assert hits and hits[0].plate == "А123ВС77"
+    assert vehicles, "plate proposal must create a car frame without a silhouette"
+    assert vehicles[0][3] < int(frame.shape[0] * 0.70), "frame must stay above puddle"
+    assert annotated is not None
+    assert zoom is not None
+
+
+def test_annotate_scene_draws_shape_and_frame():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import VehicleSilhouette, annotate_scene, draw_corner_frame, draw_vehicle_shape
+
+    frame = numpy.full((240, 320, 3), 90, dtype=numpy.uint8)
+    frame[120:200, 80:240] = (40, 42, 48)
+    silhouette = VehicleSilhouette(box=(80, 120, 240, 200), contour=None, score=1.0)
+    annotated = annotate_scene(frame, [silhouette], [])
+    assert annotated is not None
+    assert annotated.shape == frame.shape
+    # Tight blue reference frame: B channel dominates on the box edge.
+    corner = annotated[120, 80]
+    assert int(corner[0]) > int(corner[1])  # B > G for azure frame
+    draw_corner_frame(frame.copy(), (10, 10, 100, 80))
+    draw_vehicle_shape(frame.copy(), silhouette, label="АВТО")
+
+
+def test_light_and_dark_cars_get_frame():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    asphalt = numpy.full((240, 320, 3), 105, dtype=numpy.uint8)
+
+    dark = asphalt.copy()
+    dark[110:200, 60:250] = (28, 30, 32)
+    dark[120:155, 90:220] = (55, 58, 60)
+    dark_cars = find_vehicle_silhouettes(dark, max_cars=3)
+    assert dark_cars, "dark car on asphalt must get a frame"
+
+    light = asphalt.copy()
+    light[110:200, 60:250] = (210, 212, 215)
+    light[120:155, 90:220] = (185, 188, 190)
+    light_cars = find_vehicle_silhouettes(light, max_cars=3)
+    assert light_cars, "white/silver car on asphalt must get a frame"
+
+
+def test_wet_lot_finds_silver_and_dark_cars_separately():
+    """Regression: wet asphalt texture used to yield 0 cars / one giant blob."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    rs = numpy.random.RandomState(1)
+    frame = numpy.full((400, 720, 3), 110, dtype=numpy.uint8)
+    frame = numpy.clip(frame.astype(numpy.int16) + rs.randint(-25, 25, frame.shape), 0, 255).astype(
+        numpy.uint8
+    )
+    # Silver SUV left
+    frame[150:290, 50:260] = (145, 148, 152)
+    frame[165:210, 80:230] = (120, 125, 130)
+    # Dark sedan right
+    frame[160:300, 320:560] = (35, 36, 40)
+    frame[180:230, 360:520] = (55, 58, 60)
+
+    cars = find_vehicle_silhouettes(frame, max_cars=5)
+    assert len(cars) >= 2, f"expected silver + dark, got {cars}"
+    centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
+    assert centers[0] < 250, "silver SUV should be on the left"
+    assert centers[-1] > 350, "dark sedan should be on the right"
+
+
+def test_packed_parking_row_finds_multiple_cars():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    h, w = 400, 720
+    frame = numpy.full((h, w, 3), 130, dtype=numpy.uint8)
+    frame[300:400, :] = (70, 72, 75)
+    colors = [
+        (210, 210, 210),
+        (170, 170, 175),
+        (230, 230, 230),
+        (40, 45, 90),
+        (25, 25, 28),
+        (220, 220, 225),
+        (35, 38, 42),
+        (200, 200, 205),
+    ]
+    x = 15
+    for color in colors:
+        bw, bh = 82, 70
+        y0 = 160
+        frame[y0 : y0 + bh, x : x + bw] = color
+        frame[y0 + 8 : y0 + 28, x + 8 : x + bw - 8] = tuple(max(0, v - 25) for v in color)
+        frame[y0 + bh : y0 + bh + 25, x : x + bw] = (55, 55, 55)
+        x += bw + 6
+    cars = find_vehicle_silhouettes(frame, max_cars=6)
+    assert len(cars) >= 3, f"packed row must yield multiple car frames, got {cars}"
+    for car in cars:
+        bw = car.box[2] - car.box[0]
+        bh = car.box[3] - car.box[1]
+        assert bw < w * 0.28, f"must not frame a car group as one car: {car.box}"
+        assert bw < 200, f"box too wide for one packed-row car: {car.box}"
+        # Frame must hug the body — not stretch deep into asphalt/puddles.
+        assert bh <= int(bw * 1.25) + 12, f"box too tall vs car width: {car.box}"
+        assert car.box[3] < 280, f"box extends too far into foreground: {car.box}"
+    centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
+    assert centers[-1] - centers[0] > w * 0.35, f"cars should span the row, centers={centers}"
+
+
+def test_dark_and_white_pair_get_separate_tight_frames():
+    """Regression: black+white neighbours must not share one tall group box."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    frame = numpy.full((400, 720, 3), 120, dtype=numpy.uint8)
+    frame[300:400, :] = (60, 62, 65)
+    frame[150:270, 200:340] = (30, 32, 35)
+    frame[165:220, 220:320] = (50, 52, 55)
+    frame[150:270, 350:500] = (210, 212, 215)
+    frame[165:220, 370:480] = (180, 182, 185)
+    frame[270:295, 200:500] = (45, 45, 48)
+    cars = find_vehicle_silhouettes(frame, max_cars=4)
+    assert len(cars) >= 2, f"expected separate dark+white frames, got {cars}"
+    for car in cars:
+        bw = car.box[2] - car.box[0]
+        bh = car.box[3] - car.box[1]
+        assert bw < 220, f"pair must not stay glued: {car.box}"
+        assert bh <= int(bw * 1.35) + 16, f"frame must hug car body: {car.box}"
+    centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
+    assert centers[0] < 320 < centers[-1]
+
+
+def test_wet_puddle_alone_is_not_a_car():
+    """Regression: АВТО must not frame a bright puddle with no car body."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    h, w = 400, 640
+    frame = numpy.full((h, w, 3), 110, dtype=numpy.uint8)
+    # Bright wet sheet on the right — the false АВТО from operator screenshots.
+    frame[220:380, 380:620] = (195, 200, 205)
+    frame[250:360, 400:600] = (210, 215, 220)
+    assert find_vehicle_silhouettes(frame, max_cars=5) == []
+
+    # Same puddle plus a real dark car on the left — only the car remains.
+    frame[140:250, 60:220] = (35, 38, 42)
+    frame[155:195, 85:195] = (60, 62, 68)
+    cars = find_vehicle_silhouettes(frame, max_cars=5)
+    assert cars, "real car must still be found beside the puddle"
+    cx = (cars[0].box[0] + cars[0].box[2]) / 2
+    assert cx < 280, f"top detection should be the car, not the puddle: {cars[0].box}"
+    assert cars[0].box[3] < int(h * 0.72)
+
+
+def test_wet_reflections_do_not_inflate_or_glue_cars():
+    """Regression: puddle glare must not become tall multi-car frames."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    h, w = 480, 800
+    frame = numpy.full((h, w, 3), 115, dtype=numpy.uint8)
+    frame[340:460, 50:750] = (200, 205, 210)
+    tones = [
+        (200, 200, 205),
+        (35, 38, 42),
+        (220, 220, 225),
+        (30, 32, 36),
+        (180, 185, 190),
+        (45, 48, 55),
+    ]
+    x = 40
+    for col in tones:
+        y0 = 200
+        frame[y0 : y0 + 95, x : x + 95] = col
+        frame[y0 + 100 : y0 + 160, x : x + 95] = tuple(min(255, v + 20) for v in col)
+        x += 110
+    cars = find_vehicle_silhouettes(frame, max_cars=6)
+    assert len(cars) >= 3, f"expected several cars above the puddle, got {cars}"
+    for car in cars:
+        bw = car.box[2] - car.box[0]
+        bh = car.box[3] - car.box[1]
+        assert bw < w * 0.28, f"must not glue cars via reflections: {car.box}"
+        assert car.box[3] < int(h * 0.70), f"frame must not dive into puddle: {car.box}"
+        assert bh <= int(bw * 1.35) + 16, f"frame must hug car body: {car.box}"
+        assert (car.box[1] + car.box[3]) / 2 < h * 0.62
+
+
+def test_night_scene_zoom_shows_bumper_when_plate_unread(monkeypatch):
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr import recognizer
+    from anpr.recognizer import recognize_scene
+    from anpr.vehicles import VehicleSilhouette
+
+    frame = numpy.full((360, 640, 3), 25, dtype=numpy.uint8)
+    frame[140:280, 160:480] = (18, 18, 20)
+    frame[250:270, 260:400] = (200, 200, 200)  # white plate on dark bumper
+
+    monkeypatch.setattr(
+        "anpr.vehicles.find_vehicle_silhouettes",
+        lambda *a, **k: [VehicleSilhouette(box=(160, 140, 480, 280), contour=None, score=1.0)],
+    )
+    monkeypatch.setattr(recognizer, "_ocr_crop_direct", lambda *a, **k: [])
+    monkeypatch.setattr(recognizer, "_ocr_regions", lambda *a, **k: [])
+    monkeypatch.setattr(recognizer, "_collect_plate_regions", lambda *a, **k: [])
+    hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
+    assert not hits
+    assert vehicles
+    assert zoom is not None
+    assert float(zoom.mean()) > 30.0
+
+
+def test_recognize_scene_keeps_detection_frame_on_preview():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.recognizer import recognize_scene
+
+    frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
+    frame[0:40, :] = 200
+    frame[120:200, 70:250] = (35, 38, 42)
+    frame[128:155, 95:225] = (70, 72, 78)
+    frame[178:194, 110:210] = 230  # plate-like band on bumper
+    hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
+    assert vehicles, "car silhouette should be detected"
+    assert annotated is not None
+    assert annotated.shape == frame.shape, "preview must keep full scene with shape/frame, not only zoom crop"
+    assert zoom is not None
+    assert int(abs(annotated.astype("int16") - frame.astype("int16")).mean()) > 0
 
 
 def test_find_vehicle_silhouette_on_parking_lot():
@@ -250,6 +674,51 @@ def test_find_vehicle_silhouette_on_parking_lot():
     assert int(masked[160, 160].mean()) > 20  # car kept
     cut = cut_away_background(frame, silhouettes)
     assert cut.shape[0] < frame.shape[0] or cut.shape[1] < frame.shape[1]
+
+
+def test_dumpsters_are_not_marked_as_cars():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    frame = numpy.full((240, 320, 3), 110, dtype=numpy.uint8)
+    # Blue / yellow / green garbage bins — must not become АВТО.
+    frame[100:185, 250:305] = (210, 90, 35)
+    frame[100:185, 190:240] = (35, 210, 230)
+    frame[95:175, 130:175] = (40, 180, 60)
+    assert find_vehicle_silhouettes(frame, max_cars=5) == []
+
+    # Same bins plus a dark car on the left — only the car should remain.
+    frame[115:195, 20:115] = (40, 42, 48)
+    frame[125:150, 35:100] = (70, 72, 78)
+    cars = find_vehicle_silhouettes(frame, max_cars=5)
+    assert cars, "real car must still be found"
+    cx = (cars[0].box[0] + cars[0].box[2]) / 2
+    assert cx < 160, "top detection should be the car, not the bins"
+
+
+def test_hdipcam_osd_is_not_marked_as_car():
+    """Regression: HDIPCAM 2560X1440 was framed as АВТО and the lot went black."""
+    numpy = pytest.importorskip("numpy")
+    cv2 = pytest.importorskip("cv2")
+    from anpr.vehicles import annotate_scene, find_vehicle_silhouettes
+
+    frame = numpy.full((360, 640, 3), 28, dtype=numpy.uint8)
+    # Bright OSD badge bottom-right — looks like a pale blob to the FG mask.
+    cv2.putText(
+        frame,
+        "HDIPCAM 2560X1440",
+        (360, 340),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (240, 240, 240),
+        2,
+    )
+    assert find_vehicle_silhouettes(frame, max_cars=5) == []
+
+    # Even if a bad box is passed in, annotate must not black out the scene.
+    annotated = annotate_scene(frame, [(380, 300, 620, 350)], [])
+    assert float(annotated.mean()) > 15.0
 
 
 def test_type1_plate_region_aspect():
@@ -351,4 +820,69 @@ def test_zoom_box_enlarges_plate():
     zoomed = zoom_box(frame, (40, 80, 160, 100))
     assert zoomed.shape[1] > 160
     assert zoomed.shape[0] > 20
+
+
+def test_rtsp_session_reuses_open_capture(monkeypatch):
+    """Regression: opening RTSP every tick made wall-clock ~10s while OCR showed ~1s."""
+    numpy = pytest.importorskip("numpy")
+    cv2 = pytest.importorskip("cv2")
+    from anpr import capture as capture_mod
+
+    opens = {"n": 0}
+
+    class FakeCap:
+        def __init__(self, url, *args, **kwargs):
+            opens["n"] += 1
+            self.url = url
+
+        def isOpened(self):
+            return True
+
+        def set(self, *_a, **_k):
+            return True
+
+        def grab(self):
+            return True
+
+        def retrieve(self):
+            return True, numpy.zeros((40, 60, 3), dtype=numpy.uint8)
+
+        def read(self):
+            return True, numpy.zeros((40, 60, 3), dtype=numpy.uint8)
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr(cv2, "VideoCapture", FakeCap)
+    capture_mod.release_rtsp()
+    frame1 = capture_mod.grab_rtsp("rtsp://cam/test")
+    frame2 = capture_mod.grab_rtsp("rtsp://cam/test")
+    assert frame1 is not None and frame2 is not None
+    assert opens["n"] == 1
+    capture_mod.release_rtsp()
+    frame3 = capture_mod.grab_rtsp("rtsp://cam/test")
+    assert frame3 is not None
+    assert opens["n"] == 2
+    capture_mod.release_rtsp()
+
+
+def test_annotate_zoom_plate_is_bright_and_large():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.recognizer import PlateHit
+    from anpr.vehicles import annotate_zoom
+
+    frame = numpy.full((360, 640, 3), 35, dtype=numpy.uint8)
+    frame[220:250, 240:420] = (230, 230, 230)
+    hit = PlateHit(
+        plate="К900НН93",
+        confidence=0.8,
+        raw_text="К900НН93",
+        bbox=(240, 220, 420, 250),
+        engine="test",
+    )
+    zoom = annotate_zoom(frame, hit.bbox, [], [hit])
+    assert zoom is not None
+    assert zoom.shape[1] >= 900
+    assert float(zoom.mean()) > 40.0
 

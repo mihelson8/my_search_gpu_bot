@@ -19,6 +19,7 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+%LAUNCH% -m pip install rapidocr-onnxruntime 2>nul
 
-echo OK. Now run: python anpr_gui.py
+echo OK. Now run START_ANPR.bat or python anpr_gui.py
 pause
