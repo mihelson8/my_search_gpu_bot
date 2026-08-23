@@ -239,9 +239,9 @@ def _looks_like_wheel_or_stain(image, box: Box) -> bool:
     aspect = bw / float(bh)
     cy = (y0 + y1) / 2.0
     # A real parked body fills more of this high camera than a tyre next to a puddle.
-    if area_ratio <= 0.055 and cy >= h * 0.52 and aspect <= 1.95:
+    if area_ratio <= 0.055 and cy >= h * 0.58 and aspect <= 1.95:
         return True
-    if bh <= int(h * 0.20) and y1 >= int(h * 0.60) and area_ratio <= 0.08:
+    if bh <= int(h * 0.16) and y1 >= int(h * 0.68) and area_ratio <= 0.05:
         return True
     return False
 

@@ -492,6 +492,10 @@ def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
 
     frame = numpy.full((240, 320, 3), 95, dtype=numpy.uint8)
     frame[170:190, 120:200] = 230
+    frame[174:186, 132:136] = 20
+    frame[174:186, 148:152] = 20
+    frame[174:186, 164:168] = 20
+    frame[174:186, 180:184] = 20
 
     def fake_ocr_regions(region_map, min_confidence):
         return [
