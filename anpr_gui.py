@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r16».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r17».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -717,7 +717,8 @@ class AnprApp:
                     lambda: self._set_detection(
                         self._last_plate or "—",
                         "unknown" if not self._last_plate else self._last_category,
-                        "Нет картинки с камеры (пустой/зелёный кадр). Проверьте RTSP и Seetong, затем Старт.",
+                        "Нет картинки с камеры (чёрный/пустой кадр). Нажмите Старт, проверьте RTSP в «Камера / IP». "
+                        "Надпись HDIPCAM — это не авто.",
                         0.0,
                     ),
                 )

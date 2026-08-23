@@ -495,7 +495,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
         downscale_for_anpr,
         find_vehicle_silhouettes,
         vehicle_box_from_plate,
-        _looks_like_dumpster,
+        _is_non_vehicle,
     )
 
     if image is None or getattr(image, "size", 0) == 0:
@@ -515,7 +515,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
     silhouettes = []
     try:
         silhouettes = find_vehicle_silhouettes(work, max_cars=1)
-        silhouettes = [item for item in silhouettes if not _looks_like_dumpster(work, item.box)]
+        silhouettes = [item for item in silhouettes if not _is_non_vehicle(work, item.box)]
     except Exception:
         silhouettes = []
 
@@ -571,11 +571,11 @@ def recognize_scene(image, min_confidence: float = 0.35):
             if not hit.bbox:
                 continue
             box = vehicle_box_from_plate(hit.bbox, work.shape)
-            if _looks_like_dumpster(work, box):
+            if _is_non_vehicle(work, box):
                 continue
             silhouettes.append(VehicleSilhouette(box=box, contour=None, score=1.0 - index * 0.05))
 
-    silhouettes = [item for item in silhouettes if not _looks_like_dumpster(work, item.box)]
+    silhouettes = [item for item in silhouettes if not _is_non_vehicle(work, item.box)]
     vehicles = [item.box for item in silhouettes]
 
     try:

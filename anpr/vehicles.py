@@ -103,6 +103,47 @@ def _looks_like_dumpster(image, box: Box) -> bool:
     return False
 
 
+def _looks_like_camera_osd(image, box: Box) -> bool:
+    """True for HDIPCAM / resolution badges that must never be framed as АВТО."""
+    h, w = image.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    area_ratio = (bw * bh) / float(max(h * w, 1))
+    cx = (x0 + x1) / 2.0
+    cy = (y0 + y1) / 2.0
+    # Typical OSD corners on Seetong / HDIPCAM overlays.
+    in_br = cx >= w * 0.50 and cy >= h * 0.72
+    in_bl = cx <= w * 0.45 and cy >= h * 0.88
+    in_tl = cx <= w * 0.55 and cy <= h * 0.20
+    in_tr = cx >= w * 0.55 and cy <= h * 0.20
+    if not (in_br or in_bl or in_tl or in_tr):
+        return False
+    # Small / medium corner blob = badge, not a parking car.
+    if area_ratio <= 0.14:
+        return True
+    # Wide thin strip of white text (HDIPCAM 2560X1440).
+    aspect = bw / float(bh)
+    if bh <= h * 0.22 and aspect >= 2.2:
+        return True
+    return False
+
+
+def _is_non_vehicle(image, box: Box) -> bool:
+    return _looks_like_dumpster(image, box) or _looks_like_camera_osd(image, box)
+
+
+def clear_osd_zones(mask):
+    """Zero camera OSD corners so they never enter the vehicle silhouette mask."""
+    if mask is None or getattr(mask, "size", 0) == 0:
+        return mask
+    h, w = mask.shape[:2]
+    # Match recognizer.mask_osd: corners only — do not wipe the bumper zone.
+    mask[0 : max(int(h * 0.12), 8), 0 : max(int(w * 0.50), 40)] = 0
+    mask[0 : max(int(h * 0.10), 6), int(w * 0.70) : w] = 0
+    mask[int(h * 0.88) : h, int(w * 0.55) : w] = 0
+    mask[int(h * 0.94) : h, :] = 0
+    return mask
+
 def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
     """Higher = more like a car from a high parking camera."""
     import cv2
@@ -183,12 +224,15 @@ def _silhouettes_from_mask(
             min(w, x + cw + pad_x),
             min(h, y + ch + pad_y),
         )
-        if image is not None and _looks_like_dumpster(image, box):
+        if image is not None and _is_non_vehicle(image, box):
             continue
         score = ratio + (cy / h) * 0.08 + min(solidity, 1.0) * 0.04
         if image is not None:
             score = _car_likeness_score(image, box, base=score)
         if score < 0.08:
+            continue
+        # Reject weak corner detections even if likeness is borderline.
+        if image is not None and _looks_like_camera_osd(image, box):
             continue
         found.append(VehicleSilhouette(box=box, contour=contour, score=score))
     return found
@@ -247,11 +291,14 @@ def _foreground_mask(image):
     vivid_bins = cv2.bitwise_or(vivid_bins, cv2.inRange(hsv, (35, 50, 40), (95, 255, 255)))  # green lids/grass
     mask[vivid_bins > 0] = 0
 
+    # Never treat HDIPCAM / resolution OSD as a car blob.
+    clear_osd_zones(mask)
+
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
-    return cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
-
+    out = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
+    return clear_osd_zones(out)
 
 def _edge_mask(image):
     import cv2
@@ -278,7 +325,7 @@ def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette
     except Exception:
         pass
     # Edge mask is intentionally skipped: grass and dumpster lids create false cars.
-    found = [item for item in found if not _looks_like_dumpster(image, item.box)]
+    found = [item for item in found if not _is_non_vehicle(image, item.box)]
     if not found:
         return []
     kept = _nms(found, iou_thresh=0.42)
@@ -527,12 +574,19 @@ def annotate_scene(image, vehicles: Sequence[VehicleLike], plates: list) -> obje
     import numpy as np
 
     vis = image.copy()
-    if vehicles:
-        mask = silhouette_mask(vis.shape, vehicles, dilate=15)
-        # Dim the lot so the car shape stands out, but keep context.
-        dim = (vis.astype(np.float32) * 0.35).astype(vis.dtype)
+    # Drop OSD / dumpster false cars before dimming — otherwise the lot goes black.
+    real_vehicles = []
+    for item in vehicles:
+        box = _as_box(item)
+        if _is_non_vehicle(image, box):
+            continue
+        real_vehicles.append(item)
+    if real_vehicles:
+        mask = silhouette_mask(vis.shape, real_vehicles, dilate=15)
+        # Mild dim only — heavy 0.35 made false OSD frames look like a black screen.
+        dim = (vis.astype(np.float32) * 0.72).astype(vis.dtype)
         vis = np.where(mask[:, :, None] > 0, vis, dim)
-        for index, item in enumerate(vehicles):
+        for index, item in enumerate(real_vehicles):
             title = "АВТО" if index == 0 else f"АВТО {index + 1}"
             draw_vehicle_shape(vis, item, label=title)
     for hit in plates:

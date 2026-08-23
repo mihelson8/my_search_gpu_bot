@@ -273,7 +273,14 @@ def _is_useless_frame(frame, max_std: float = 12.0) -> bool:
             return True
         # Compare pixels, not BGR channels (solid green has channel spread).
         flat = frame.reshape(-1, frame.shape[-1]) if frame.ndim == 3 else frame.reshape(-1, 1)
-        return float(flat.astype("float32").std(axis=0).max()) < max_std
+        if float(flat.astype("float32").std(axis=0).max()) < max_std:
+            return True
+        # Black feed with only corner OSD (HDIPCAM) still looks "busy" by std.
+        h, w = frame.shape[:2]
+        core = frame[int(h * 0.10) : int(h * 0.85), int(w * 0.08) : int(w * 0.92)]
+        if core is not None and getattr(core, "size", 0) > 0 and _is_mostly_black(core):
+            return True
+        return False
     except Exception:
         return True
 

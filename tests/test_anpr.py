@@ -460,6 +460,30 @@ def test_dumpsters_are_not_marked_as_cars():
     assert cx < 160, "top detection should be the car, not the bins"
 
 
+def test_hdipcam_osd_is_not_marked_as_car():
+    """Regression: HDIPCAM 2560X1440 was framed as АВТО and the lot went black."""
+    numpy = pytest.importorskip("numpy")
+    cv2 = pytest.importorskip("cv2")
+    from anpr.vehicles import annotate_scene, find_vehicle_silhouettes
+
+    frame = numpy.full((360, 640, 3), 28, dtype=numpy.uint8)
+    # Bright OSD badge bottom-right — looks like a pale blob to the FG mask.
+    cv2.putText(
+        frame,
+        "HDIPCAM 2560X1440",
+        (360, 340),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (240, 240, 240),
+        2,
+    )
+    assert find_vehicle_silhouettes(frame, max_cars=5) == []
+
+    # Even if a bad box is passed in, annotate must not black out the scene.
+    annotated = annotate_scene(frame, [(380, 300, 620, 350)], [])
+    assert float(annotated.mean()) > 15.0
+
+
 def test_type1_plate_region_aspect():
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
