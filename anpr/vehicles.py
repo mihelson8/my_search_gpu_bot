@@ -204,7 +204,7 @@ def _is_non_vehicle(image, box: Box) -> bool:
         # A front/rear car under this high camera is never a very wide, shallow
         # sheet. Preserve a coherent bright neutral body whose lower edge was
         # tightened away; otherwise these are asphalt or objects glued by it.
-        if bw >= int(w * 0.28) and bh <= int(h * 0.36) and aspect >= 2.45:
+        if bw >= int(w * 0.28) and bh <= int(h * 0.50) and aspect >= 2.45:
             mean_sat, mean_val, _vivid, _bin, _green = _box_color_stats(image, box)
             bright_silver_body = mean_sat <= 35 and mean_val >= 155
             if not bright_silver_body:

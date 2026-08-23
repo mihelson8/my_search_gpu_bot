@@ -861,7 +861,22 @@ def recognize_scene(image, min_confidence: float = 0.35):
             silhouettes, unique, work.shape
         )
 
-    silhouettes = [item for item in silhouettes if not _is_non_vehicle(work, item.box)]
+    def _contains_confirmed_plate(item) -> bool:
+        x0, y0, x1, y1 = item.box
+        for hit in unique:
+            if not hit.bbox:
+                continue
+            px0, py0, px1, py1 = hit.bbox
+            cx, cy = (px0 + px1) / 2.0, (py0 + py1) / 2.0
+            if x0 <= cx <= x1 and y0 <= cy <= y1:
+                return True
+        return False
+
+    silhouettes = [
+        item
+        for item in silhouettes
+        if _contains_confirmed_plate(item) or not _is_non_vehicle(work, item.box)
+    ]
     vehicles = [item.box for item in silhouettes]
 
     try:
