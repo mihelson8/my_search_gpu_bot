@@ -210,9 +210,12 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
 
 
 # High parking cam: blobs wider than this must be *attempted* to split.
-_SPLIT_ATTEMPT_W_RATIO = 0.22
+_SPLIT_ATTEMPT_W_RATIO = 0.18
 # Absolute reject — almost certainly several cars or the whole lot.
 _MAX_GROUP_W_RATIO = 0.62
+# Keep frame tight to the body; bumper only needs a thin strip for the plate.
+_BUMPER_EXPAND_RATIO = 0.22
+_MAX_BOX_ASPECT_H_OVER_W = 1.20
 
 
 def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | None = None) -> bool:
@@ -252,7 +255,7 @@ def _column_projection(mask, box: Box):
     bh = y1 - y0
     if bw < 10 or bh < 10:
         return None, y0, y0
-    y_mid = y0 + max(int(bh * 0.58), 20)
+    y_mid = y0 + max(int(bh * 0.62), 20)
     roi = mask[y0:y_mid, x0:x1]
     if roi is None or getattr(roi, "size", 0) == 0:
         return None, y0, y_mid
@@ -322,9 +325,60 @@ def _valley_cut_spans(col, min_width: int) -> list:
     return spans if len(spans) >= 2 else []
 
 
+def _color_transition_spans(image, box: Box, min_width: int) -> list:
+    """Split dark|light car pairs by a sharp brightness jump between bodies."""
+    import cv2
+    import numpy as np
+
+    if image is None or getattr(image, "size", 0) == 0:
+        return []
+    x0, y0, x1, y1 = [int(v) for v in box]
+    bw = x1 - x0
+    bh = y1 - y0
+    if bw < min_width * 2 or bh < 20:
+        return []
+    y_hi = y0 + max(int(bh * 0.62), 18)
+    crop = image[y0:y_hi, x0:x1]
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return []
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
+    col = gray.mean(axis=0).astype(np.float32)
+    k = max(5, min(25, (bw // 28) | 1))
+    col = cv2.GaussianBlur(col.reshape(1, -1), (k, 1), 0).ravel()
+    grad = np.abs(np.diff(col))
+    if grad.size < min_width:
+        return []
+    # Absolute jump — percentile alone fires on windshield reflections.
+    thr = max(28.0, float(np.percentile(grad, 92)))
+    cuts = []
+    i = min_width
+    while i < bw - min_width:
+        if grad[i - 1] >= thr and (not cuts or i - cuts[-1] >= min_width):
+            lo = max(min_width, i - 6)
+            hi = min(bw - min_width, i + 7)
+            j = lo + int(np.argmax(grad[lo:hi]))
+            cut = j + 1
+            # Real dark|light pair: plateaus on each side must differ a lot.
+            left = float(col[max(0, cut - min_width) : cut].mean())
+            right = float(col[cut : min(bw, cut + min_width)].mean())
+            if grad[j] >= thr and abs(left - right) >= 40.0:
+                cuts.append(cut)
+                i = cut + min_width
+                continue
+        i += 1
+    if not cuts:
+        return []
+    edges = [0] + cuts + [bw]
+    spans = []
+    for a, b in zip(edges, edges[1:]):
+        if b - a >= min_width:
+            spans.append((a, b))
+    return spans if len(spans) >= 2 else []
+
+
 def _geometric_spans(bw: int, min_width: int, frame_w: int) -> list:
     """Last resort: tile a mega-blob into car-width slices (never keep a group box)."""
-    target = max(min_width, int(frame_w * 0.11))
+    target = max(min_width, int(frame_w * 0.10))
     target = min(target, max(min_width, int(bw / 2)))
     n = max(2, int(round(bw / float(target))))
     # Cap slice count so tiny shreds are not emitted.
@@ -348,10 +402,10 @@ def _boxes_from_spans(mask, box: Box, spans, y_mid: int) -> List[Box]:
     for a, b in spans:
         xa = max(0, x0 + int(a) - 2)
         xb = min(mask.shape[1], x0 + int(b) + 2)
-        tight = _tighten_box_to_mask(mask, (xa, y0, xb, min(y1, y_mid + int(bh * 0.14))))
+        tight = _tighten_box_to_mask(mask, (xa, y0, xb, min(y1, y_mid + int(bh * 0.10))))
         tw = max(1, tight[2] - tight[0])
         th = max(1, tight[3] - tight[1])
-        max_h = max(int(tw * 1.45), 50)
+        max_h = max(int(tw * _MAX_BOX_ASPECT_H_OVER_W), 48)
         if th > max_h:
             tight = (tight[0], tight[1], tight[2], tight[1] + max_h)
         boxes.append(tight)
@@ -364,27 +418,29 @@ def _looks_like_car_group(box: Box, frame_w: int, col=None, min_width: int = 55,
     bw = max(1, x1 - x0)
     bh = max(1, y1 - y0)
     # separate_row clears the bumper band — restore height for close-up checks only.
-    bh_eff = max(bh, int(bh * 1.40) + 10)
+    bh_eff = max(bh, int(bh * 1.25) + 10)
     if frame_h:
         bh_eff = min(bh_eff, max(1, frame_h - y0))
     aspect_raw = bw / float(bh)
     aspect_eff = bw / float(bh_eff)
-    # Tall close-up body filling much of the frame is one car, not a row.
-    if frame_h and bh_eff >= int(frame_h * 0.36) and bw <= int(frame_w * 0.70) and aspect_eff < 2.9:
+    # Close-up single car: fills much of a small/medium frame.
+    if frame_h and bw >= int(frame_w * 0.42) and bh_eff >= int(frame_h * 0.26) and aspect_eff < 3.1:
+        return False
+    if frame_h and bh_eff >= int(frame_h * 0.34) and bw <= int(frame_w * 0.72) and aspect_eff < 2.9:
         return False
     if bw >= int(frame_w * 0.70) and aspect_raw >= 2.4:
         return True
-    if bw >= int(frame_w * 0.36) and aspect_raw >= 2.2:
+    if bw >= int(frame_w * 0.34) and aspect_raw >= 2.3:
         return True
-    if bw >= int(frame_w * 0.30) and aspect_raw >= 2.7:
+    if bw >= int(frame_w * 0.28) and aspect_raw >= 2.8:
         return True
     # Parking-row view: use RAW height (already bumper-trimmed) so 2 glued cars stay "wide".
     if (
         frame_h
         and frame_w >= 480
-        and bh < int(frame_h * 0.30)
-        and bw >= int(frame_w * 0.20)
-        and aspect_raw >= 1.55
+        and bh < int(frame_h * 0.34)
+        and bw >= int(frame_w * 0.16)
+        and aspect_raw >= 1.45
     ):
         return True
     if col is not None and len(col) >= min_width * 2:
@@ -395,7 +451,9 @@ def _looks_like_car_group(box: Box, frame_w: int, col=None, min_width: int = 55,
     return False
 
 
-def _column_split_boxes(mask, box: Box, min_width: int = 55, frame_w: int | None = None) -> List[Box]:
+def _column_split_boxes(
+    mask, box: Box, min_width: int = 55, frame_w: int | None = None, image=None
+) -> List[Box]:
     """Split a wide blob (parking row glued by shadows) into per-car boxes."""
     x0, y0, x1, y1 = [int(v) for v in box]
     bw = x1 - x0
@@ -414,6 +472,12 @@ def _column_split_boxes(mask, box: Box, min_width: int = 55, frame_w: int | None
     is_group = _looks_like_car_group(
         box, frame_w, col=col, min_width=min_width, frame_h=frame_h
     )
+    # Dark|light neighbours: cut on a sharp brightness jump even without a mask gap.
+    if len(spans) < 2:
+        color_spans = _color_transition_spans(image, box, min_width=min_width)
+        if len(color_spans) >= 2:
+            spans = color_spans
+            is_group = True
     # Peak/valley/geometric cuts only when the blob looks like several cars —
     # otherwise a single body (windshield dip) gets shredded.
     if len(spans) < 2 and is_group:
@@ -427,7 +491,9 @@ def _column_split_boxes(mask, box: Box, min_width: int = 55, frame_w: int | None
     return _boxes_from_spans(mask, box, spans, y_mid)
 
 
-def _force_split_to_cars(mask, box: Box, min_width: int, frame_w: int, depth: int = 0) -> List[Box]:
+def _force_split_to_cars(
+    mask, box: Box, min_width: int, frame_w: int, depth: int = 0, image=None
+) -> List[Box]:
     """Recursively split group blobs; keep a single close-up car intact."""
     x0, y0, x1, y1 = [int(v) for v in box]
     bw = max(1, x1 - x0)
@@ -438,11 +504,14 @@ def _force_split_to_cars(mask, box: Box, min_width: int, frame_w: int, depth: in
     is_group = _looks_like_car_group(
         box, frame_w, col=col, min_width=min_width, frame_h=frame_h
     )
+    if not is_group and image is not None and bw > soft_max:
+        if len(_color_transition_spans(image, box, min_width=min_width)) >= 2:
+            is_group = True
     if depth >= 5:
         return [] if is_group else [box]
     if bw <= soft_max and not is_group:
         return [box]
-    subs = _column_split_boxes(mask, box, min_width=min_width, frame_w=frame_w)
+    subs = _column_split_boxes(mask, box, min_width=min_width, frame_w=frame_w, image=image)
     if len(subs) < 2:
         if not is_group:
             return [box]  # one wide car — do not tile by width alone
@@ -460,7 +529,9 @@ def _force_split_to_cars(mask, box: Box, min_width: int, frame_w: int, depth: in
         ):
             out.append(sub)
         else:
-            out.extend(_force_split_to_cars(mask, sub, min_width, frame_w, depth + 1))
+            out.extend(
+                _force_split_to_cars(mask, sub, min_width, frame_w, depth + 1, image=image)
+            )
     return out
 
 
@@ -512,6 +583,90 @@ def _tighten_box_to_mask(mask, box: Box) -> Box:
     return (x0 + int(cx[0]), y0 + int(ry[0]), x0 + int(cx[-1]) + 1, y0 + int(ry[-1]) + 1)
 
 
+def _include_bumper_plate(image, box: Box, max_extra: int) -> Box:
+    """Grow the bottom slightly if a white plate / dark bumper sits just under the body."""
+    import cv2
+    import numpy as np
+
+    if image is None or getattr(image, "size", 0) == 0 or max_extra <= 0:
+        return box
+    h, w = image.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    x0, x1 = max(0, x0), min(w, x1)
+    if x1 - x0 < 20:
+        return box
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    limit = min(h, y1 + max_extra)
+    best = y1
+    miss = 0
+    for y in range(y1, limit):
+        row = gray[y, x0:x1]
+        bright = float((row >= 195).mean())
+        dark = float((row <= 70).mean())
+        # Plate band or bumper fascia — stop on asphalt texture.
+        if bright >= 0.18 or dark >= 0.40:
+            best = y + 1
+            miss = 0
+        else:
+            miss += 1
+            if miss >= 4 and y > y1 + 6:
+                break
+    return (x0, y0, x1, best)
+
+
+def _fit_box_to_car_body(mask, box: Box, full_mask=None, image=None) -> Box:
+    """Shrink a detection to the dense car body; keep a thin bumper/plate strip."""
+    src = full_mask if full_mask is not None else mask
+    if src is None or getattr(src, "size", 0) == 0:
+        return box
+    h, w = src.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w, x1), min(h, y1)
+    if x1 - x0 < 20 or y1 - y0 < 20:
+        return (x0, y0, x1, y1)
+
+    x0, y0, x1, y1 = _tighten_dense_xy(src, (x0, y0, x1, y1), row_thr=0.12, col_thr=0.10)
+    bw = max(1, x1 - x0)
+    body_h = max(1, y1 - y0)
+    # Modest default bumper — plate hunt may extend a bit more.
+    bump = max(10, int(body_h * _BUMPER_EXPAND_RATIO))
+    y1 = min(h, y1 + bump)
+    box = _include_bumper_plate(image, (x0, y0, x1, y1), max_extra=max(18, int(body_h * 0.45)))
+    x0, y0, x1, y1 = box
+    max_h = max(int(bw * _MAX_BOX_ASPECT_H_OVER_W), 48)
+    if (y1 - y0) > max_h:
+        y1 = y0 + max_h
+    return (x0, y0, x1, y1)
+
+
+def _tighten_dense_xy(mask, box: Box, row_thr: float = 0.12, col_thr: float = 0.10) -> Box:
+    """Keep only rows/cols with enough mask mass (drop sparse shadow)."""
+    import numpy as np
+
+    h, w = mask.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w, x1), min(h, y1)
+    roi = mask[y0:y1, x0:x1] > 0
+    if roi.size == 0 or not roi.any():
+        return (x0, y0, x1, y1)
+    row_frac = roi.mean(axis=1)
+    col_frac = roi.mean(axis=0)
+    r_thr = max(row_thr, float(row_frac.max()) * 0.28)
+    c_thr = max(col_thr, float(col_frac.max()) * 0.22)
+    rows = np.where(row_frac >= r_thr)[0]
+    cols = np.where(col_frac >= c_thr)[0]
+    if rows.size == 0 or cols.size == 0:
+        return _tighten_box_to_mask(mask, (x0, y0, x1, y1))
+    return (
+        x0 + int(cols[0]),
+        y0 + int(rows[0]),
+        x0 + int(cols[-1]) + 1,
+        y0 + int(rows[-1]) + 1,
+    )
+
+
 def _separate_row_mask(mask):
     """Clear near shadow carpet; break thin bridges between adjacent cars."""
     import cv2
@@ -520,7 +675,8 @@ def _separate_row_mask(mask):
         return mask
     out = mask.copy()
     h, w = out.shape[:2]
-    out[int(h * 0.74) : h, :] = 0
+    # Clear far-foreground puddles/shadows that inflate the frame downward.
+    out[int(h * 0.70) : h, :] = 0
     # Narrow vertical open — wide kernels punch holes through a single body.
     k_bridge = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 23))
     return cv2.morphologyEx(out, cv2.MORPH_OPEN, k_bridge, iterations=1)
@@ -539,11 +695,9 @@ def _silhouettes_from_mask(
     found: List[VehicleSilhouette] = []
 
     def _add_box(box: Box, contour=None) -> None:
+        # Fit to dense body on the full tone mask (keeps bumper, drops puddles).
+        box = _fit_box_to_car_body(work, box, full_mask=mask, image=image)
         x0, y0, x1, y1 = box
-        # Separated masks clear the near shadow band — grow box down so bumper/plate remain.
-        bh = max(1, y1 - y0)
-        y1 = min(h, y1 + int(bh * 0.40) + 10)
-        box = (x0, y0, x1, y1)
         bw, bh = max(1, x1 - x0), max(1, y1 - y0)
         if bw < 55 or bh < 40:
             return
@@ -557,7 +711,7 @@ def _silhouettes_from_mask(
         if ratio < min_ratio or ratio > min(max_ratio, 0.45):
             return
         # High-angle front view can look nearly square / slightly tall.
-        if not (0.65 <= aspect <= 3.6):
+        if not (0.70 <= aspect <= 3.4):
             return
         if image is not None and _is_non_vehicle(image, box):
             return
@@ -576,7 +730,7 @@ def _silhouettes_from_mask(
             continue
         area = cw * ch
         ratio = area / frame_area
-        pad_x, pad_y = int(cw * 0.03), int(ch * 0.04)
+        pad_x, pad_y = int(cw * 0.02), int(ch * 0.02)
         box = (
             max(0, x - pad_x),
             max(0, y - pad_y),
@@ -587,12 +741,14 @@ def _silhouettes_from_mask(
         min_w = max(48, int(w * 0.055))
         need_split = (
             cw > int(w * _SPLIT_ATTEMPT_W_RATIO)
-            or (cw >= max(160, int(w * 0.32)) and cw >= int(ch * 1.7))
+            or (cw >= max(140, int(w * 0.28)) and cw >= int(ch * 1.55))
             or (ratio > max_ratio and cw > int(ch * 1.8))
             or _looks_like_car_group(box, w, min_width=min_w, frame_h=h)
         )
         if need_split:
-            subs = _force_split_to_cars(work, box, min_width=min_w, frame_w=w)
+            subs = _force_split_to_cars(
+                work, box, min_width=min_w, frame_w=w, image=image
+            )
             if len(subs) >= 2:
                 for sub in subs:
                     _add_box(sub, contour=None)

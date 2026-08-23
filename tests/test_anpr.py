@@ -472,11 +472,38 @@ def test_packed_parking_row_finds_multiple_cars():
     assert len(cars) >= 3, f"packed row must yield multiple car frames, got {cars}"
     for car in cars:
         bw = car.box[2] - car.box[0]
+        bh = car.box[3] - car.box[1]
         assert bw < w * 0.28, f"must not frame a car group as one car: {car.box}"
         assert bw < 200, f"box too wide for one packed-row car: {car.box}"
-    # Centers should be spread across the row, not stacked on one mega-blob.
+        # Frame must hug the body — not stretch deep into asphalt/puddles.
+        assert bh <= int(bw * 1.25) + 12, f"box too tall vs car width: {car.box}"
+        assert car.box[3] < 280, f"box extends too far into foreground: {car.box}"
     centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
     assert centers[-1] - centers[0] > w * 0.35, f"cars should span the row, centers={centers}"
+
+
+def test_dark_and_white_pair_get_separate_tight_frames():
+    """Regression: black+white neighbours must not share one tall group box."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    frame = numpy.full((400, 720, 3), 120, dtype=numpy.uint8)
+    frame[300:400, :] = (60, 62, 65)
+    frame[150:270, 200:340] = (30, 32, 35)
+    frame[165:220, 220:320] = (50, 52, 55)
+    frame[150:270, 350:500] = (210, 212, 215)
+    frame[165:220, 370:480] = (180, 182, 185)
+    frame[270:295, 200:500] = (45, 45, 48)
+    cars = find_vehicle_silhouettes(frame, max_cars=4)
+    assert len(cars) >= 2, f"expected separate dark+white frames, got {cars}"
+    for car in cars:
+        bw = car.box[2] - car.box[0]
+        bh = car.box[3] - car.box[1]
+        assert bw < 220, f"pair must not stay glued: {car.box}"
+        assert bh <= int(bw * 1.25) + 16, f"frame must hug car body: {car.box}"
+    centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
+    assert centers[0] < 320 < centers[-1]
 
 
 def test_night_scene_zoom_shows_bumper_when_plate_unread(monkeypatch):
