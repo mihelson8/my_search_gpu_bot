@@ -105,6 +105,10 @@ class AnprApp:
         )
         self.run_label.config(text=f"сборка {APP_VERSION}")
 
+    def _maybe_startup_dialog(self) -> None:
+        """Always open the old camera/source dialog, then auto-start capture."""
+        self.open_camera_dialog(on_close=self.start_capture)
+
     def _warn_missing_packages(self) -> None:
         try:
             from anpr.capture import missing_capture_packages
@@ -113,7 +117,7 @@ class AnprApp:
         except Exception:
             missing = ["numpy", "Pillow", "mss"]
         if not missing:
-            self.root.after(500, self.start_capture)
+            self.root.after(500, self._maybe_startup_dialog)
             return
         names = ", ".join(missing)
         text = (
@@ -167,7 +171,17 @@ class AnprApp:
         ttk.Button(top, text="Снимок сейчас", command=self.capture_once).pack(side="left", padx=(0, 8))
         ttk.Button(top, text="Камера / IP", command=self.open_camera_dialog).pack(side="left", padx=(0, 16))
 
+        ttk.Label(top, text="Источник:").pack(side="left")
         self.source_var = tk.StringVar(value=SOURCE_LABELS.get(self.cfg.get("source"), SOURCE_LABELS["seetong_folder"]))
+        self.source_combo = ttk.Combobox(
+            top,
+            textvariable=self.source_var,
+            values=list(SOURCE_LABELS.values()),
+            state="readonly",
+            width=28,
+        )
+        self.source_combo.pack(side="left", padx=6)
+
         self.run_label = ttk.Label(top, text="запуск…", style="Muted.TLabel")
         self.run_label.pack(side="right")
 
@@ -418,6 +432,11 @@ class AnprApp:
         ttk.Button(self.tab_set, text="Сохранить настройки", command=self.persist_settings).pack(anchor="w", pady=12)
         ttk.Button(
             self.tab_set,
+            text="Открыть диалог подключения (старый)",
+            command=self.open_camera_dialog,
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Button(
+            self.tab_set,
             text="Удалить лишние копии программы",
             command=self.remove_wrong_copies,
         ).pack(anchor="w")
@@ -479,11 +498,24 @@ class AnprApp:
         if not self.window_var.get():
             self.window_var.set("Seetong Lite Client")
 
-    def open_camera_dialog(self) -> None:
+    def open_camera_dialog(self, on_close=None) -> None:
         dlg = tk.Toplevel(self.root)
         dlg.title("Подключение камеры")
         dlg.geometry("520x560")
         dlg.configure(bg=self.bg)
+        if on_close:
+            dlg.transient(self.root)
+            dlg.grab_set()
+
+        def _finish() -> None:
+            if on_close:
+                on_close()
+
+        def _close_dialog() -> None:
+            dlg.destroy()
+            _finish()
+
+        dlg.protocol("WM_DELETE_WINDOW", _close_dialog)
 
         ttk.Label(
             dlg,
@@ -533,6 +565,7 @@ class AnprApp:
                 "Готово",
                 "Источник: камера по сети.\nНажмите Старт.\nSeetong на этом компьютере не обязателен.",
             )
+            _finish()
 
         ttk.Button(dlg, text="Подключить по IP (найти HTTP или RTSP)", command=lambda: use_ip("auto")).pack(
             padx=20, pady=4, fill="x"
@@ -553,8 +586,10 @@ class AnprApp:
             save_config(self.cfg)
             dlg.destroy()
             messagebox.showinfo("Готово", "Источник: папка снимков Seetong.\nСнимок в клиенте, затем Старт.")
+            _finish()
 
         ttk.Button(dlg, text="Использовать снимки Seetong", command=use_cloud).pack(padx=20, pady=6, fill="x")
+        ttk.Button(dlg, text="Закрыть", command=_close_dialog).pack(padx=20, pady=(4, 16), fill="x")
 
     def apply_lite_preset(self) -> None:
         self.window_var.set("Seetong Lite Client")
