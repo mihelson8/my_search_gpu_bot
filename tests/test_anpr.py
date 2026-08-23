@@ -379,6 +379,52 @@ def test_recognize_scene_draws_frame_without_silhouette(monkeypatch):
     assert int(abs(annotated.astype("int16") - frame.astype("int16")).mean()) > 0
 
 
+def test_upper_parking_row_plate_search_drives_frame_and_ocr(monkeypatch):
+    """A missed silhouette must not hide plates in the real upper car row."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr import recognizer
+    from anpr.recognizer import PlateHit, plate_focus_band, parking_band, recognize_scene
+
+    frame = numpy.full((400, 720, 3), 105, dtype=numpy.uint8)
+    frame[80:220, 250:430] = (38, 40, 45)
+    frame[190:208, 305:390] = 225
+    frame[240:390, :] = (190, 195, 200)  # puddle below the parked car
+
+    focus_box, _focus = plate_focus_band(frame)
+    parking_box, _parking = parking_band(frame)
+    assert focus_box[1] < 80 and focus_box[3] < 280
+    assert parking_box[1] < 80 and parking_box[3] < 280
+
+    plate_box = (305, 190, 390, 208)
+    monkeypatch.setattr("anpr.vehicles.find_vehicle_silhouettes", lambda *a, **k: [])
+    monkeypatch.setattr(
+        recognizer,
+        "_collect_plate_regions",
+        lambda *a, **k: [(plate_box, frame[190:208, 305:390])],
+    )
+    monkeypatch.setattr(
+        recognizer,
+        "_ocr_regions",
+        lambda *a, **k: [
+            PlateHit(
+                plate="А123ВС77",
+                confidence=0.92,
+                raw_text="A123BC77",
+                bbox=plate_box,
+                engine="test",
+            )
+        ],
+    )
+
+    hits, vehicles, annotated, zoom = recognize_scene(frame, min_confidence=0.1)
+    assert hits and hits[0].plate == "А123ВС77"
+    assert vehicles, "plate proposal must create a car frame without a silhouette"
+    assert vehicles[0][3] < int(frame.shape[0] * 0.70), "frame must stay above puddle"
+    assert annotated is not None
+    assert zoom is not None
+
+
 def test_annotate_scene_draws_shape_and_frame():
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")

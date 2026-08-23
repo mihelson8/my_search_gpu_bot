@@ -119,12 +119,12 @@ def _upscale_for_ocr(crop, max_side: int = 560):
 
 
 def plate_focus_band(image):
-    """Center-lower strip where a high camera usually sees the Type-1 plate."""
+    """Upper parking row where this high camera sees parked cars and plates."""
     h, w = image.shape[:2]
-    y0 = int(h * 0.42)
-    y1 = int(h * 0.92)
-    x0 = int(w * 0.18)
-    x1 = int(w * 0.82)
+    y0 = int(h * 0.10)
+    y1 = int(h * 0.62)
+    x0 = int(w * 0.02)
+    x1 = int(w * 0.98)
     if y1 - y0 < 40 or x1 - x0 < 60:
         return (0, 0, w, h), image
     return (x0, y0, x1, y1), image[y0:y1, x0:x1]
@@ -145,12 +145,12 @@ def mask_osd(image):
 
 
 def parking_band(image):
-    """Keep the lower parking area where plates are large enough to read."""
+    """Keep the upper parked-car row; exclude the large puddle below it."""
     h, w = image.shape[:2]
-    y0 = int(h * 0.30)
-    y1 = int(h * 0.90)
-    x0 = int(w * 0.04)
-    x1 = int(w * 0.96)
+    y0 = int(h * 0.08)
+    y1 = int(h * 0.64)
+    x0 = int(w * 0.02)
+    x1 = int(w * 0.98)
     if y1 - y0 < 40 or x1 - x0 < 40:
         return (0, 0, w, h), image
     return (x0, y0, x1, y1), image[y0:y1, x0:x1]
@@ -542,6 +542,22 @@ def recognize_scene(image, min_confidence: float = 0.35):
         silhouettes = []
 
     hits: List[PlateHit] = []
+    global_regions = []
+    try:
+        # Always search the actual upper parking row.  This is independent of
+        # silhouette detection, so a missed car frame cannot also hide its plate.
+        global_regions = _collect_plate_regions(
+            work, origin=(0, 0), inside_vehicle=False, max_regions=6
+        )
+        h, w = work.shape[:2]
+        global_regions = [
+            item
+            for item in global_regions
+            if int(h * 0.10) <= (item[0][1] + item[0][3]) / 2.0 <= int(h * 0.64)
+            and (item[0][2] - item[0][0]) >= max(18, int(w * 0.02))
+        ]
+    except Exception:
+        global_regions = []
 
     def _has_good_plate(items: List[PlateHit]) -> bool:
         return any(plate_is_valid(h.plate) and not is_osd_text(h.plate) for h in items)
@@ -566,8 +582,14 @@ def recognize_scene(image, min_confidence: float = 0.35):
                     _ocr_crop_direct(crop, roi, min_confidence=max(0.10, min_confidence - 0.12))
                 )
 
+    if not _has_good_plate(hits) and global_regions:
+        _OCR_BUDGET["max"] = max(int(_OCR_BUDGET.get("max", 1)), 3)
+        hits.extend(
+            _ocr_regions(global_regions[:3], min_confidence=max(0.08, min_confidence - 0.16))
+        )
+
     if not _has_good_plate(hits):
-        _OCR_BUDGET["max"] = max(int(_OCR_BUDGET.get("max", 1)), 2)
+        _OCR_BUDGET["max"] = max(int(_OCR_BUDGET.get("max", 1)), 3)
         try:
             (fx0, fy0, fx1, fy1), focus = plate_focus_band(work)
             try:
@@ -575,10 +597,11 @@ def recognize_scene(image, min_confidence: float = 0.35):
             except Exception:
                 pass
             fh, fw = focus.shape[:2]
-            mid = focus[int(fh * 0.45) : int(fh * 0.92), int(fw * 0.18) : int(fw * 0.82)]
+            # Parked plates are in the upper-row body/bumper strip, not the puddle.
+            mid = focus[int(fh * 0.18) : int(fh * 0.90), :]
             if mid is not None and getattr(mid, "size", 0) > 0:
-                my0 = fy0 + int(fh * 0.45)
-                mx0 = fx0 + int(fw * 0.18)
+                my0 = fy0 + int(fh * 0.18)
+                mx0 = fx0
                 hits.extend(
                     _ocr_crop_direct(
                         mid,
@@ -600,6 +623,46 @@ def recognize_scene(image, min_confidence: float = 0.35):
         unique.append(hit)
     unique.sort(key=lambda item: item.confidence, reverse=True)
     unique = unique[:1]
+
+    # Plate-shaped regions also provide conservative car proposals even before
+    # OCR succeeds. This avoids the old failure where no silhouette meant no OCR.
+    if len(silhouettes) < 2 and global_regions:
+        h, w = work.shape[:2]
+        for index, (plate_box, _crop) in enumerate(global_regions[:6]):
+            px0, py0, px1, py1 = plate_box
+            pw, ph = max(1, px1 - px0), max(1, py1 - py0)
+            aspect = pw / float(ph)
+            if not (2.0 <= aspect <= 9.0):
+                continue
+            if not (int(h * 0.12) <= (py0 + py1) / 2.0 <= int(h * 0.62)):
+                continue
+            box = vehicle_box_from_plate(plate_box, work.shape, expand=1.35)
+            if _is_non_vehicle(work, box):
+                continue
+            bx0, by0, bx1, by1 = box
+            # Tight parking-row fallback; never extend into the puddle.
+            box = (bx0, by0, bx1, min(by1, int(h * 0.66)))
+            if box[2] - box[0] < 45 or box[3] - box[1] < 35:
+                continue
+            duplicate = False
+            for old in silhouettes:
+                ox0, oy0, ox1, oy1 = old.box
+                ix0, iy0 = max(box[0], ox0), max(box[1], oy0)
+                ix1, iy1 = min(box[2], ox1), min(box[3], oy1)
+                inter = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+                small = min(
+                    max(1, (box[2] - box[0]) * (box[3] - box[1])),
+                    max(1, (ox1 - ox0) * (oy1 - oy0)),
+                )
+                if inter / float(small) >= 0.45:
+                    duplicate = True
+                    break
+            if not duplicate:
+                silhouettes.append(
+                    VehicleSilhouette(box=box, contour=None, score=0.72 - index * 0.03)
+                )
+            if len(silhouettes) >= 6:
+                break
 
     if unique and not silhouettes:
         for index, hit in enumerate(unique):

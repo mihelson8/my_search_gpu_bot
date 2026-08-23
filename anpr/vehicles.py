@@ -1084,16 +1084,16 @@ def bumper_box(box: Box) -> Box:
     return (x0, y0 + int(h * 0.32), x1, y1)
 
 
-def vehicle_box_from_plate(plate_box: Box, image_shape, expand: float = 3.2) -> Box:
+def vehicle_box_from_plate(plate_box: Box, image_shape, expand: float = 1.35) -> Box:
     """Guess a car frame around a found plate when silhouette detection failed."""
     h, w = image_shape[:2]
     x0, y0, x1, y1 = [int(v) for v in plate_box]
     pw = max(8, x1 - x0)
     ph = max(6, y1 - y0)
     bx0 = max(0, int(x0 - pw * expand))
-    by0 = max(0, int(y0 - ph * (expand + 0.8)))
+    by0 = max(0, int(y0 - ph * (expand + 2.6)))
     bx1 = min(w, int(x1 + pw * expand))
-    by1 = min(h, int(y1 + ph * 1.4))
+    by1 = min(h, int(y1 + ph * 1.0))
     if bx1 - bx0 < 40 or by1 - by0 < 30:
         return (max(0, x0 - 40), max(0, y0 - 80), min(w, x1 + 40), min(h, y1 + 40))
     return (bx0, by0, bx1, by1)
