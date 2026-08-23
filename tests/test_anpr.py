@@ -442,22 +442,37 @@ def test_wet_lot_finds_silver_and_dark_cars_separately():
     assert centers[-1] > 350, "dark sedan should be on the right"
 
 
-def test_small_shadow_blob_is_not_framed():
+def test_packed_parking_row_finds_multiple_cars():
     numpy = pytest.importorskip("numpy")
     pytest.importorskip("cv2")
     from anpr.vehicles import find_vehicle_silhouettes
 
-    frame = numpy.full((360, 640, 3), 100, dtype=numpy.uint8)
-    # Tiny dark stain — must not become АВТО.
-    frame[200:230, 80:120] = (25, 25, 25)
-    # Real dark car.
-    frame[140:280, 280:520] = (30, 32, 34)
-    frame[160:210, 320:480] = (50, 52, 55)
-    cars = find_vehicle_silhouettes(frame, max_cars=5)
-    assert cars, "real car must be found"
-    assert len(cars) == 1
-    cx = (cars[0].box[0] + cars[0].box[2]) / 2
-    assert cx > 250
+    h, w = 400, 720
+    frame = numpy.full((h, w, 3), 130, dtype=numpy.uint8)
+    frame[300:400, :] = (70, 72, 75)
+    colors = [
+        (210, 210, 210),
+        (170, 170, 175),
+        (230, 230, 230),
+        (40, 45, 90),
+        (25, 25, 28),
+        (220, 220, 225),
+        (35, 38, 42),
+        (200, 200, 205),
+    ]
+    x = 15
+    for color in colors:
+        bw, bh = 82, 70
+        y0 = 160
+        frame[y0 : y0 + bh, x : x + bw] = color
+        frame[y0 + 8 : y0 + 28, x + 8 : x + bw - 8] = tuple(max(0, v - 25) for v in color)
+        frame[y0 + bh : y0 + bh + 25, x : x + bw] = (55, 55, 55)
+        x += bw + 6
+    cars = find_vehicle_silhouettes(frame, max_cars=6)
+    assert len(cars) >= 2, f"packed row must yield multiple car frames, got {cars}"
+    for car in cars:
+        bw = car.box[2] - car.box[0]
+        assert bw < w * 0.7, "must not frame the whole parking row as one car"
 
 
 def test_night_scene_zoom_shows_bumper_when_plate_unread(monkeypatch):

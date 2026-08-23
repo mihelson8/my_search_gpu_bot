@@ -166,13 +166,13 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
     mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
 
     score = base
-    # Top-down cars are usually wider than tall, but not tiny squares.
-    if 1.25 <= aspect <= 3.4:
+    # Top-down / front-high cars: allow near-square bodies.
+    if 1.15 <= aspect <= 3.4:
         score += 0.26
-    elif 1.10 <= aspect < 1.25:
-        score += 0.08
+    elif 0.85 <= aspect < 1.15:
+        score += 0.12
     else:
-        score -= 0.18
+        score -= 0.12
     score += min(area_ratio, 0.32) * 0.70
     if area_ratio < 0.03:
         score -= 0.20
@@ -210,72 +210,268 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
 
 
 def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | None = None) -> bool:
-    """Reject shadows, fragments and weak extras so only real cars get a frame."""
+    """Reject tiny shadows/stains; keep real cars in a packed parking row."""
     h, w = image.shape[:2]
     x0, y0, x1, y1 = [int(v) for v in box]
     bw, bh = max(1, x1 - x0), max(1, y1 - y0)
     area_ratio = (bw * bh) / float(max(h * w, 1))
     aspect = bw / float(bh)
-    if bw < 85 or bh < 55:
+    if bw < 55 or bh < 40:
         return True
-    if area_ratio < 0.030:
+    if area_ratio < 0.015:
         return True
-    if aspect < 1.08 or aspect > 3.6:
+    # Reject whole-frame / half-frame blobs.
+    if area_ratio > 0.42 or bw > int(w * 0.85):
         return True
-    if score < 0.28:
+    if aspect < 0.60 or aspect > 4.0:
         return True
-    # Second/third detections must be nearly as strong as the best car.
+    if score < 0.16:
+        return True
     if best_score is not None and best_score > 0:
-        if score < max(0.40, best_score * 0.72):
+        if score < max(0.18, best_score * 0.40):
             return True
     return False
+
+
+def _column_split_boxes(mask, box: Box, min_width: int = 55) -> List[Box]:
+    """Split a wide blob (parking row glued by shadows) into per-car boxes."""
+    import cv2
+    import numpy as np
+
+    x0, y0, x1, y1 = [int(v) for v in box]
+    bw = x1 - x0
+    bh = y1 - y0
+    if bw < min_width * 2 or bh < 20:
+        return [box]
+    # Upper body only — lower bumper shadows glue cars into one strip.
+    y_mid = y0 + max(int(bh * 0.58), 20)
+    roi = mask[y0:y_mid, x0:x1]
+    if roi is None or getattr(roi, "size", 0) == 0:
+        return [box]
+    col = (roi > 0).sum(axis=0).astype(np.float32)
+    if float(col.max()) < 6:
+        return [box]
+    k = max(5, min(21, bw // 30) | 1)
+    col = cv2.GaussianBlur(col.reshape(1, -1), (k, 1), 0).ravel()
+    thr = max(float(col.max()) * 0.30, 5.0)
+    active = col >= thr
+    spans: List[tuple] = []
+    start = None
+    for i, on in enumerate(active):
+        if on and start is None:
+            start = i
+        elif not on and start is not None:
+            if i - start >= min_width:
+                spans.append((start, i))
+            start = None
+    if start is not None and (bw - start) >= min_width:
+        spans.append((start, bw))
+    if len(spans) < 2:
+        # Only use peak fallback on very wide rows.
+        if bw >= min_width * 3:
+            spans = _peak_spans(col, min_width=min_width)
+        else:
+            return [box]
+    if len(spans) < 2:
+        return [box]
+    boxes: List[Box] = []
+    for a, b in spans:
+        xa = max(0, x0 + a - 3)
+        xb = min(mask.shape[1], x0 + b + 3)
+        # Height from upper mass + modest bumper, capped so aspect stays car-like.
+        tight = _tighten_box_to_mask(mask, (xa, y0, xb, min(y1, y_mid + int(bh * 0.12))))
+        tw = max(1, tight[2] - tight[0])
+        th = max(1, tight[3] - tight[1])
+        max_h = max(int(tw * 1.45), 50)
+        if th > max_h:
+            tight = (tight[0], tight[1], tight[2], tight[1] + max_h)
+        boxes.append(tight)
+    return boxes
+
+
+def _peak_spans(col, min_width: int = 55) -> list:
+    """Fallback span finder using peaks of a column projection."""
+    import numpy as np
+
+    col = np.asarray(col, dtype=np.float32)
+    if col.size < min_width * 2:
+        return []
+    thr = max(float(col.max()) * 0.35, 5.0)
+    peaks = []
+    for i in range(2, len(col) - 2):
+        if col[i] >= thr and col[i] >= col[i - 1] and col[i] >= col[i + 1]:
+            if not peaks or i - peaks[-1] >= min_width:
+                peaks.append(i)
+    if len(peaks) < 2:
+        return []
+    spans = []
+    half = max(min_width // 2, 28)
+    for p in peaks:
+        a = max(0, p - half)
+        b = min(len(col), p + half)
+        spans.append((a, b))
+    return spans
+
+
+def _tighten_box_to_mask(mask, box: Box) -> Box:
+    """Shrink a box to the actual mask mass (drop empty shadow padding)."""
+    import numpy as np
+
+    h, w = mask.shape[:2]
+    x0, y0, x1, y1 = [int(v) for v in box]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w, x1), min(h, y1)
+    roi = mask[y0:y1, x0:x1]
+    if roi is None or getattr(roi, "size", 0) == 0 or int(roi.max()) == 0:
+        return (x0, y0, x1, y1)
+    rows = np.any(roi > 0, axis=1)
+    cols = np.any(roi > 0, axis=0)
+    if not rows.any() or not cols.any():
+        return (x0, y0, x1, y1)
+    ry = np.where(rows)[0]
+    cx = np.where(cols)[0]
+    return (x0 + int(cx[0]), y0 + int(ry[0]), x0 + int(cx[-1]) + 1, y0 + int(ry[-1]) + 1)
+
+
+def _separate_row_mask(mask):
+    """Clear near shadow carpet; lightly break thin bridges without splitting one car."""
+    import cv2
+
+    if mask is None or getattr(mask, "size", 0) == 0:
+        return mask
+    out = mask.copy()
+    h, w = out.shape[:2]
+    out[int(h * 0.74) : h, :] = 0
+    # Mild vertical open — strong kernels punch holes in a single car body.
+    k_mild = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 17))
+    return cv2.morphologyEx(out, cv2.MORPH_OPEN, k_mild, iterations=1)
 
 
 def _silhouettes_from_mask(
     mask, image_shape, min_ratio: float, max_ratio: float, image=None
 ) -> List[VehicleSilhouette]:
     import cv2
+    import numpy as np
 
     h, w = image_shape[:2]
     frame_area = float(h * w)
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    work = _separate_row_mask(mask)
+    contours, _ = cv2.findContours(work, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     found: List[VehicleSilhouette] = []
+
+    def _add_box(box: Box, contour=None) -> None:
+        x0, y0, x1, y1 = box
+        # Separated masks clear the near shadow band — grow box down so bumper/plate remain.
+        bh = max(1, y1 - y0)
+        y1 = min(h, y1 + int(bh * 0.40) + 10)
+        box = (x0, y0, x1, y1)
+        bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+        if bw < 55 or bh < 40:
+            return
+        ratio = (bw * bh) / frame_area
+        if ratio < min_ratio or ratio > max_ratio:
+            return
+        aspect = bw / float(bh)
+        # High-angle front view can look nearly square / slightly tall.
+        if not (0.65 <= aspect <= 3.8):
+            return
+        if image is not None and _is_non_vehicle(image, box):
+            return
+        score = ratio + ((y0 + y1) / 2.0 / max(h, 1)) * 0.08
+        if image is not None:
+            score = _car_likeness_score(image, box, base=score)
+        if score < 0.14:
+            return
+        if image is not None and _looks_like_camera_osd(image, box):
+            return
+        found.append(VehicleSilhouette(box=box, contour=contour, score=score))
+
     for contour in contours:
         x, y, cw, ch = cv2.boundingRect(contour)
-        if cw < 70 or ch < 45:
+        if cw < 55 or ch < 40:
             continue
         area = cw * ch
         ratio = area / frame_area
-        if ratio < min_ratio or ratio > max_ratio:
-            continue
-        aspect = cw / float(ch)
-        if not (1.05 <= aspect <= 3.8):
-            continue
-        hull = cv2.contourArea(cv2.convexHull(contour)) or 1.0
-        solidity = (cv2.contourArea(contour) or 0.0) / hull
-        if solidity < 0.28:
-            continue
-        cy = y + ch / 2.0
-        if cy < h * 0.22:
-            continue
-        pad_x, pad_y = int(cw * 0.04), int(ch * 0.05)
+        pad_x, pad_y = int(cw * 0.03), int(ch * 0.04)
         box = (
             max(0, x - pad_x),
             max(0, y - pad_y),
             min(w, x + cw + pad_x),
             min(h, y + ch + pad_y),
         )
-        if image is not None and _is_non_vehicle(image, box):
+        # Split only very wide blobs when column spans look like several cars.
+        wide_row = cw >= max(280, int(w * 0.50)) and cw >= int(ch * 2.0)
+        oversized = ratio > max_ratio and cw > int(ch * 2.0)
+        if wide_row or oversized:
+            subs = _column_split_boxes(work, box, min_width=max(52, int(w * 0.06)))
+            span_w = sum(max(0, s[2] - s[0]) for s in subs)
+            if len(subs) >= 2 and span_w >= int(cw * 0.55):
+                for sub in subs:
+                    _add_box(sub, contour=None)
+                continue
+        if ratio < min_ratio or ratio > max_ratio:
             continue
-        score = ratio + (cy / h) * 0.08 + min(solidity, 1.0) * 0.04
-        if image is not None:
-            score = _car_likeness_score(image, box, base=score)
-        if score < 0.28:
+        hull = cv2.contourArea(cv2.convexHull(contour)) or 1.0
+        solidity = (cv2.contourArea(contour) or 0.0) / hull
+        if solidity < 0.22:
             continue
-        if image is not None and _looks_like_camera_osd(image, box):
+        cy = y + ch / 2.0
+        if cy < h * 0.18:
             continue
-        found.append(VehicleSilhouette(box=box, contour=contour, score=score))
+        _add_box(box, contour=contour)
     return found
+
+
+def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette]:
+    """Find car shapes in a parking row (light and dark) and frame real cars."""
+    if image is None or getattr(image, "size", 0) == 0:
+        return []
+    found: List[VehicleSilhouette] = []
+    dark = light = None
+    try:
+        dark, light = _car_tone_masks(image)
+        found.extend(
+            _silhouettes_from_mask(dark, image.shape, min_ratio=0.012, max_ratio=0.55, image=image)
+        )
+        found.extend(
+            _silhouettes_from_mask(light, image.shape, min_ratio=0.012, max_ratio=0.55, image=image)
+        )
+    except Exception:
+        pass
+    found = [item for item in found if not _is_non_vehicle(image, item.box)]
+    if not found:
+        # Edge fallback only when tonal masks are almost empty (not a full parking row).
+        try:
+            import numpy as np
+
+            fg = 0.0
+            if dark is not None and light is not None:
+                fg = float(((dark > 0) | (light > 0)).mean())
+            if fg < 0.04:
+                edges = _edge_car_mask(image)
+                found.extend(
+                    _silhouettes_from_mask(
+                        edges, image.shape, min_ratio=0.020, max_ratio=0.45, image=image
+                    )
+                )
+        except Exception:
+            pass
+        found = [item for item in found if not _is_non_vehicle(image, item.box)]
+    if not found:
+        return []
+    kept = _nms(found, iou_thresh=0.38)
+    kept.sort(key=lambda item: item.score, reverse=True)
+    best = kept[0].score
+    strong = [
+        item
+        for item in kept
+        if not _is_weak_car_candidate(image, item.box, item.score, best_score=best)
+    ]
+    if not strong and kept:
+        if not _is_weak_car_candidate(image, kept[0].box, kept[0].score, best_score=None):
+            strong = [kept[0]]
+    limit = max(1, min(int(max_cars), 4))
+    return strong[:limit]
 
 
 def _foreground_mask(image):
@@ -391,51 +587,6 @@ def _edge_car_mask(image):
     filled = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=3)
     clear_osd_zones(filled)
     return cv2.resize(filled, (w, h), interpolation=cv2.INTER_NEAREST)
-
-
-def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette]:
-    """Find car shapes (light→dark) and return only confident frames."""
-    if image is None or getattr(image, "size", 0) == 0:
-        return []
-    found: List[VehicleSilhouette] = []
-    try:
-        dark, light = _car_tone_masks(image)
-        found.extend(
-            _silhouettes_from_mask(dark, image.shape, min_ratio=0.028, max_ratio=0.40, image=image)
-        )
-        found.extend(
-            _silhouettes_from_mask(light, image.shape, min_ratio=0.028, max_ratio=0.40, image=image)
-        )
-    except Exception:
-        pass
-    # Edge fallback only when nothing tonal was found (avoids shadow frames).
-    if not found:
-        try:
-            edges = _edge_car_mask(image)
-            found.extend(
-                _silhouettes_from_mask(
-                    edges, image.shape, min_ratio=0.035, max_ratio=0.38, image=image
-                )
-            )
-        except Exception:
-            pass
-    found = [item for item in found if not _is_non_vehicle(image, item.box)]
-    if not found:
-        return []
-    kept = _nms(found, iou_thresh=0.40)
-    kept.sort(key=lambda item: item.score, reverse=True)
-    best = kept[0].score
-    strong = [
-        item
-        for item in kept
-        if not _is_weak_car_candidate(image, item.box, item.score, best_score=best)
-    ]
-    if not strong and kept:
-        if not _is_weak_car_candidate(image, kept[0].box, kept[0].score, best_score=None):
-            strong = [kept[0]]
-    # At most 2 confident cars — extras were false shadows/stains.
-    limit = max(1, min(int(max_cars), 2))
-    return strong[:limit]
 
 
 def find_vehicle_rois(image, max_cars: int = 6) -> List[Box]:
@@ -571,12 +722,12 @@ def silhouette_mask(image_shape, vehicles: Sequence[VehicleLike], dilate: int = 
     h, w = image_shape[:2]
     mask = np.zeros((h, w), dtype=np.uint8)
     for item in vehicles:
+        x0, y0, x1, y1 = _as_box(item)
+        # Always fill the detection box (includes bumper expand below the contour).
+        mask[max(0, y0) : max(0, y1), max(0, x0) : max(0, x1)] = 255
         contour = _as_contour(item)
         if contour is not None and len(contour):
             cv2.drawContours(mask, [contour], -1, 255, thickness=-1)
-        else:
-            x0, y0, x1, y1 = _as_box(item)
-            mask[y0:y1, x0:x1] = 255
     if dilate > 0:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate, dilate))
         mask = cv2.dilate(mask, kernel, iterations=1)
