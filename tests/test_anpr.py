@@ -469,10 +469,14 @@ def test_packed_parking_row_finds_multiple_cars():
         frame[y0 + bh : y0 + bh + 25, x : x + bw] = (55, 55, 55)
         x += bw + 6
     cars = find_vehicle_silhouettes(frame, max_cars=6)
-    assert len(cars) >= 2, f"packed row must yield multiple car frames, got {cars}"
+    assert len(cars) >= 3, f"packed row must yield multiple car frames, got {cars}"
     for car in cars:
         bw = car.box[2] - car.box[0]
-        assert bw < w * 0.7, "must not frame the whole parking row as one car"
+        assert bw < w * 0.28, f"must not frame a car group as one car: {car.box}"
+        assert bw < 200, f"box too wide for one packed-row car: {car.box}"
+    # Centers should be spread across the row, not stacked on one mega-blob.
+    centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
+    assert centers[-1] - centers[0] > w * 0.35, f"cars should span the row, centers={centers}"
 
 
 def test_night_scene_zoom_shows_bumper_when_plate_unread(monkeypatch):
