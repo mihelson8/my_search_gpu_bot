@@ -177,26 +177,59 @@ def parking_band(image):
 
 def _plate_candidates_from_mask(image, mask, min_aspect: float, max_aspect: float, target_aspect: float):
     import cv2
+    import numpy as np
 
     h, w = image.shape[:2]
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     scored = []
     for contour in contours:
-        x, y, cw, ch = cv2.boundingRect(contour)
-        if ch < 7 or cw < 24:
+        (cx, cy), (rw, rh), angle = cv2.minAreaRect(contour)
+        if rw < rh:
+            rw, rh = rh, rw
+            angle += 90.0
+        if rh < 6 or rw < 22:
             continue
-        aspect = cw / float(ch)
+        aspect = rw / float(max(rh, 1.0))
         if not (min_aspect <= aspect <= max_aspect):
             continue
-        area = cw * ch
+        area = rw * rh
         if area < 150 or area > 0.50 * w * h:
             continue
-        pad_x, pad_y = int(cw * 0.10), int(ch * 0.24)
-        x0 = max(0, x - pad_x)
-        y0 = max(0, y - pad_y)
-        x1 = min(w, x + cw + pad_x)
-        y1 = min(h, y + ch + pad_y)
-        crop = image[y0:y1, x0:x1]
+
+        # Expand in the plate's own coordinate system, then rectify it. OCR now
+        # sees a horizontal Type-1 plate even when the car is viewed obliquely.
+        expanded = ((cx, cy), (rw * 1.18, rh * 1.65), angle)
+        points = cv2.boxPoints(expanded).astype(np.float32)
+        sums = points.sum(axis=1)
+        diffs = np.diff(points, axis=1).reshape(-1)
+        ordered = np.array(
+            [
+                points[np.argmin(sums)],
+                points[np.argmin(diffs)],
+                points[np.argmax(sums)],
+                points[np.argmax(diffs)],
+            ],
+            dtype=np.float32,
+        )
+        out_w = max(32, int(round(rw * 1.18)))
+        out_h = max(12, int(round(rh * 1.65)))
+        target = np.array(
+            [[0, 0], [out_w - 1, 0], [out_w - 1, out_h - 1], [0, out_h - 1]],
+            dtype=np.float32,
+        )
+        matrix = cv2.getPerspectiveTransform(ordered, target)
+        crop = cv2.warpPerspective(
+            image,
+            matrix,
+            (out_w, out_h),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+        x, y, cw, ch = cv2.boundingRect(points.astype(np.int32))
+        x0, y0 = max(0, x), max(0, y)
+        x1, y1 = min(w, x + cw), min(h, y + ch)
+        if x1 <= x0 or y1 <= y0:
+            continue
         closeness = abs(aspect - target_aspect)
         vertical_bonus = (y0 + y1) / (2.0 * max(h, 1))
         scored.append((closeness - vertical_bonus * 0.4, -area, (x0, y0, x1, y1), crop))
@@ -404,7 +437,14 @@ def _collect_plate_regions(image, origin=(0, 0), inside_vehicle: bool = False, m
                 ax1, ay1 = min(vw, x1 + ex), min(vh, y1 + ey)
                 expanded = view[ay0:ay1, ax0:ax1]
                 if expanded is not None and getattr(expanded, "size", 0) > 0:
-                    crop = expanded
+                    eh, ew = expanded.shape[:2]
+                    ch, cw = crop.shape[:2]
+                    expanded_aspect = ew / float(max(eh, 1))
+                    rectified_aspect = cw / float(max(ch, 1))
+                    # Keep the perspective-corrected candidate when the
+                    # axis-aligned bumper context would make it too square.
+                    if not (rectified_aspect >= 2.5 and expanded_aspect < 2.2):
+                        crop = expanded
                 region_map.append((box, crop))
                 if len(region_map) >= max_regions:
                     return region_map
@@ -630,7 +670,10 @@ def _credible_plate_region(item, image_shape) -> bool:
     x0, y0, x1, y1 = box
     pw, ph = max(1, x1 - x0), max(1, y1 - y0)
     aspect = pw / float(ph)
-    if not (2.0 <= aspect <= 9.0):
+    crop_aspect = 0.0
+    if crop is not None and getattr(crop, "size", 0) > 0:
+        crop_aspect = crop.shape[1] / float(max(crop.shape[0], 1))
+    if not (2.0 <= aspect <= 9.0 or 2.0 <= crop_aspect <= 9.0):
         return False
     if pw < max(18, int(w * 0.018)) or pw > int(w * 0.22):
         return False

@@ -824,6 +824,10 @@ def test_wide_textured_asphalt_is_not_marked_as_car():
         for car in cars
     )
 
+    # Shapes matching the user's r32 frame: one broad wet sheet and one small stain.
+    assert _is_non_vehicle(frame, (60, 140, 490, 300))
+    assert _is_non_vehicle(frame, (420, 260, 485, 320))
+
 
 def test_hdipcam_osd_is_not_marked_as_car():
     """Regression: HDIPCAM 2560X1440 was framed as АВТО and the lot went black."""
@@ -862,6 +866,31 @@ def test_type1_plate_region_aspect():
     (x0, y0, x1, y1), _crop = regions[0]
     aspect = (x1 - x0) / float(max(y1 - y0, 1))
     assert 2.5 <= aspect <= 8.5
+
+
+def test_angled_type1_plate_is_rectified_for_ocr():
+    numpy = pytest.importorskip("numpy")
+    cv2 = pytest.importorskip("cv2")
+    from anpr.recognizer import find_plate_regions
+
+    frame = numpy.full((180, 320, 3), 55, dtype=numpy.uint8)
+    rect = ((190, 105), (110, 22), -32)
+    quad = cv2.boxPoints(rect).astype("int32")
+    cv2.fillConvexPoly(frame, quad, (235, 235, 235))
+    # Character-like dark strokes follow the same angle.
+    for offset in (-36, -20, -4, 14, 30):
+        center = (190 + offset, 105)
+        stroke = cv2.boxPoints((center, (4, 15), -32)).astype("int32")
+        cv2.fillConvexPoly(frame, stroke, (20, 20, 20))
+
+    regions = find_plate_regions(frame)
+    assert regions, "oblique Type-1 plate must remain a candidate"
+    _box, crop = min(
+        regions,
+        key=lambda item: abs((item[0][0] + item[0][2]) / 2 - 190)
+        + abs((item[0][1] + item[0][3]) / 2 - 105),
+    )
+    assert crop.shape[1] / float(max(crop.shape[0], 1)) >= 2.5
 
 
 def test_seetong_window_keywords():
