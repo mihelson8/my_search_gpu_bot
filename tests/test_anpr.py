@@ -805,6 +805,26 @@ def test_dumpsters_are_not_marked_as_cars():
     assert find_vehicle_silhouettes(large, max_cars=5) == []
 
 
+def test_wide_textured_asphalt_is_not_marked_as_car():
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import _is_non_vehicle, find_vehicle_silhouettes
+
+    rs = numpy.random.RandomState(23)
+    frame = numpy.full((400, 720, 3), 72, dtype=numpy.uint8)
+    asphalt = rs.randint(65, 175, (100, 350, 1), dtype=numpy.uint8)
+    frame[140:240, 180:530] = numpy.repeat(asphalt, 3, axis=2)
+    bad_box = (180, 140, 530, 240)
+
+    assert _is_non_vehicle(frame, bad_box), "wide shallow asphalt sheet is not a car"
+    cars = find_vehicle_silhouettes(frame, max_cars=5)
+    assert all(car.box != bad_box for car in cars)
+    assert all(
+        (car.box[2] - car.box[0]) / max(1, car.box[3] - car.box[1]) < 3.05
+        for car in cars
+    )
+
+
 def test_hdipcam_osd_is_not_marked_as_car():
     """Regression: HDIPCAM 2560X1440 was framed as АВТО and the lot went black."""
     numpy = pytest.importorskip("numpy")

@@ -191,6 +191,15 @@ def _looks_like_wet_puddle(image, box: Box) -> bool:
 
 
 def _is_non_vehicle(image, box: Box) -> bool:
+    if image is not None and getattr(image, "size", 0) > 0:
+        h, w = image.shape[:2]
+        x0, y0, x1, y1 = box
+        bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+        aspect = bw / float(bh)
+        # A front/rear car under this high camera is never a very wide, shallow
+        # sheet. These boxes are exposed asphalt or several objects glued by it.
+        if bw >= int(w * 0.28) and bh <= int(h * 0.34) and aspect >= 3.05:
+            return True
     return (
         _looks_like_dumpster(image, box)
         or _looks_like_camera_osd(image, box)
