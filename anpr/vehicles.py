@@ -217,9 +217,13 @@ def _box_has_car_structure(image, box: Box) -> bool:
     sides = float(0.5 * (np.mean(left) + np.mean(right)))
     glass_mean = float(np.mean(glass))
     bumper_mean = float(np.mean(bumper))
-    if sides >= glass_mean + 10:
+    glass_std = float(np.std(glass))
+    # Asphalt noise is grainy; glass/paint bands are smoother and offset in tone.
+    if glass_std > 30:
+        return False
+    if sides >= glass_mean + 12:
         return True
-    if abs(glass_mean - bumper_mean) >= 14:
+    if abs(glass_mean - bumper_mean) >= 18:
         return True
     return False
 
