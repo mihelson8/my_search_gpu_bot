@@ -257,6 +257,16 @@ def missing_capture_packages():
     return missing
 
 
+def missing_ocr_packages():
+    """RapidOCR is required to read Type-1 plates on this PC."""
+    try:
+        import rapidocr_onnxruntime  # noqa: F401
+
+        return []
+    except ImportError:
+        return ["rapidocr-onnxruntime"]
+
+
 def _is_mostly_black(frame, threshold: float = 16.0) -> bool:
     try:
         return float(frame.mean()) < threshold

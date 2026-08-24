@@ -338,6 +338,32 @@ def test_mostly_black_frame():
     assert not _is_useless_frame(noisy)
 
 
+def test_requirements_include_rapidocr():
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[1] / "requirements-anpr.txt").read_text(encoding="utf-8")
+    assert "rapidocr-onnxruntime" in text
+
+
+def test_missing_ocr_packages_reports_rapidocr(monkeypatch):
+    import sys
+    from anpr.capture import missing_ocr_packages
+
+    monkeypatch.setitem(sys.modules, "rapidocr_onnxruntime", None)
+    # Force import failure by hiding the module name.
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "rapidocr_onnxruntime":
+            raise ImportError("missing")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    assert "rapidocr-onnxruntime" in missing_ocr_packages()
+
+
 def test_mask_osd_keeps_center_plate():
     numpy = pytest.importorskip("numpy")
     from anpr.recognizer import mask_osd

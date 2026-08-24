@@ -98,7 +98,7 @@ class AnprApp:
             f"Сборка {APP_VERSION}",
             f"Открыта сборка:\n{APP_VERSION}\n\n"
             f"Папка:\n{here}\n\n"
-            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r38».\n"
+            "Сверху должен быть ЖЁЛТЫЙ значок «СБОРКА …-r39».\n"
             "Если значка нет — запущена старая копия.\n\n"
             "Правильный запуск: D:\\AvtonomeraSeetong\\START_ANPR.bat\n"
             "Проверка: VERIFY_INSTALL.bat",
@@ -107,23 +107,35 @@ class AnprApp:
 
     def _warn_missing_packages(self) -> None:
         try:
-            from anpr.capture import missing_capture_packages
+            from anpr.capture import missing_capture_packages, missing_ocr_packages
 
             missing = missing_capture_packages()
+            missing_ocr = missing_ocr_packages()
         except Exception:
             missing = ["numpy", "Pillow", "mss"]
-        if not missing:
-            self.root.after(500, self.start_capture)
+            missing_ocr = ["rapidocr-onnxruntime"]
+        if missing:
+            names = ", ".join(missing)
+            text = (
+                "Нет библиотек для скриншота: "
+                + names
+                + "\n\nВ командной строке выполните:\npython -m pip install -r requirements-anpr.txt\n\n"
+                "Потом закройте это окно и снова запустите:\npython anpr_gui.py"
+            )
+            self.preview_label.config(text=text)
+            messagebox.showwarning("Нужна установка пакетов", text)
             return
-        names = ", ".join(missing)
-        text = (
-            "Нет библиотек для скриншота: "
-            + names
-            + "\n\nВ командной строке выполните:\npython -m pip install -r requirements-anpr.txt\n\n"
-            "Потом закройте это окно и снова запустите:\npython anpr_gui.py"
-        )
-        self.preview_label.config(text=text)
-        messagebox.showwarning("Нужна установка пакетов", text)
+        if missing_ocr:
+            text = (
+                "Нет RapidOCR — номер не будет читаться.\n\n"
+                "Закройте программу и запустите UPDATE_NOW.bat\n"
+                "или в командной строке:\n"
+                "python -m pip install rapidocr-onnxruntime"
+            )
+            self.preview_label.config(text=text)
+            messagebox.showwarning("Нужен RapidOCR", text)
+            self.run_label.config(text="OCR не установлен")
+        self.root.after(500, self.start_capture)
 
     def _setup_styles(self) -> None:
         style = ttk.Style()

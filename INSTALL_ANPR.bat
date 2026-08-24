@@ -19,7 +19,11 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-%LAUNCH% -m pip install rapidocr-onnxruntime 2>nul
+%LAUNCH% -c "import rapidocr_onnxruntime" 2>nul
+if errorlevel 1 (
+    echo Installing RapidOCR...
+    %LAUNCH% -m pip install rapidocr-onnxruntime
+)
 
 echo OK. Now run START_ANPR.bat or python anpr_gui.py
 pause

@@ -29,6 +29,11 @@ if errorlevel 1 (
     %LAUNCH% -m pip install -r requirements-anpr.txt
     if errorlevel 1 %LAUNCH% -m pip install opencv-python Pillow mss numpy
 )
+%LAUNCH% -c "import rapidocr_onnxruntime" 2>nul
+if errorlevel 1 (
+    echo Installing RapidOCR, please wait...
+    %LAUNCH% -m pip install rapidocr-onnxruntime
+)
 if exist "%CD%\MAKE_DESKTOP_SHORTCUT.ps1" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\MAKE_DESKTOP_SHORTCUT.ps1" >nul 2>&1
 )

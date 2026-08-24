@@ -196,7 +196,20 @@ function Install-Packages([string]$dir) {
         if ($LASTEXITCODE -ne 0) {
             & $py -m pip install opencv-python Pillow mss numpy
         }
-        & $py -m pip install rapidocr-onnxruntime 2>$null
+    }
+    # OpenCV can already be present while RapidOCR is missing. Without it
+    # the app draws a car frame and never reads the plate.
+    & $py -c "import rapidocr_onnxruntime" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Installing RapidOCR (needed to read plates)..."
+        if (Test-Path $req) {
+            & $py -m pip install -r $req
+        }
+        & $py -m pip install rapidocr-onnxruntime
+        & $py -c "import rapidocr_onnxruntime" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: RapidOCR failed to install. Plates will not be read."
+        }
     }
     return $true
 }
@@ -288,7 +301,7 @@ if (Test-Path $verFile) {
     if ($m) { $shownVer = $m.Matches.Groups[1].Value }
 }
 Write-Host ("  READY. File version: " + $shownVer)
-Write-Host "  In the app look for YELLOW badge: BUILD 2026.08.23-r38"
+Write-Host "  In the app look for YELLOW badge: BUILD 2026.08.23-r39"
 Write-Host ("  Folder: " + $stable)
 Write-Host "  If badge is missing - old program is still open."
 Write-Host "========================================"
