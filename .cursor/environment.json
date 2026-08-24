@@ -1,0 +1,4 @@
+{
+  "name": "my_search_gpu_bot",
+  "install": "python3 -m pip install --user -r requirements.txt -r requirements-anpr.txt"
+}
