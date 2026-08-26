@@ -897,6 +897,22 @@ def test_dumpsters_are_not_marked_as_cars():
     large[120:290, 475:600] = (45, 175, 65)  # green plastic
     assert find_vehicle_silhouettes(large, max_cars=5) == []
 
+    # A blue hatchback must not be treated as a plastic bin.
+    lot = numpy.full((400, 720, 3), 118, dtype=numpy.uint8)
+    lot[140:230, 40:170] = (190, 90, 40)
+    lot[155:185, 60:150] = (40, 45, 80)
+    lot[145:235, 190:330] = (195, 198, 200)
+    lot[160:190, 210:310] = (120, 125, 130)
+    lot[135:240, 350:520] = (35, 32, 40)
+    lot[155:195, 370:500] = (20, 20, 25)
+    lot[200:300, 560:640] = (40, 170, 70)
+    lot[210:310, 650:710] = (215, 125, 35)
+    cars = find_vehicle_silhouettes(lot, max_cars=6)
+    assert len(cars) >= 2, f"blue + silver + dark cars must be framed, got {cars}"
+    centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
+    assert centers[0] < 200, "blue hatchback on the left must remain a car"
+    assert all(c.box[0] < 540 for c in cars), "dumpsters on the right must not be cars"
+
 
 def test_wide_textured_asphalt_is_not_marked_as_car():
     numpy = pytest.importorskip("numpy")

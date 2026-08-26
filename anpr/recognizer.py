@@ -763,6 +763,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
     import numpy as np
 
     from anpr.vehicles import (
+        VehicleSilhouette,
         annotate_scene,
         annotate_zoom,
         brighten_crop,
@@ -770,6 +771,7 @@ def recognize_scene(image, min_confidence: float = 0.35):
         crop_box,
         downscale_for_anpr,
         find_vehicle_silhouettes,
+        vehicle_box_from_plate,
         _is_non_vehicle,
     )
 
@@ -904,6 +906,15 @@ def recognize_scene(image, min_confidence: float = 0.35):
         silhouettes = _tighten_silhouettes_to_recognized_plates(
             silhouettes, unique, work.shape
         )
+    elif not silhouettes and global_regions:
+        # Keep a car frame around a credible plate even if OCR has not finished.
+        for index, (plate_box, _crop) in enumerate(global_regions[:4]):
+            box = vehicle_box_from_plate(plate_box, work.shape, expand=1.15)
+            if _is_non_vehicle(work, box):
+                continue
+            silhouettes.append(
+                VehicleSilhouette(box=box, contour=None, score=0.70 - index * 0.04)
+            )
 
     def _contains_confirmed_plate(item) -> bool:
         x0, y0, x1, y1 = item.box

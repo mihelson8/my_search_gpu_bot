@@ -87,9 +87,12 @@ def _looks_like_dumpster(image, box: Box) -> bool:
     area_ratio = (bw * bh) / float(max(h * w, 1))
     mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
 
+    # A painted car (blue hatchback) has windshield/bumper structure. Bins do not.
+    if _box_has_car_structure(image, box):
+        return False
     # Colored plastic bins may occupy a large close-up box. Test colour before
     # the car-size exemption; the previous ordering let blue/green bins through.
-    if area_ratio < 0.22 and bin_color_ratio >= 0.10 and aspect < 2.8:
+    if area_ratio < 0.22 and bin_color_ratio >= 0.18 and aspect < 2.8:
         return True
     if green_ratio >= 0.14 and area_ratio < 0.22 and aspect < 3.0:
         return True
@@ -319,9 +322,13 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
         score += 0.08
     else:
         score -= 0.10
-    score -= vivid_ratio * 0.55
-    score -= bin_color_ratio * 0.90
-    score -= green_ratio * 0.80
+    score -= vivid_ratio * 0.35
+    if _box_has_car_structure(image, box):
+        score -= bin_color_ratio * 0.12
+        score -= green_ratio * 0.20
+    else:
+        score -= bin_color_ratio * 0.90
+        score -= green_ratio * 0.80
     # White / silver cars.
     if mean_sat < 45 and mean_val >= 125:
         score += 0.18
@@ -983,20 +990,14 @@ def find_vehicle_silhouettes(image, max_cars: int = 6) -> List[VehicleSilhouette
         pass
     found = [item for item in found if not _is_non_vehicle(image, item.box)]
     if not found:
-        # Edge fallback only when tonal masks are almost empty (not a full parking row).
+        # Wet lots still have tonal speckles, so a low-fg gate hid every car.
         try:
-            import numpy as np
-
-            fg = 0.0
-            if dark is not None and light is not None:
-                fg = float(((dark > 0) | (light > 0)).mean())
-            if fg < 0.04:
-                edges = _edge_car_mask(image)
-                found.extend(
-                    _silhouettes_from_mask(
-                        edges, image.shape, min_ratio=0.020, max_ratio=0.45, image=image
-                    )
+            edges = _edge_car_mask(image)
+            found.extend(
+                _silhouettes_from_mask(
+                    edges, image.shape, min_ratio=0.020, max_ratio=0.45, image=image
                 )
+            )
         except Exception:
             pass
         found = [item for item in found if not _is_non_vehicle(image, item.box)]

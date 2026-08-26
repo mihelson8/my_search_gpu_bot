@@ -24,18 +24,18 @@ echo --- Содержимое anpr\version.py ---
 findstr /C:"APP_VERSION" "%STABLE%\anpr\version.py"
 echo.
 
-findstr /C:"2026.08.23-r39" "%STABLE%\anpr\version.py" >nul
+findstr /C:"2026.08.23-r40" "%STABLE%\anpr\version.py" >nul
 if errorlevel 1 (
-  echo [СТАРАЯ СБОРКА] Нужна 2026.08.23-r39
+  echo [СТАРАЯ СБОРКА] Нужна 2026.08.23-r40
   echo 1^) Закройте программу
   echo 2^) Скачайте новый ZIP и распакуйте
   echo 3^) Запустите UPDATE_NOW.bat из НОВОЙ жёлтой папки
   echo 4^) Снова запустите этот VERIFY_INSTALL.bat
 ) else (
-  echo [OK] В папке стоит сборка r39.
+  echo [OK] В папке стоит сборка r40.
   echo Откройте программу через START_ANPR.bat из:
   echo   %STABLE%
-  echo В окне должен быть ЖЁЛТЫЙ значок: СБОРКА 2026.08.23-r39
+  echo В окне должен быть ЖЁЛТЫЙ значок: СБОРКА 2026.08.23-r40
 )
 
 echo.
