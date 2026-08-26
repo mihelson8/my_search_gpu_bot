@@ -59,7 +59,7 @@ def _box_color_stats(image, box: Box):
     x0, y0, x1, y1 = box
     crop = image[y0:y1, x0:x1]
     if crop is None or getattr(crop, "size", 0) == 0:
-        return 0.0, 0.0, 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     if crop.ndim == 2:
         crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR)
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
@@ -70,12 +70,46 @@ def _box_color_stats(image, box: Box):
     mean_val = float(np.mean(val))
     vivid = (sat > 55) & (val > 45)
     vivid_ratio = float(np.mean(vivid)) if vivid.size else 0.0
-    blue = vivid & (hue >= 85) & (hue <= 145)
-    yellow = vivid & (hue >= 8) & (hue <= 45)
-    green = ((sat > 35) & (val > 35) & (hue >= 35) & (hue <= 95))
+    # Keep green away from cyan/blue car paint (OpenCV H ~90–130).
+    blue = vivid & (hue >= 90) & (hue <= 140)
+    yellow = vivid & (hue >= 8) & (hue <= 40)
+    green = (sat > 40) & (val > 40) & (hue >= 40) & (hue <= 85)
     bin_color_ratio = float(np.mean(blue | yellow | green)) if vivid.size else 0.0
     green_ratio = float(np.mean(green)) if green.size else 0.0
-    return mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio
+    blue_ratio = float(np.mean(blue)) if blue.size else 0.0
+    yellow_ratio = float(np.mean(yellow)) if yellow.size else 0.0
+    return mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio, blue_ratio, yellow_ratio
+
+
+def _has_vehicle_tone_variation(image, box: Box) -> bool:
+    """True when a blob has window/bumper/shadow contrast, not flat plastic."""
+    import cv2
+    import numpy as np
+
+    if image is None or getattr(image, "size", 0) == 0:
+        return False
+    x0, y0, x1, y1 = [int(v) for v in box]
+    h, w = image.shape[:2]
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(w, x1), min(h, y1)
+    crop = image[y0:y1, x0:x1]
+    if crop is None or getattr(crop, "size", 0) == 0:
+        return False
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop
+    ch, cw = gray.shape[:2]
+    if ch < 20 or cw < 28:
+        return False
+    std = float(np.std(gray))
+    upper = gray[0 : max(int(ch * 0.40), 1), :]
+    lower = gray[int(ch * 0.55) : ch, :]
+    window = gray[int(ch * 0.16) : int(ch * 0.52), int(cw * 0.14) : int(cw * 0.86)]
+    if std >= 16:
+        return True
+    if upper.size and lower.size and abs(float(np.mean(upper)) - float(np.mean(lower))) >= 12:
+        return True
+    if window.size and abs(float(np.mean(window)) - float(np.mean(gray))) >= 10:
+        return True
+    return False
 
 
 def _looks_like_dumpster(image, box: Box) -> bool:
@@ -85,16 +119,28 @@ def _looks_like_dumpster(image, box: Box) -> bool:
     aspect = bw / float(bh)
     h, w = image.shape[:2]
     area_ratio = (bw * bh) / float(max(h * w, 1))
-    mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
+    (
+        mean_sat,
+        mean_val,
+        vivid_ratio,
+        bin_color_ratio,
+        green_ratio,
+        blue_ratio,
+        yellow_ratio,
+    ) = _box_color_stats(image, box)
 
     # A painted car (blue hatchback) has windshield/bumper structure. Bins do not.
     if _box_has_car_structure(image, box):
         return False
-    # Colored plastic bins may occupy a large close-up box. Test colour before
-    # the car-size exemption; the previous ordering let blue/green bins through.
-    if area_ratio < 0.22 and bin_color_ratio >= 0.18 and aspect < 2.8:
+    # Green / yellow plastic is enough — those are bins, not car paint.
+    if area_ratio < 0.22 and green_ratio >= 0.14 and aspect < 3.0:
         return True
-    if green_ratio >= 0.14 and area_ratio < 0.22 and aspect < 3.0:
+    if area_ratio < 0.22 and yellow_ratio >= 0.18 and aspect < 2.8:
+        return True
+    # Blue is a common car colour. Only reject uniform plastic (no window/shadow).
+    if _has_vehicle_tone_variation(image, box) and green_ratio < 0.14 and yellow_ratio < 0.18:
+        return False
+    if area_ratio < 0.22 and blue_ratio >= 0.20 and aspect < 2.8:
         return True
     if area_ratio < 0.16 and vivid_ratio >= 0.20 and mean_sat >= 55 and aspect < 2.5:
         return True
@@ -265,7 +311,7 @@ def _is_non_vehicle(image, box: Box) -> bool:
         # A front/rear car under this high camera is never a very wide, shallow
         # sheet. Preserve a coherent body (bright paint or windshield structure).
         if bw >= int(w * 0.28) and bh <= int(h * 0.50) and aspect >= 2.45:
-            mean_sat, mean_val, _vivid, _bin, _green = _box_color_stats(image, box)
+            mean_sat, mean_val, _vivid, _bin, _green, _blue, _yellow = _box_color_stats(image, box)
             bright_silver_body = mean_sat <= 35 and mean_val >= 155
             if not bright_silver_body and not _box_has_car_structure(image, box):
                 return True
@@ -300,7 +346,15 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
     area_ratio = (bw * bh) / float(max(h * w, 1))
     cx = (x0 + x1) / 2.0
     cy = (y0 + y1) / 2.0
-    mean_sat, mean_val, vivid_ratio, bin_color_ratio, green_ratio = _box_color_stats(image, box)
+    (
+        mean_sat,
+        mean_val,
+        _vivid_ratio,
+        _bin_color_ratio,
+        green_ratio,
+        blue_ratio,
+        yellow_ratio,
+    ) = _box_color_stats(image, box)
 
     score = base
     # Top-down / front-high cars: allow near-square bodies.
@@ -322,13 +376,16 @@ def _car_likeness_score(image, box: Box, base: float = 0.0) -> float:
         score += 0.08
     else:
         score -= 0.10
-    score -= vivid_ratio * 0.35
+    # Yellow/green bins tank the score. Blue paint is a car colour.
+    score -= (yellow_ratio + green_ratio) * 0.35
     if _box_has_car_structure(image, box):
-        score -= bin_color_ratio * 0.12
+        score -= yellow_ratio * 0.12
         score -= green_ratio * 0.20
     else:
-        score -= bin_color_ratio * 0.90
+        score -= yellow_ratio * 0.85
         score -= green_ratio * 0.80
+    if blue_ratio >= 0.12 and _has_vehicle_tone_variation(image, box):
+        score += 0.18
     # White / silver cars.
     if mean_sat < 45 and mean_val >= 125:
         score += 0.18
@@ -366,11 +423,12 @@ _SPLIT_ATTEMPT_W_RATIO = 0.16
 # Absolute reject — almost certainly several cars or the whole lot.
 _MAX_GROUP_W_RATIO = 0.62
 # Keep frame tight to the body; bumper only needs a thin strip for the plate.
-_BUMPER_EXPAND_RATIO = 0.20
-_MAX_BOX_ASPECT_H_OVER_W = 1.15
+# High/oblique rear views are taller than wide — 1.15 cut the plate off.
+_BUMPER_EXPAND_RATIO = 0.28
+_MAX_BOX_ASPECT_H_OVER_W = 1.28
 # Cars sit above the wet foreground on a typical Seetong parking cam.
 _PARKING_MASK_BOTTOM = 0.78
-_PARKING_FRAME_BOTTOM = 0.60
+_PARKING_FRAME_BOTTOM = 0.68
 
 
 def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | None = None) -> bool:
@@ -396,14 +454,15 @@ def _is_weak_car_candidate(image, box: Box, score: float, best_score: float | No
     # Wide+flat = parking row glued together.
     if _looks_like_car_group(box, w, min_width=max(48, int(w * 0.055)), frame_h=h):
         return True
-    if aspect < 0.65 or aspect > 4.0:
+    if aspect < 0.60 or aspect > 4.0:
         return True
     if bh > int(bw * 1.40) + 16 and y1 > int(h * 0.75):
         return True
     if score < 0.16:
         return True
-    if best_score is not None and best_score > 0:
-        if score < max(0.18, best_score * 0.40):
+    # Do not drop a separate mid-score car just because a silver neighbour scored higher.
+    if best_score is not None and best_score > 0 and score < 0.24:
+        if score < max(0.16, best_score * 0.40):
             return True
     return False
 
@@ -757,13 +816,18 @@ def _include_bumper_plate(image, box: Box, max_extra: int) -> Box:
     limit = min(h, y1 + max_extra, int(h * _PARKING_MASK_BOTTOM) + 8)
     best = y1
     miss = 0
+    # Shaded Type-1 plates are far below 195; puddles still trip the sheet check.
+    plate_lvl = 150
+    dark_lvl = 95
+    body = gray[max(0, y1 - 10) : y1, x0:x1]
+    body_mean = float(np.mean(body)) if body.size else 0.0
     for y in range(y1, limit):
         row = gray[y, x0:x1]
-        bright = float((row >= 195).mean())
-        dark = float((row <= 70).mean())
+        bright = float((row >= plate_lvl).mean())
+        dark = float((row <= dark_lvl).mean())
         # Full-width mirror / puddle glare — stop immediately.
         if bright >= 0.78:
-            on = (row >= 195).astype(np.uint8)
+            on = (row >= plate_lvl).astype(np.uint8)
             # Count longest bright run; puddles span almost the whole box.
             longest = 0
             run = 0
@@ -776,9 +840,9 @@ def _include_bumper_plate(image, box: Box, max_extra: int) -> Box:
             if longest >= int(0.78 * bw):
                 break
         plate_like = False
-        if 0.10 <= bright <= 0.85:
+        if 0.08 <= bright <= 0.85:
             # Plate is a compact bright run, not a puddle sheet.
-            on = (row >= 195).astype(np.uint8)
+            on = (row >= plate_lvl).astype(np.uint8)
             runs = []
             start = None
             for i, v in enumerate(on):
@@ -790,10 +854,15 @@ def _include_bumper_plate(image, box: Box, max_extra: int) -> Box:
             if start is not None:
                 runs.append(len(on) - start)
             longest = max(runs) if runs else 0
-            if 0.10 * bw <= longest <= 0.85 * bw:
+            if 0.08 * bw <= longest <= 0.70 * bw:
                 plate_like = True
-        bumper_like = dark >= 0.45 and bright < 0.40
-        if plate_like or bumper_like:
+        bumper_like = dark >= 0.40 and bright < 0.45
+        paint_continue = (
+            body_mean > 0
+            and float(np.mean(np.abs(row.astype(np.int16) - body_mean) < 32)) >= 0.45
+            and bright < 0.55
+        )
+        if plate_like or bumper_like or paint_continue:
             best = y + 1
             miss = 0
         else:
@@ -908,8 +977,8 @@ def _silhouettes_from_mask(
         ratio = (bw * bh) / frame_area
         if ratio < min_ratio or ratio > min(max_ratio, 0.42):
             return
-        # High-angle front view can look nearly square / slightly tall.
-        if not (0.70 <= aspect <= 4.0):
+        # High-angle rear hatchback is slightly taller than wide.
+        if not (0.62 <= aspect <= 4.0):
             return
         if image is not None and _is_non_vehicle(image, box):
             return
@@ -1080,10 +1149,15 @@ def _car_tone_masks(image):
 
     dark = cv2.bitwise_or(mask_dark, dark_body)
     light = cv2.bitwise_or(mask_light, pale)
+    hue, sat, val = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+    # Saturated blue/red car paint can match wet-asphalt luma and vanish.
+    # Do not OR-in every vivid pixel — HSV-noisy wet grain glues the lot.
+    blue_paint = (hue >= 90) & (hue <= 140) & (sat > 50) & (val > 40) & (val < 245)
+    red_paint = ((hue <= 8) | (hue >= 168)) & (sat > 50) & (val > 35) & (val < 245)
+    dark = cv2.bitwise_or(dark, np.uint8(blue_paint | red_paint) * 255)
 
-    # Remove only small vivid dumpster components from both masks.
+    # Wipe small yellow/green dumpster speckles only — never blue/red car paint.
     vivid = cv2.inRange(hsv, (8, 75, 65), (40, 255, 255))
-    vivid = cv2.bitwise_or(vivid, cv2.inRange(hsv, (95, 75, 65), (135, 255, 255)))
     vivid = cv2.bitwise_or(vivid, cv2.inRange(hsv, (40, 60, 50), (85, 255, 255)))
     vivid_n, _lbl, vivid_stats, _ = cv2.connectedComponentsWithStats(vivid, connectivity=8)
     for i in range(1, vivid_n):

@@ -908,10 +908,50 @@ def test_dumpsters_are_not_marked_as_cars():
     lot[200:300, 560:640] = (40, 170, 70)
     lot[210:310, 650:710] = (215, 125, 35)
     cars = find_vehicle_silhouettes(lot, max_cars=6)
-    assert len(cars) >= 2, f"blue + silver + dark cars must be framed, got {cars}"
+    assert len(cars) >= 3, f"blue + silver + dark cars must be framed, got {cars}"
     centers = sorted((c.box[0] + c.box[2]) / 2 for c in cars)
     assert centers[0] < 200, "blue hatchback on the left must remain a car"
+    assert any(200 <= c <= 360 for c in centers), "silver sedan in the middle must remain a car"
+    assert any(c > 360 for c in centers), "dark minivan must remain a car"
     assert all(c.box[0] < 540 for c in cars), "dumpsters on the right must not be cars"
+
+
+def test_rear_blue_hatchback_is_not_a_dumpster():
+    """r39/r40 treated a sunlit blue hatchback as a plastic bin (no frames)."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import _looks_like_dumpster, find_vehicle_silhouettes
+
+    frame = numpy.full((400, 720, 3), 125, dtype=numpy.uint8)
+    # Rear-high view: bright roof, dark window, saturated blue body, bumper.
+    frame[130:250, 80:230] = (190, 95, 40)
+    frame[130:158, 95:215] = (210, 150, 90)
+    frame[158:198, 100:210] = (45, 50, 75)
+    frame[228:250, 90:220] = (150, 80, 35)
+    box = (80, 130, 230, 250)
+    assert not _looks_like_dumpster(frame, box), "blue hatchback must not be a dumpster"
+    cars = find_vehicle_silhouettes(frame, max_cars=4)
+    assert cars, "sunlit blue hatchback must get a frame"
+    cx = (cars[0].box[0] + cars[0].box[2]) / 2
+    assert 80 < cx < 250, f"frame should sit on the hatchback, got {cars[0].box}"
+
+
+def test_rear_car_frame_includes_bumper_plate():
+    """High-angle rear view must not cut the Type-1 plate off the bumper."""
+    numpy = pytest.importorskip("numpy")
+    pytest.importorskip("cv2")
+    from anpr.vehicles import find_vehicle_silhouettes
+
+    frame = numpy.full((400, 720, 3), 125, dtype=numpy.uint8)
+    frame[120:250, 90:240] = (185, 90, 40)
+    frame[128:155, 105:225] = (200, 140, 85)
+    frame[155:195, 110:220] = (40, 48, 70)
+    # White Type-1 plate on the bumper, below the dense roof/window mass.
+    frame[248:268, 125:205] = (220, 220, 225)
+    cars = find_vehicle_silhouettes(frame, max_cars=4)
+    assert cars, "rear blue car must be framed"
+    _x0, _y0, _x1, y1 = cars[0].box
+    assert y1 >= 265, f"frame must include the bumper plate, got {cars[0].box}"
 
 
 def test_wide_textured_asphalt_is_not_marked_as_car():
